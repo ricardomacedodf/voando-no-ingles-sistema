@@ -101,9 +101,19 @@ export default function Sidebar({ onClose }) {
       <div className="px-3 pb-5 pt-2">
         <div className="mx-1 h-px bg-border mb-3" />
 
-        <div className="mx-1 mb-3 rounded-xl border border-border bg-background p-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 border border-border">
+        <div className="mx-1 mb-3 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Perfil Google
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              conectado
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-md border border-border/80 bg-background px-2.5 py-2.5">
+            <div className="h-11 w-11 rounded-full overflow-hidden bg-muted text-muted-foreground flex items-center justify-center flex-shrink-0 border border-border/80">
               {avatarUrl && !avatarError ? (
                 <img
                   src={avatarUrl}
@@ -118,19 +128,19 @@ export default function Sidebar({ onClose }) {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground truncate">
+              <p className="text-sm font-semibold text-foreground truncate leading-tight">
                 {displayName}
               </p>
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
                 {displayEmail}
               </p>
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <button
               onClick={toggleSound}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border border-border bg-card text-sidebar-foreground hover:text-muted-foreground transition-all duration-200"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-xs font-medium border border-border bg-background text-foreground hover:bg-muted transition-colors duration-200"
             >
               {soundEnabled ? (
                 <Volume2 className="w-4 h-4 opacity-70" />
@@ -143,7 +153,7 @@ export default function Sidebar({ onClose }) {
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border border-destructive/30 bg-red-50 text-destructive hover:bg-destructive hover:text-white transition-all duration-200 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-xs font-medium border border-red-200 bg-background text-red-600 hover:bg-red-50 transition-colors duration-200 disabled:opacity-50"
             >
               <LogOut className="w-4 h-4" />
               <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
