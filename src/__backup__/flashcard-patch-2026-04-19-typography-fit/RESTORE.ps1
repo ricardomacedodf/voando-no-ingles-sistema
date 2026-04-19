@@ -1,0 +1,6 @@
+$srcRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$backup = $PSScriptRoot
+
+Copy-Item (Join-Path $backup 'Flashcards.jsx.bak') (Join-Path $srcRoot 'pages\Flashcards.jsx') -Force
+
+Write-Output 'Restauração concluída.'

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import Sidebar from "../components/Sidebar";
@@ -8,48 +8,49 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <aside className="hidden lg:block w-[260px] flex-shrink-0 fixed inset-y-0 left-0 z-30">
+    <div className="min-h-screen bg-background">
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 md:flex">
         <Sidebar />
       </aside>
 
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-40 lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       <aside
-        className={`
-          fixed inset-y-0 left-0 z-50 w-[280px] transform transition-transform duration-300 ease-out lg:hidden
-          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white transition-transform duration-300 ease-out md:hidden ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        <div className="absolute top-4 right-3 z-10">
+        <div className="absolute right-3 top-4 z-10">
           <button
             onClick={() => setMobileOpen(false)}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-muted"
+            aria-label="Fechar menu"
           >
-            <X className="w-5 h-5 text-muted-foreground" />
+            <X className="h-5 w-5 text-muted-foreground" />
           </button>
         </div>
         <Sidebar onClose={() => setMobileOpen(false)} />
       </aside>
 
-      <div className="flex-1 lg:ml-[260px] flex flex-col min-h-screen">
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-card border-b border-border sticky top-0 z-20">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="p-2 -ml-2 rounded-lg hover:bg-muted transition-colors"
-          >
-            <Menu className="w-5 h-5 text-foreground" />
-          </button>
-          <Logo compact={false} />
-        </header>
+      <header className="fixed left-0 right-0 top-0 z-40 flex h-16 items-center border-b border-border bg-white px-4 md:hidden">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="mr-2 inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted"
+          aria-label="Abrir menu"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+        <Logo variant="mobile" />
+      </header>
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
-          <div className="max-w-6xl mx-auto">
+      <div className="md:ml-64">
+        <main className="min-h-screen p-4 pt-20 md:p-6 md:pt-6 lg:p-8">
+          <div className="mx-auto max-w-6xl">
             <Outlet />
           </div>
         </main>
