@@ -1,10 +1,19 @@
 import { Star } from "lucide-react";
 import { getGameState } from "../lib/gameState";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function WelcomeCard() {
   const game = getGameState();
+  const { user } = useAuth();
+
   const xpInLevel = game.xp % 100;
   const xpProgress = (xpInLevel / 100) * 100;
+
+  const firstName =
+    user?.firstName ||
+    user?.name?.split(" ")[0] ||
+    user?.full_name?.split(" ")[0] ||
+    "Usuário";
 
   return (
     <div
@@ -17,7 +26,7 @@ export default function WelcomeCard() {
       <div className="absolute bottom-[-60px] right-[60px] w-[150px] h-[150px] rounded-full bg-white/5" />
 
       <div className="relative z-10">
-        <p className="text-white/80 text-sm font-medium mb-1">Olá 👋</p>
+        <p className="text-white/80 text-sm font-medium mb-1">Olá, {firstName} 👋</p>
         <h1 className="text-white text-lg md:text-xl font-bold mb-6">
           Pronto para aprender inglês hoje?
         </h1>

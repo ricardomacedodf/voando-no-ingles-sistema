@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { Check, X, Lightbulb, Volume2, VolumeX } from "lucide-react";
+import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import ModeSelector from "../components/ModeSelector";
 import ProgressBar from "../components/ProgressBar";
 import ExamplesPanel from "../components/ExamplesPanel";
@@ -9,29 +11,12 @@ import {
   recordIncorrect,
   updateStreak,
   recordStudySession,
-  syncDominatedCount,
   playSound,
   getSoundState,
-  saveSoundState
+  saveSoundState,
+  getGameState,
+  saveGameState,
 } from "../lib/gameState";
-
-const STORAGE_KEY = "vocabulary_items";
-
-function getStoredVocabulary() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Erro ao ler vocabulary do localStorage:", error);
-    return [];
-  }
-}
-
-function saveStoredVocabulary(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -42,7 +27,36 @@ function shuffleArray(arr) {
   return a;
 }
 
+function updateDominatedCount(items) {
+  const game = getGameState();
+  game.dominatedCount = items.filter(
+    (item) => item?.stats?.status === "dominada"
+  ).length;
+  saveGameState(game);
+}
+
+function mapVocabularyRow(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    term: row.term || "",
+    pronunciation: row.pronunciation || "",
+    meanings: Array.isArray(row.meanings) ? row.meanings : [],
+    stats: row.stats || {
+      correct: 0,
+      incorrect: 0,
+      total_reviews: 0,
+      avg_response_time: 0,
+      status: "nova",
+    },
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
 export default function Flashcards() {
+  const { user } = useAuth();
+
   const [vocab, setVocab] = useState([]);
   const [mode, setMode] = useState("en_pt");
   const [current, setCurrent] = useState(0);
@@ -55,27 +69,60 @@ export default function Flashcards() {
   const [cardDir, setCardDir] = useState("en_pt");
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
 
+  const fetchVocabulary = async () => {
+    if (!user?.id) return [];
+
+    const { data, error } = await supabase
+      .from("vocabulary")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return Array.isArray(data) ? data.map(mapVocabularyRow) : [];
+  };
+
   useEffect(() => {
-    function load() {
-      setLoading(true);
+    let isMounted = true;
 
-      const data = getStoredVocabulary();
-      const prepared = mode === "random" ? shuffleArray(data) : data;
+    async function load() {
+      try {
+        setLoading(true);
 
-      recordStudySession();
-      updateStreak();
-      syncDominatedCount();
+        const data = await fetchVocabulary();
+        const prepared = mode === "random" ? shuffleArray(data) : data;
 
-      setVocab(prepared);
-      setCurrent(0);
-      setFlipped(false);
-      setShowExamples(false);
-      setSessionDone(false);
-      setLoading(false);
+        recordStudySession();
+        updateStreak();
+        updateDominatedCount(prepared);
+
+        if (!isMounted) return;
+
+        setVocab(prepared);
+        setCurrent(0);
+        setFlipped(false);
+        setShowExamples(false);
+        setSessionDone(false);
+      } catch (error) {
+        console.error("Erro ao carregar vocabulário no Flashcards:", error);
+        if (!isMounted) return;
+        setVocab([]);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
 
     load();
-  }, [mode]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mode, user?.id]);
 
   useEffect(() => {
     const card = vocab[current];
@@ -112,7 +159,7 @@ export default function Flashcards() {
   };
 
   const handleResponse = async (correct) => {
-    if (!card) return;
+    if (!card || !user?.id) return;
 
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
 
@@ -130,7 +177,7 @@ export default function Flashcards() {
       incorrect: 0,
       total_reviews: 0,
       avg_response_time: 0,
-      status: "nova"
+      status: "nova",
     };
 
     const newCorrect = stats.correct + (correct ? 1 : 0);
@@ -147,48 +194,45 @@ export default function Flashcards() {
       else if (rate < 0.5) newStatus = "difícil";
     }
 
+    const updatedStats = {
+      correct: newCorrect,
+      incorrect: newIncorrect,
+      total_reviews: newTotal,
+      avg_response_time: Math.round(newAvg),
+      last_reviewed: new Date().toISOString(),
+      status: newStatus,
+    };
+
     try {
-      const allItems = getStoredVocabulary();
-      const updatedItems = allItems.map((item) =>
+      const { error } = await supabase
+        .from("vocabulary")
+        .update({
+          stats: updatedStats,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", card.id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      const updatedVocab = vocab.map((item) =>
         item.id === card.id
           ? {
               ...item,
-              stats: {
-                correct: newCorrect,
-                incorrect: newIncorrect,
-                total_reviews: newTotal,
-                avg_response_time: Math.round(newAvg),
-                last_reviewed: new Date().toISOString(),
-                status: newStatus
-              },
-              updatedAt: new Date().toISOString()
+              stats: updatedStats,
+              updatedAt: new Date().toISOString(),
             }
           : item
       );
 
-      saveStoredVocabulary(updatedItems);
-      syncDominatedCount();
-
-      setVocab((prev) =>
-        prev.map((item) =>
-          item.id === card.id
-            ? {
-                ...item,
-                stats: {
-                  correct: newCorrect,
-                  incorrect: newIncorrect,
-                  total_reviews: newTotal,
-                  avg_response_time: Math.round(newAvg),
-                  last_reviewed: new Date().toISOString(),
-                  status: newStatus
-                },
-                updatedAt: new Date().toISOString()
-              }
-            : item
-        )
-      );
+      setVocab(updatedVocab);
+      updateDominatedCount(updatedVocab);
     } catch (error) {
-      console.error("Erro ao atualizar estatísticas localmente:", error);
+      console.error("Erro ao atualizar estatísticas no Supabase:", error);
+      alert("Não foi possível salvar seu progresso desta carta.");
+      return;
     }
 
     if (current < vocab.length - 1) {
@@ -208,7 +252,7 @@ export default function Flashcards() {
         index === current
           ? {
               ...item,
-              _startTime: Date.now()
+              _startTime: Date.now(),
             }
           : item
       )
@@ -243,13 +287,20 @@ export default function Flashcards() {
         <h2 className="text-xl font-bold text-foreground mb-2">Sessão completa! 🎉</h2>
         <p className="text-muted-foreground mb-4">Você revisou {vocab.length} cartões.</p>
         <button
-          onClick={() => {
-            const data = getStoredVocabulary();
-            setVocab(mode === "random" ? shuffleArray(data) : data);
-            setCurrent(0);
-            setFlipped(false);
-            setSessionDone(false);
-            setShowExamples(false);
+          onClick={async () => {
+            try {
+              const data = await fetchVocabulary();
+              const prepared = mode === "random" ? shuffleArray(data) : data;
+              setVocab(prepared);
+              setCurrent(0);
+              setFlipped(false);
+              setSessionDone(false);
+              setShowExamples(false);
+              updateDominatedCount(prepared);
+            } catch (error) {
+              console.error("Erro ao recarregar flashcards:", error);
+              alert("Não foi possível recarregar os flashcards.");
+            }
           }}
           className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
         >

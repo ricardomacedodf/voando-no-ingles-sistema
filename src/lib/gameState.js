@@ -1,6 +1,5 @@
 const GAME_STATE_KEY = "voando_game_state";
 const SOUND_STATE_KEY = "voando_sound_state";
-const VOCAB_STORAGE_KEY = "vocabulary_items";
 
 const defaultGameState = {
   xp: 0,
@@ -30,22 +29,6 @@ const defaultSoundState = {
     critical_action: true,
   },
 };
-
-function getStoredVocabulary() {
-  try {
-    const raw = localStorage.getItem(VOCAB_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Erro ao ler vocabulary_items:", error);
-    return [];
-  }
-}
-
-function saveStoredVocabulary(items) {
-  localStorage.setItem(VOCAB_STORAGE_KEY, JSON.stringify(items));
-}
 
 export function getDefaultGameState() {
   return { ...defaultGameState };
@@ -109,13 +92,18 @@ export function recordStudySession() {
   return state;
 }
 
-export function syncDominatedCount() {
+export function syncDominatedCount(value = 0) {
   const state = getGameState();
-  const vocab = getStoredVocabulary();
 
-  const dominatedCount = vocab.filter(
-    (item) => item?.stats?.status === "dominada"
-  ).length;
+  let dominatedCount = state.dominatedCount || 0;
+
+  if (Array.isArray(value)) {
+    dominatedCount = value.filter(
+      (item) => item?.stats?.status === "dominada"
+    ).length;
+  } else if (typeof value === "number") {
+    dominatedCount = value;
+  }
 
   state.dominatedCount = dominatedCount;
   saveGameState(state);
@@ -187,28 +175,11 @@ export function checkStreakMedals() {
 
 export function resetStudyHistory() {
   try {
-    const vocab = getStoredVocabulary();
-
-    const cleanedVocab = vocab.map((item) => ({
-      ...item,
-      stats: {
-        correct: 0,
-        incorrect: 0,
-        total_reviews: 0,
-        avg_response_time: 0,
-        status: "nova",
-      },
-      updatedAt: new Date().toISOString(),
-    }));
-
-    saveStoredVocabulary(cleanedVocab);
-
     const resetState = {
       ...defaultGameState,
     };
 
     saveGameState(resetState);
-
     return { success: true };
   } catch (error) {
     console.error("Erro ao resetar histórico de estudo:", error);

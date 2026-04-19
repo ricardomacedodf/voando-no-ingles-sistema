@@ -1,22 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { ArrowRight, Check } from "lucide-react";
+import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import ModeSelector from "../components/ModeSelector";
 import { addXP, recordCorrect, recordIncorrect, playSound } from "../lib/gameState";
 
-const STORAGE_KEY = "vocabulary_items";
 const PAIRS_PER_ROUND = 5;
-
-function getStoredVocabulary() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Erro ao ler vocabulary do localStorage:", error);
-    return [];
-  }
-}
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -25,6 +14,25 @@ function shuffleArray(arr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function mapVocabularyRow(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    term: row.term || "",
+    pronunciation: row.pronunciation || "",
+    meanings: Array.isArray(row.meanings) ? row.meanings : [],
+    stats: row.stats || {
+      correct: 0,
+      incorrect: 0,
+      total_reviews: 0,
+      avg_response_time: 0,
+      status: "nova",
+    },
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
 }
 
 function buildPool(vocab) {
@@ -37,7 +45,7 @@ function buildPool(vocab) {
           vocabId: v.id,
           term: v.term,
           meaning: m.meaning,
-          meaningIdx: mi
+          meaningIdx: mi,
         });
       }
     });
@@ -50,9 +58,9 @@ function weightedSample(pool, difficultyMap, count) {
   if (pool.length === 0) return [];
 
   const byVocab = {};
-  pool.forEach((item, i) => {
+  pool.forEach((item) => {
     if (!byVocab[item.vocabId]) byVocab[item.vocabId] = [];
-    byVocab[item.vocabId].push({ item, poolIdx: i });
+    byVocab[item.vocabId].push({ item });
   });
 
   const candidates = Object.values(byVocab).map((entries) => {
@@ -74,6 +82,8 @@ function weightedSample(pool, difficultyMap, count) {
 }
 
 export default function Combinations() {
+  const { user } = useAuth();
+
   const [allVocab, setAllVocab] = useState([]);
   const [pool, setPool] = useState([]);
   const [mode, setMode] = useState("en_pt");
@@ -88,22 +98,58 @@ export default function Combinations() {
   const [roundComplete, setRoundComplete] = useState(false);
   const [errors, setErrors] = useState(0);
   const [loading, setLoading] = useState(true);
+
   const difficultyMap = useRef({});
 
+  const fetchVocabulary = async () => {
+    if (!user?.id) return [];
+
+    const { data, error } = await supabase
+      .from("vocabulary")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return Array.isArray(data) ? data.map(mapVocabularyRow) : [];
+  };
+
   useEffect(() => {
-    function load() {
-      setLoading(true);
+    let isMounted = true;
 
-      const data = getStoredVocabulary();
-      const valid = data.filter((v) => v.term && v.meanings?.some((m) => m?.meaning));
+    async function load() {
+      try {
+        setLoading(true);
 
-      setAllVocab(valid);
-      setPool(buildPool(valid));
-      setLoading(false);
+        const data = await fetchVocabulary();
+        const valid = data.filter((v) => v.term && v.meanings?.some((m) => m?.meaning));
+
+        if (!isMounted) return;
+
+        setAllVocab(valid);
+        setPool(buildPool(valid));
+        setRound(0);
+      } catch (error) {
+        console.error("Erro ao carregar vocabulário em Combinações:", error);
+        if (!isMounted) return;
+        setAllVocab([]);
+        setPool([]);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
 
     load();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (pool.length === 0) return;
@@ -121,7 +167,7 @@ export default function Combinations() {
         id: i,
         text: dir === "en_pt" ? p.term : p.meaning,
         vocabId: p.vocabId,
-        meaningIdx: p.meaningIdx
+        meaningIdx: p.meaningIdx,
       }))
     );
 
@@ -130,7 +176,7 @@ export default function Combinations() {
         id: i,
         text: dir === "en_pt" ? p.meaning : p.term,
         vocabId: p.vocabId,
-        meaningIdx: p.meaningIdx
+        meaningIdx: p.meaningIdx,
       }))
     );
 
@@ -147,11 +193,12 @@ export default function Combinations() {
   const checkMatch = (leftIdx, rightIdx) => {
     const left = leftItems[leftIdx];
     const right = rightItems[rightIdx];
-    return left && right && left.vocabId === right.vocabId;
+    return left && right && left.vocabId === right.vocabId && left.meaningIdx === right.meaningIdx;
   };
 
   const handleLeftClick = (idx) => {
-    if (matched.has(`l${idx}`)) return;
+    if (matched.has(`l${idx}`) || roundComplete) return;
+
     playSound("selection");
     setSelectedLeft(idx);
 
@@ -161,7 +208,8 @@ export default function Combinations() {
   };
 
   const handleRightClick = (idx) => {
-    if (matched.has(`r${idx}`)) return;
+    if (matched.has(`r${idx}`) || roundComplete) return;
+
     playSound("selection");
     setSelectedRight(idx);
 
@@ -263,6 +311,7 @@ export default function Combinations() {
             const isMatched = matched.has(`l${idx}`);
             const isSelected = selectedLeft === idx;
             const isError = errorPair?.left === idx;
+
             let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
 
             if (isMatched) cls = "bg-emerald-50 border-primary text-primary";
@@ -288,6 +337,7 @@ export default function Combinations() {
             const isMatched = matched.has(`r${idx}`);
             const isSelected = selectedRight === idx;
             const isError = errorPair?.right === idx;
+
             let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
 
             if (isMatched) cls = "bg-emerald-50 border-primary text-primary";

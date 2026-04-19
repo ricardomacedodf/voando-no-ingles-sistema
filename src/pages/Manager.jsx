@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Pencil, Trash2, FileJson, AlertTriangle } from "lucide-react";
+import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import { playSound } from "../lib/gameState";
 import ManagerForm from "../components/ManagerForm";
 import ManagerImport from "../components/ManagerImport";
@@ -14,25 +16,28 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const STORAGE_KEY = "vocabulary_items";
-
-function getStoredVocabulary() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Erro ao ler vocabulary do localStorage:", error);
-    return [];
-  }
-}
-
-function saveStoredVocabulary(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+function mapVocabularyRow(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    term: row.term || "",
+    pronunciation: row.pronunciation || "",
+    meanings: Array.isArray(row.meanings) ? row.meanings : [],
+    stats: row.stats || {
+      correct: 0,
+      incorrect: 0,
+      total_reviews: 0,
+      avg_response_time: 0,
+      status: "nova",
+    },
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
 }
 
 export default function Manager() {
+  const { user } = useAuth();
+
   const [vocab, setVocab] = useState([]);
   const [search, setSearch] = useState("");
   const [view, setView] = useState("list");
@@ -41,18 +46,28 @@ export default function Manager() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   const loadVocab = async () => {
+    if (!user?.id) {
+      setVocab([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
 
-      const data = getStoredVocabulary().sort((a, b) => {
-        const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-        const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
+      const { data, error } = await supabase
+        .from("vocabulary")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false });
 
-      setVocab(data);
+      if (error) {
+        throw error;
+      }
+
+      setVocab(Array.isArray(data) ? data.map(mapVocabularyRow) : []);
     } catch (error) {
-      console.error("Erro ao carregar vocabulário local:", error);
+      console.error("Erro ao carregar vocabulário no Supabase:", error);
       setVocab([]);
     } finally {
       setLoading(false);
@@ -61,13 +76,20 @@ export default function Manager() {
 
   useEffect(() => {
     loadVocab();
-  }, []);
+  }, [user?.id]);
 
   const handleDelete = async (id) => {
     try {
-      const currentItems = getStoredVocabulary();
-      const updatedItems = currentItems.filter((item) => item.id !== id);
-      saveStoredVocabulary(updatedItems);
+      const { error } = await supabase
+        .from("vocabulary")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
       playSound("critical_action");
       loadVocab();
     } catch (error) {
@@ -78,7 +100,15 @@ export default function Manager() {
 
   const handleDeleteAll = async () => {
     try {
-      saveStoredVocabulary([]);
+      const { error } = await supabase
+        .from("vocabulary")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
       playSound("critical_action");
       setShowDeleteAll(false);
       loadVocab();

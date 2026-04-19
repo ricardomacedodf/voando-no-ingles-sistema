@@ -1,27 +1,85 @@
 import { useEffect, useState } from "react";
+import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import ProgressBar from "../components/ProgressBar";
 import { getGameState, resetStudyHistory } from "../lib/gameState";
 
 export default function Progress() {
+  const { user } = useAuth();
+
   const [gameState, setGameState] = useState(() => getGameState());
+  const [vocabStats, setVocabStats] = useState({
+    totalCards: 0,
+    dominated: 0,
+    difficult: 0,
+    studied: 0,
+  });
+  const [loading, setLoading] = useState(true);
   const [isResetting, setIsResetting] = useState(false);
 
+  const loadProgress = async () => {
+    try {
+      setLoading(true);
+
+      if (!user?.id) {
+        setGameState(getGameState());
+        setVocabStats({
+          totalCards: 0,
+          dominated: 0,
+          difficult: 0,
+          studied: 0,
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("vocabulary")
+        .select("id, stats")
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      const safeVocab = Array.isArray(data) ? data : [];
+
+      setGameState(getGameState());
+
+      setVocabStats({
+        totalCards: safeVocab.length,
+        dominated: safeVocab.filter((v) => v.stats?.status === "dominada").length,
+        difficult: safeVocab.filter((v) => v.stats?.status === "difícil").length,
+        studied: safeVocab.filter((v) => (v.stats?.total_reviews || 0) > 0).length,
+      });
+    } catch (error) {
+      console.error("Erro ao carregar progresso:", error);
+      setGameState(getGameState());
+      setVocabStats({
+        totalCards: 0,
+        dominated: 0,
+        difficult: 0,
+        studied: 0,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
+    loadProgress();
+
     const refreshProgress = () => {
       setGameState(getGameState());
     };
 
-    refreshProgress();
-
-    const interval = setInterval(refreshProgress, 800);
-
-    window.addEventListener("focus", refreshProgress);
+    const interval = setInterval(refreshProgress, 1000);
+    window.addEventListener("focus", loadProgress);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener("focus", refreshProgress);
+      window.removeEventListener("focus", loadProgress);
     };
-  }, []);
+  }, [user?.id]);
 
   const currentLevelXp = gameState.xp % 100;
   const nextLevelXp = 100;
@@ -33,19 +91,42 @@ export default function Progress() {
     { label: "Sessões de estudo", value: gameState.totalStudySessions },
     { label: "Acertos seguidos", value: gameState.consecutiveCorrect },
     { label: "Maior sequência", value: gameState.maxConsecutiveCorrect },
-    { label: "Palavras dominadas", value: gameState.dominatedCount },
-    { label: "Medalhas", value: gameState.medals.length }
+    { label: "Palavras dominadas", value: vocabStats.dominated },
+    { label: "Palavras difíceis", value: vocabStats.difficult },
   ];
 
-  const handleResetHistory = () => {
+  const handleResetHistory = async () => {
     const confirmed = window.confirm(
       "Tem certeza que deseja resetar apenas o progresso de estudo?\n\nAs palavras cadastradas serão mantidas.\n\nSerão zerados XP, nível, streak, medalhas e estatísticas de aprendizado."
     );
 
     if (!confirmed) return;
 
+    if (!user?.id) {
+      alert("Usuário não identificado.");
+      return;
+    }
+
     try {
       setIsResetting(true);
+
+      const { error } = await supabase
+        .from("vocabulary")
+        .update({
+          stats: {
+            correct: 0,
+            incorrect: 0,
+            total_reviews: 0,
+            avg_response_time: 0,
+            status: "nova",
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
 
       const result = resetStudyHistory();
 
@@ -54,7 +135,7 @@ export default function Progress() {
         return;
       }
 
-      setGameState(getGameState());
+      await loadProgress();
       alert("Progresso resetado com sucesso. Suas palavras cadastradas foram mantidas.");
     } catch (error) {
       console.error("Erro ao resetar progresso:", error);
@@ -63,6 +144,14 @@ export default function Progress() {
       setIsResetting(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-7 h-7 border-3 border-border border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -113,6 +202,35 @@ export default function Progress() {
             </p>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h2 className="text-lg font-semibold text-foreground mb-3">
+          Resumo do vocabulário
+        </h2>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-border bg-background p-4">
+            <p className="text-sm text-muted-foreground">Total cadastrado</p>
+            <p className="text-2xl font-bold text-foreground mt-2">
+              {vocabStats.totalCards}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-background p-4">
+            <p className="text-sm text-muted-foreground">Já estudadas</p>
+            <p className="text-2xl font-bold text-foreground mt-2">
+              {vocabStats.studied}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-background p-4">
+            <p className="text-sm text-muted-foreground">Dominadas</p>
+            <p className="text-2xl font-bold text-foreground mt-2">
+              {vocabStats.dominated}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-5">

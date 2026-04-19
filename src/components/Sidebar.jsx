@@ -1,8 +1,21 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, BarChart3, Layers, HelpCircle, Puzzle, Settings2, Palette, Volume2, VolumeX } from "lucide-react";
+import {
+  Home,
+  BarChart3,
+  Layers,
+  HelpCircle,
+  Puzzle,
+  Settings2,
+  Palette,
+  Volume2,
+  VolumeX,
+  LogOut,
+  UserCircle2,
+} from "lucide-react";
 import Logo from "./Logo";
 import { getSoundState, saveSoundState } from "../lib/gameState";
 import { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 const navItems = [
   { label: "Início", path: "/", icon: Home },
@@ -16,7 +29,10 @@ const navItems = [
 
 export default function Sidebar({ onClose }) {
   const location = useLocation();
+  const { user, logout } = useAuth();
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
 
   const toggleSound = () => {
     const state = getSoundState();
@@ -24,6 +40,28 @@ export default function Sidebar({ onClose }) {
     saveSoundState(state);
     setSoundEnabled(state.enabled);
   };
+
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout?.();
+      onClose?.();
+    } catch (error) {
+      console.error("Erro ao sair da conta:", error);
+      alert("Não foi possível sair da conta.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const displayName =
+    user?.firstName ||
+    user?.name ||
+    user?.full_name ||
+    "Usuário";
+
+  const displayEmail = user?.email || "";
+  const avatarUrl = user?.avatar_url || "";
 
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
@@ -37,21 +75,23 @@ export default function Sidebar({ onClose }) {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
+
           return (
             <Link
               key={item.path}
               to={item.path}
               onClick={onClose}
-              className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                transition-all duration-200 ease-out group
-                ${isActive
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ease-out group ${
+                isActive
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-sidebar-foreground hover:text-muted-foreground"
-                }
-              `}
+              }`}
             >
-              <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "" : "opacity-70 group-hover:opacity-50"}`} />
+              <Icon
+                className={`w-[18px] h-[18px] flex-shrink-0 ${
+                  isActive ? "" : "opacity-70 group-hover:opacity-50"
+                }`}
+              />
               <span>{item.label}</span>
             </Link>
           );
@@ -60,18 +100,56 @@ export default function Sidebar({ onClose }) {
 
       <div className="px-3 pb-5 pt-2">
         <div className="mx-1 h-px bg-border mb-3" />
-        <button
-          onClick={toggleSound}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full
-            text-sidebar-foreground hover:text-muted-foreground transition-all duration-200"
-        >
-          {soundEnabled ? (
-            <Volume2 className="w-[18px] h-[18px] opacity-70" />
-          ) : (
-            <VolumeX className="w-[18px] h-[18px] opacity-70" />
-          )}
-          <span>Som {soundEnabled ? "ativado" : "desativado"}</span>
-        </button>
+
+        <div className="mx-1 mb-3 rounded-xl border border-border bg-background p-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 border border-border">
+              {avatarUrl && !avatarError ? (
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <UserCircle2 className="w-5 h-5" />
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {displayName}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {displayEmail}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={toggleSound}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border border-border bg-card text-sidebar-foreground hover:text-muted-foreground transition-all duration-200"
+            >
+              {soundEnabled ? (
+                <Volume2 className="w-4 h-4 opacity-70" />
+              ) : (
+                <VolumeX className="w-4 h-4 opacity-70" />
+              )}
+              <span>{soundEnabled ? "Som ligado" : "Som desligado"}</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border border-destructive/30 bg-red-50 text-destructive hover:bg-destructive hover:text-white transition-all duration-200 disabled:opacity-50"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

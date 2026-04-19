@@ -1,29 +1,11 @@
 import { useState } from "react";
 import { ArrowLeft, FileJson, Download, Loader2 } from "lucide-react";
-
-const STORAGE_KEY = "vocabulary_items";
-
-function getStoredVocabulary() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Erro ao ler vocabulary do localStorage:", error);
-    return [];
-  }
-}
-
-function saveStoredVocabulary(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
-
-function generateId() {
-  return `local_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
+import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function ManagerImport({ vocab, onBack, onDone }) {
+  const { user } = useAuth();
+
   const [json, setJson] = useState("");
   const [status, setStatus] = useState(null);
   const [processing, setProcessing] = useState(false);
@@ -96,6 +78,14 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
       return;
     }
 
+    if (!user?.id) {
+      setStatus({
+        type: "error",
+        msg: "Usuário não identificado.",
+      });
+      return;
+    }
+
     try {
       setProcessing(true);
       setProgress({ current: 0, total: result.data.length, pct: 0 });
@@ -104,10 +94,10 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
         msg: `Processando ${result.data.length} palavras...`,
       });
 
-      const currentItems = getStoredVocabulary();
+      const now = new Date().toISOString();
 
       const importedItems = result.data.map((item) => ({
-        id: generateId(),
+        user_id: user.id,
         term: (item.term || "").trim(),
         pronunciation: (item.pronunciation || "").trim(),
         meanings: (item.meanings || [])
@@ -123,8 +113,6 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
               .filter((e) => e.sentence),
           }))
           .filter((m) => m.meaning),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         stats: {
           correct: 0,
           incorrect: 0,
@@ -132,17 +120,25 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
           avg_response_time: 0,
           status: "nova",
         },
+        created_at: now,
+        updated_at: now,
       }));
 
       for (let i = 0; i < importedItems.length; i++) {
+        const { error } = await supabase
+          .from("vocabulary")
+          .insert([importedItems[i]]);
+
+        if (error) {
+          throw error;
+        }
+
         setProgress({
           current: i + 1,
           total: importedItems.length,
           pct: Math.round(((i + 1) / importedItems.length) * 100),
         });
       }
-
-      saveStoredVocabulary([...importedItems, ...currentItems]);
 
       setStatus({
         type: "success",
@@ -151,7 +147,7 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
 
       setTimeout(() => onDone?.(), 1000);
     } catch (error) {
-      console.error("Erro ao importar JSON localmente:", error);
+      console.error("Erro ao importar JSON no Supabase:", error);
       setStatus({
         type: "error",
         msg: "Não foi possível importar o JSON.",

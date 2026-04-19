@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Volume2, VolumeX, ArrowRight, Lightbulb, Check } from "lucide-react";
+import { supabase } from "@/api/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import ModeSelector from "../components/ModeSelector";
 import ProgressBar from "../components/ProgressBar";
 import ExamplesPanel from "../components/ExamplesPanel";
@@ -10,26 +12,10 @@ import {
   updateStreak,
   playSound,
   getSoundState,
-  saveSoundState
+  saveSoundState,
+  getGameState,
+  saveGameState
 } from "../lib/gameState";
-
-const STORAGE_KEY = "vocabulary_items";
-
-function getStoredVocabulary() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Erro ao ler vocabulary do localStorage:", error);
-    return [];
-  }
-}
-
-function saveStoredVocabulary(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -40,7 +26,36 @@ function shuffleArray(arr) {
   return a;
 }
 
+function updateDominatedCount(items) {
+  const game = getGameState();
+  game.dominatedCount = items.filter(
+    (item) => item?.stats?.status === "dominada"
+  ).length;
+  saveGameState(game);
+}
+
+function mapVocabularyRow(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    term: row.term || "",
+    pronunciation: row.pronunciation || "",
+    meanings: Array.isArray(row.meanings) ? row.meanings : [],
+    stats: row.stats || {
+      correct: 0,
+      incorrect: 0,
+      total_reviews: 0,
+      avg_response_time: 0,
+      status: "nova",
+    },
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
 export default function Quiz() {
+  const { user } = useAuth();
+
   const [allVocab, setAllVocab] = useState([]);
   const [queue, setQueue] = useState([]);
   const [mode, setMode] = useState("en_pt");
@@ -58,24 +73,61 @@ export default function Quiz() {
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const startTime = useRef(Date.now());
 
+  const fetchVocabulary = async () => {
+    if (!user?.id) return [];
+
+    const { data, error } = await supabase
+      .from("vocabulary")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return Array.isArray(data) ? data.map(mapVocabularyRow) : [];
+  };
+
   useEffect(() => {
-    function load() {
-      setLoading(true);
+    let isMounted = true;
 
-      const data = getStoredVocabulary();
+    async function load() {
+      try {
+        setLoading(true);
 
-      setAllVocab(data);
-      setQueue(shuffleArray(data));
-      setCurrent(0);
-      setAnswered(false);
-      setSelected(null);
-      setShowExamples(false);
-      setSessionDone(false);
-      setLoading(false);
+        const data = await fetchVocabulary();
+
+        if (!isMounted) return;
+
+        setAllVocab(data);
+        setQueue(shuffleArray(data));
+        setCurrent(0);
+        setAnswered(false);
+        setSelected(null);
+        setShowExamples(false);
+        setSessionDone(false);
+        setActiveMeaning(null);
+        setOptions([]);
+        updateDominatedCount(data);
+      } catch (error) {
+        console.error("Erro ao carregar vocabulário no Quiz:", error);
+        if (!isMounted) return;
+        setAllVocab([]);
+        setQueue([]);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
 
     load();
-  }, [mode]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mode, user?.id]);
 
   useEffect(() => {
     if (queue.length === 0 || !queue[current]) return;
@@ -90,7 +142,10 @@ export default function Quiz() {
     const dir = mode === "random" ? (Math.random() > 0.5 ? "en_pt" : "pt_en") : mode;
     setCardDir(dir);
 
-    if (!meaning) return;
+    if (!meaning) {
+      setOptions([]);
+      return;
+    }
 
     const correctAnswer = dir === "en_pt" ? meaning.meaning : card.term;
 
@@ -114,9 +169,10 @@ export default function Quiz() {
     setOptions(allOptions);
     setAnswered(false);
     setSelected(null);
+    setIsCorrect(false);
     setShowExamples(false);
     startTime.current = Date.now();
-  }, [current, queue, allVocab, mode]);
+  }, [current, mode, queue.length, allVocab.length]);
 
   const toggleSound = () => {
     const state = getSoundState();
@@ -126,7 +182,7 @@ export default function Quiz() {
   };
 
   const handleSelect = async (idx) => {
-    if (answered) return;
+    if (answered || !user?.id || !options[idx]) return;
 
     setSelected(idx);
     setAnswered(true);
@@ -168,50 +224,55 @@ export default function Quiz() {
       else if (rate < 0.5) newStatus = "difícil";
     }
 
-    try {
-      const allItems = getStoredVocabulary();
+    const updatedStats = {
+      correct: newCorrect,
+      incorrect: newIncorrect,
+      total_reviews: newTotal,
+      avg_response_time: Math.round(newAvg),
+      last_reviewed: new Date().toISOString(),
+      status: newStatus
+    };
 
-      const updatedItems = allItems.map((item) =>
+    try {
+      const { error } = await supabase
+        .from("vocabulary")
+        .update({
+          stats: updatedStats,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", card.id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      const refreshedAllVocab = allVocab.map((item) =>
         item.id === card.id
           ? {
               ...item,
-              stats: {
-                correct: newCorrect,
-                incorrect: newIncorrect,
-                total_reviews: newTotal,
-                avg_response_time: Math.round(newAvg),
-                last_reviewed: new Date().toISOString(),
-                status: newStatus
-              },
+              stats: updatedStats,
               updatedAt: new Date().toISOString()
             }
           : item
       );
 
-      saveStoredVocabulary(updatedItems);
-
-      const refreshed = updatedItems;
-      setAllVocab(refreshed);
+      setAllVocab(refreshedAllVocab);
       setQueue((prev) =>
         prev.map((item) =>
           item.id === card.id
             ? {
                 ...item,
-                stats: {
-                  correct: newCorrect,
-                  incorrect: newIncorrect,
-                  total_reviews: newTotal,
-                  avg_response_time: Math.round(newAvg),
-                  last_reviewed: new Date().toISOString(),
-                  status: newStatus
-                },
+                stats: updatedStats,
                 updatedAt: new Date().toISOString()
               }
             : item
         )
       );
+      updateDominatedCount(refreshedAllVocab);
     } catch (error) {
-      console.error("Erro ao atualizar stats do quiz localmente:", error);
+      console.error("Erro ao atualizar stats do quiz no Supabase:", error);
+      alert("Não foi possível salvar seu progresso nesta pergunta.");
     }
   };
 
@@ -250,12 +311,21 @@ export default function Quiz() {
         <h2 className="text-xl font-bold text-foreground mb-2">Quiz completo! 🎉</h2>
         <p className="text-muted-foreground mb-4">Você respondeu {queue.length} perguntas.</p>
         <button
-          onClick={() => {
-            const data = getStoredVocabulary();
-            setAllVocab(data);
-            setCurrent(0);
-            setSessionDone(false);
-            setQueue(shuffleArray(data));
+          onClick={async () => {
+            try {
+              const data = await fetchVocabulary();
+              setAllVocab(data);
+              setCurrent(0);
+              setSessionDone(false);
+              setQueue(shuffleArray(data));
+              setAnswered(false);
+              setSelected(null);
+              setShowExamples(false);
+              updateDominatedCount(data);
+            } catch (error) {
+              console.error("Erro ao recarregar quiz:", error);
+              alert("Não foi possível recarregar o quiz.");
+            }
           }}
           className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
