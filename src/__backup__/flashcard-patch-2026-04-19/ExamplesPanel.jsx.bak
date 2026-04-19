@@ -44,7 +44,7 @@ export default function ExamplesPanel({
         }
       >
         <div className="flex items-center gap-2 text-foreground">
-          <Lightbulb className={isFlashcard ? "h-[18px] w-[18px] text-[#ED9A0A]" : "h-4 w-4 text-[#ED9A0A]"} />
+          <Lightbulb className={isFlashcard ? "h-[18px] w-[18px] text-[#64748B]" : "h-4 w-4 text-[#ED9A0A]"} />
           <h3 className={isFlashcard ? "text-base font-bold" : "text-2xl font-semibold leading-none"}>{title}</h3>
         </div>
 

@@ -1,12 +1,8 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ProgressBar from "../components/ProgressBar";
-import {
-  getGameState,
-  resetStudyHistory,
-  GAME_STATE_UPDATED_EVENT,
-} from "../lib/gameState";
+import { getGameState, resetStudyHistory } from "../lib/gameState";
 
 export default function Progress() {
   const { user } = useAuth();
@@ -76,11 +72,11 @@ export default function Progress() {
       setGameState(getGameState());
     };
 
-    window.addEventListener(GAME_STATE_UPDATED_EVENT, refreshProgress);
+    const interval = setInterval(refreshProgress, 1000);
     window.addEventListener("focus", loadProgress);
 
     return () => {
-      window.removeEventListener(GAME_STATE_UPDATED_EVENT, refreshProgress);
+      clearInterval(interval);
       window.removeEventListener("focus", loadProgress);
     };
   }, [user?.id]);

@@ -1,6 +1,5 @@
 const GAME_STATE_KEY = "voando_game_state";
 const SOUND_STATE_KEY = "voando_sound_state";
-export const GAME_STATE_UPDATED_EVENT = "voando:game-state-updated";
 
 const defaultGameState = {
   xp: 0,
@@ -49,14 +48,6 @@ export function getGameState() {
 
 export function saveGameState(state) {
   localStorage.setItem(GAME_STATE_KEY, JSON.stringify(state));
-
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent(GAME_STATE_UPDATED_EVENT, {
-        detail: { state: { ...state } },
-      })
-    );
-  }
 }
 
 export function addXP(amount) {

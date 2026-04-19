@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Check, X, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import FlashcardModeSelector from "../components/FlashcardModeSelector";
+import ModeSelector from "../components/ModeSelector";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import {
@@ -60,7 +60,6 @@ function mapVocabularyRow(row) {
 export default function Flashcards() {
   const { user } = useAuth();
 
-  const [baseVocab, setBaseVocab] = useState([]);
   const [vocab, setVocab] = useState([]);
   const [mode, setMode] = useState("en_pt");
   const [current, setCurrent] = useState(0);
@@ -74,7 +73,6 @@ export default function Flashcards() {
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
   const responseLockRef = useRef(false);
-  const prevModeRef = useRef(mode);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -108,7 +106,6 @@ export default function Flashcards() {
 
         if (!isMounted) return;
 
-        setBaseVocab(data);
         setVocab(prepared);
         setCurrent(0);
         setFlipped(false);
@@ -119,7 +116,6 @@ export default function Flashcards() {
       } catch (error) {
         console.error("Erro ao carregar vocabulário no Flashcards:", error);
         if (!isMounted) return;
-        setBaseVocab([]);
         setVocab([]);
       } finally {
         if (isMounted) {
@@ -133,24 +129,7 @@ export default function Flashcards() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (loading || baseVocab.length === 0) return;
-    if (prevModeRef.current === mode) return;
-
-    prevModeRef.current = mode;
-
-    const prepared = mode === "random" ? shuffleArray(baseVocab) : [...baseVocab];
-    setVocab(prepared);
-    setCurrent(0);
-    setFlipped(false);
-    setShowExamples(false);
-    setSessionDone(false);
-    setIsSubmittingResponse(false);
-    responseLockRef.current = false;
-    updateDominatedCount(prepared);
-  }, [mode, baseVocab, loading]);
+  }, [mode, user?.id]);
 
   useEffect(() => {
     const card = vocab[current];
@@ -257,17 +236,6 @@ export default function Flashcards() {
       );
 
       setVocab(updatedVocab);
-      setBaseVocab((previous) =>
-        previous.map((item) =>
-          item.id === card.id
-            ? {
-                ...item,
-                stats: updatedStats,
-                updatedAt: now,
-              }
-            : item
-        )
-      );
       updateDominatedCount(updatedVocab);
 
       const xpDelta = correct ? 1 : -2;
@@ -342,7 +310,6 @@ export default function Flashcards() {
             try {
               const data = await fetchVocabulary();
               const prepared = mode === "random" ? shuffleArray(data) : data;
-              setBaseVocab(data);
               setVocab(prepared);
               setCurrent(0);
               setFlipped(false);
@@ -365,116 +332,128 @@ export default function Flashcards() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-          Flashcards
+    <div className="mx-auto w-full max-w-[671.2px]">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-4xl font-bold leading-none text-foreground">Flashcards</h1>
           <button
             type="button"
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted"
+            className="rounded-lg p-1.5 transition-colors hover:bg-muted"
             title={soundEnabled ? "Desativar áudio" : "Ativar áudio"}
           >
             {soundEnabled ? (
-              <Volume2 className="h-5 w-5 text-muted-foreground" />
+              <Volume2 className="h-4 w-4 text-primary" />
             ) : (
-              <VolumeX className="h-5 w-5 text-muted-foreground" />
+              <VolumeX className="h-4 w-4 text-muted-foreground" />
             )}
           </button>
-        </h1>
+        </div>
 
-        <FlashcardModeSelector mode={mode} setMode={setMode} />
+        <ModeSelector mode={mode} setMode={setMode} />
       </div>
 
-      <div className="flex items-center gap-4 text-sm font-medium">
-        <span className="text-muted-foreground">{current + 1} de {vocab.length}</span>
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full bg-[#25B15F] transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="whitespace-nowrap text-sm font-semibold text-muted-foreground">
+            {current + 1} de {vocab.length}
+          </span>
+          <div className="h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="flex items-center gap-1 text-[#25B15F]">
-            <Check className="h-3.5 w-3.5" />
-            Acertei: {card?.stats?.correct || 0}
+
+        <div className="flex items-center gap-4 text-sm font-semibold">
+          <span className="flex items-center gap-1.5 text-primary">
+            <Check className="h-4 w-4" /> Acertei: {card?.stats?.correct || 0}
           </span>
-          <span className="flex items-center gap-1 text-red-500">
-            <X className="h-3.5 w-3.5" />
-            Errei: {card?.stats?.incorrect || 0}
+          <span className="flex items-center gap-1.5 text-destructive">
+            <X className="h-4 w-4" /> Errei: {card?.stats?.incorrect || 0}
           </span>
-          {xpFeedback ? (
-            <span
-              className={`ml-4 font-bold animate-in fade-in slide-in-from-bottom-1 duration-200 ${
-                xpFeedback.includes("+") ? "text-primary" : "text-destructive"
-              }`}
-            >
-              {xpFeedback}
-            </span>
-          ) : null}
         </div>
       </div>
+
+      {xpFeedback ? (
+        <p
+          className={`mb-3 text-right text-xs font-bold animate-in fade-in slide-in-from-bottom-1 duration-200 ${
+            xpFeedback.includes("+") ? "text-primary" : "text-destructive"
+          }`}
+        >
+          {xpFeedback}
+        </p>
+      ) : null}
 
       <div
-        className="flip-card w-full cursor-pointer select-none"
+        className="flip-card w-full"
         style={{
           maxWidth: `${FLASHCARD_CARD_WIDTH}px`,
           aspectRatio: `${FLASHCARD_CARD_WIDTH} / ${FLASHCARD_CARD_HEIGHT}`,
         }}
-        onClick={handleFlip}
       >
-        <div className={`flip-card-inner relative h-full w-full ${flipped ? "flipped" : ""}`}>
-          <div className="flip-card-front absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-border bg-white p-8 text-center shadow-sm">
-            <span className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        <div
+          className={`flip-card-inner relative h-full w-full cursor-pointer ${
+            flipped ? "flipped" : ""
+          }`}
+          onClick={handleFlip}
+        >
+          <div
+            className="flip-card-front flashcard-context-box absolute inset-0"
+          >
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               {frontLabel}
             </span>
-            <p className="break-words text-3xl font-bold leading-tight text-foreground md:text-5xl">
+            <p className="mt-5 max-w-[90%] text-[clamp(2rem,5vw,3.6rem)] font-bold leading-tight text-foreground break-words">
               {front}
             </p>
-            <p className="mt-4 text-xs text-muted-foreground">Clique para revelar</p>
+            {card?.pronunciation && cardDir !== "pt_en" ? (
+              <p className="mt-2 text-sm italic text-muted-foreground">/{card.pronunciation}/</p>
+            ) : null}
+            <p className="mt-5 text-sm text-muted-foreground">Clique para revelar</p>
           </div>
 
-          <div className="flip-card-back absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-border bg-white p-8 text-center shadow-sm">
-            <span className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <div
+            className="flip-card-back flashcard-context-box absolute inset-0"
+          >
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               {backLabel}
             </span>
-            <p className="break-words text-3xl font-bold leading-tight text-foreground md:text-5xl">
+            <p className="mt-5 max-w-[90%] text-[clamp(2rem,5vw,3.6rem)] font-bold leading-tight text-foreground break-words">
               {back}
             </p>
-            {card?.pronunciation ? (
-              <p className="mt-4 font-mono text-base text-muted-foreground">/{card.pronunciation}/</p>
-            ) : null}
+            <p className="mt-5 text-sm text-muted-foreground">Use os botões abaixo para avaliar</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => handleResponse(false)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-14 items-center justify-center gap-2 rounded-md border border-red-500 px-4 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex h-14 items-center justify-center gap-2 rounded-xl border border-[#F3A3AA] bg-card px-4 text-base font-semibold text-[#F56E77] transition-colors hover:bg-[#FFF2F4] disabled:cursor-not-allowed disabled:opacity-60"
         >
+          <X className="h-4 w-4" />
           Ainda aprendendo
         </button>
-
         <button
           type="button"
           onClick={() => handleResponse(true)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-14 items-center justify-center gap-2 rounded-md bg-[#25B15F] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex h-14 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Check className="mr-1 h-4 w-4" />
+          <Check className="h-4 w-4" />
           Já sei
         </button>
       </div>
 
       {card?.meanings?.length > 0 ? (
-        <div className="space-y-0">
+        <div className="mt-3">
           <ExamplesToggleButton
             expanded={showExamples}
             onClick={() => setShowExamples((value) => !value)}
-            variant="flashcard"
           />
 
           {showExamples ? (
@@ -482,7 +461,6 @@ export default function Flashcards() {
               allMeanings={card.meanings}
               activeMeaning={activeMeaning?.meaning}
               titleTerm={card?.term}
-              variant="flashcard"
               onClose={() => setShowExamples(false)}
             />
           ) : null}
@@ -491,4 +469,3 @@ export default function Flashcards() {
     </div>
   );
 }
-

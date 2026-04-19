@@ -1,0 +1,42 @@
+import { Lightbulb } from "lucide-react";
+
+export default function ExamplesToggleButton({
+  expanded,
+  onClick,
+  collapsedLabel = "Ver exemplos",
+  expandedLabel = "Ocultar exemplos",
+  variant = "default",
+  className = "",
+}) {
+  if (variant === "flashcard") {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`group flex h-12 w-full items-center justify-center gap-2 rounded-md border border-[#47556966] bg-white px-4 py-2 text-center text-sm font-medium leading-5 text-[#1A1A1A] transition-colors hover:border-[#ED9A0A] hover:bg-[#ED9A0A] hover:text-white ${expanded ? "mb-6" : ""} ${className}`}
+      >
+        <Lightbulb
+          className={`h-[18px] w-[18px] transition-colors group-hover:text-white ${
+            expanded ? "text-[#ED9A0A]" : "text-[#64748B]"
+          }`}
+        />
+        {expanded ? expandedLabel : collapsedLabel}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors duration-200 ${
+        expanded
+          ? "bg-[#F5F7FA] border-[#D9E1E8] text-[#2F3A45]"
+          : "bg-card border-border/70 text-foreground"
+      } hover:bg-[#ED9A0A] hover:border-[#ED9A0A] hover:text-white ${className}`}
+    >
+      <Lightbulb className="w-4 h-4" />
+      {expanded ? expandedLabel : collapsedLabel}
+    </button>
+  );
+}

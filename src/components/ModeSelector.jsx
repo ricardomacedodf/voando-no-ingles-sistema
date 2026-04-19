@@ -1,27 +1,27 @@
 export default function ModeSelector({ mode, setMode }) {
   const modes = [
-    { key: "en_pt", label: "EN → PT" },
-    { key: "pt_en", label: "PT → EN" },
+    { key: "en_pt", label: "EN -> PT" },
+    { key: "pt_en", label: "PT -> EN" },
     { key: "random", label: "Aleatório" },
   ];
 
   return (
-    <div className="flex gap-1.5">
-      {modes.map((m) => (
+    <div className="inline-flex items-center rounded-full border border-border/80 bg-card p-1 shadow-sm">
+      {modes.map((item) => (
         <button
-          key={m.key}
-          onClick={() => setMode(m.key)}
-          className={`
-            px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200
-            ${mode === m.key
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "bg-card text-foreground border border-border/80 hover:border-primary/30"
-            }
-          `}
+          key={item.key}
+          type="button"
+          onClick={() => setMode(item.key)}
+          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+            mode === item.key
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
         >
-          {m.label}
+          {item.label}
         </button>
       ))}
     </div>
   );
 }
+

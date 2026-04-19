@@ -10,6 +10,7 @@ import {
   Volume2,
   VolumeX,
   LogOut,
+  ChevronDown,
   UserCircle2,
 } from "lucide-react";
 import Logo from "./Logo";
@@ -33,6 +34,7 @@ export default function Sidebar({ onClose }) {
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const toggleSound = () => {
     const state = getSoundState();
@@ -98,66 +100,73 @@ export default function Sidebar({ onClose }) {
         })}
       </nav>
 
-      <div className="px-3 pb-5 pt-2">
-        <div className="mx-1 h-px bg-border mb-3" />
+      <div className="pt-2">
+        <div className="h-px bg-border" />
 
-        <div className="mx-1 mb-3 rounded-lg border border-border bg-muted/30 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Perfil Google
-            </span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              conectado
-            </span>
-          </div>
+        <div className="px-4 py-3">
+          <button
+            onClick={toggleSound}
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
+          >
+            {soundEnabled ? (
+              <Volume2 className="h-4 w-4 text-primary" />
+            ) : (
+              <VolumeX className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span>{soundEnabled ? "Som ligado" : "Som desligado"}</span>
+          </button>
 
-          <div className="flex items-center gap-3 rounded-md border border-border/80 bg-background px-2.5 py-2.5">
-            <div className="h-11 w-11 rounded-full overflow-hidden bg-muted text-muted-foreground flex items-center justify-center flex-shrink-0 border border-border/80">
-              {avatarUrl && !avatarError ? (
-                <img
-                  src={avatarUrl}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={() => setAvatarError(true)}
-                />
-              ) : (
-                <UserCircle2 className="w-5 h-5" />
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground truncate leading-tight">
-                {displayName}
-              </p>
-              <p className="text-xs text-muted-foreground truncate mt-0.5">
-                {displayEmail}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="relative mt-2">
             <button
-              onClick={toggleSound}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-xs font-medium border border-border bg-background text-foreground hover:bg-muted transition-colors duration-200"
+              type="button"
+              onClick={() => setIsProfileMenuOpen((open) => !open)}
+              className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/60"
             >
-              {soundEnabled ? (
-                <Volume2 className="w-4 h-4 opacity-70" />
-              ) : (
-                <VolumeX className="w-4 h-4 opacity-70" />
-              )}
-              <span>{soundEnabled ? "Som ligado" : "Som desligado"}</span>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
+                  {avatarUrl && !avatarError ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName}
+                      className="h-full w-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={() => setAvatarError(true)}
+                    />
+                  ) : (
+                    <UserCircle2 className="h-4 w-4" />
+                  )}
+                </div>
+
+                <div className="min-w-0">
+                  <p className="truncate text-[17px] font-medium leading-tight text-foreground">
+                    {displayName}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">
+                    {displayEmail}
+                  </p>
+                </div>
+              </div>
+
+              <ChevronDown
+                className={`h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform ${
+                  isProfileMenuOpen ? "rotate-180" : ""
+                }`}
+              />
             </button>
 
-            <button
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-xs font-medium border border-red-200 bg-background text-red-600 hover:bg-red-50 transition-colors duration-200 disabled:opacity-50"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
-            </button>
+            {isProfileMenuOpen && (
+              <button
+                onClick={async () => {
+                  setIsProfileMenuOpen(false);
+                  await handleLogout();
+                }}
+                disabled={isLoggingOut}
+                className="absolute bottom-full left-2 right-2 mb-2 flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

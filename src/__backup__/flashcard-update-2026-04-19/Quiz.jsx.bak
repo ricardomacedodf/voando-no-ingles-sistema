@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { Volume2, VolumeX, ArrowRight, Check } from "lucide-react";
+import { Volume2, VolumeX, ArrowRight, Lightbulb, Check } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ModeSelector from "../components/ModeSelector";
 import ProgressBar from "../components/ProgressBar";
 import ExamplesPanel from "../components/ExamplesPanel";
-import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import {
   addXP,
   recordCorrect,
@@ -408,29 +407,33 @@ export default function Quiz() {
         </div>
       )}
 
-      {answered && card?.meanings?.length > 0 && (
-        <div className="mt-3">
-          <ExamplesToggleButton
-            expanded={showExamples}
-            onClick={() => setShowExamples((prev) => !prev)}
-          />
-        </div>
-      )}
-
       {answered && (
-        <button
-          onClick={handleNext}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
-        >
-          Próximo <ArrowRight className="w-4 h-4" />
-        </button>
+        <div className="flex gap-3 mt-3">
+          {card?.meanings?.length > 0 && (
+            <button
+              onClick={() => setShowExamples(!showExamples)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border ${
+                showExamples
+                  ? "bg-orange-500 text-white border-orange-500"
+                  : "bg-card text-foreground border-border/60 hover:bg-orange-500 hover:text-white hover:border-orange-500"
+              }`}
+            >
+              <Lightbulb className="w-4 h-4" /> Exemplos
+            </button>
+          )}
+          <button
+            onClick={handleNext}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+          >
+            Próximo <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
       )}
 
       {showExamples && (
         <ExamplesPanel
           allMeanings={card?.meanings}
           activeMeaning={activeMeaning?.meaning}
-          titleTerm={card?.term}
           onClose={() => setShowExamples(false)}
         />
       )}

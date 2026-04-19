@@ -1,0 +1,30 @@
+export default function FlashcardModeSelector({ mode, setMode }) {
+  const modes = [
+    { key: "en_pt", label: "EN→PT" },
+    { key: "pt_en", label: "PT→EN" },
+    { key: "random", label: "Aleatório" },
+  ];
+
+  return (
+    <div className="flex rounded-full border border-[#EDF0F3] bg-white p-1 shadow-sm">
+      {modes.map((item) => {
+        const isActive = mode === item.key;
+
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setMode(item.key)}
+            className={`rounded-full px-4 py-1.5 text-center text-sm font-medium leading-5 transition-colors ${
+              isActive
+                ? "bg-[#25B15F] text-white"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

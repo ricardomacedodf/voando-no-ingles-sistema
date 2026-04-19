@@ -60,7 +60,6 @@ function mapVocabularyRow(row) {
 export default function Flashcards() {
   const { user } = useAuth();
 
-  const [baseVocab, setBaseVocab] = useState([]);
   const [vocab, setVocab] = useState([]);
   const [mode, setMode] = useState("en_pt");
   const [current, setCurrent] = useState(0);
@@ -74,7 +73,6 @@ export default function Flashcards() {
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
   const responseLockRef = useRef(false);
-  const prevModeRef = useRef(mode);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -108,7 +106,6 @@ export default function Flashcards() {
 
         if (!isMounted) return;
 
-        setBaseVocab(data);
         setVocab(prepared);
         setCurrent(0);
         setFlipped(false);
@@ -119,7 +116,6 @@ export default function Flashcards() {
       } catch (error) {
         console.error("Erro ao carregar vocabulário no Flashcards:", error);
         if (!isMounted) return;
-        setBaseVocab([]);
         setVocab([]);
       } finally {
         if (isMounted) {
@@ -133,24 +129,7 @@ export default function Flashcards() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (loading || baseVocab.length === 0) return;
-    if (prevModeRef.current === mode) return;
-
-    prevModeRef.current = mode;
-
-    const prepared = mode === "random" ? shuffleArray(baseVocab) : [...baseVocab];
-    setVocab(prepared);
-    setCurrent(0);
-    setFlipped(false);
-    setShowExamples(false);
-    setSessionDone(false);
-    setIsSubmittingResponse(false);
-    responseLockRef.current = false;
-    updateDominatedCount(prepared);
-  }, [mode, baseVocab, loading]);
+  }, [mode, user?.id]);
 
   useEffect(() => {
     const card = vocab[current];
@@ -257,17 +236,6 @@ export default function Flashcards() {
       );
 
       setVocab(updatedVocab);
-      setBaseVocab((previous) =>
-        previous.map((item) =>
-          item.id === card.id
-            ? {
-                ...item,
-                stats: updatedStats,
-                updatedAt: now,
-              }
-            : item
-        )
-      );
       updateDominatedCount(updatedVocab);
 
       const xpDelta = correct ? 1 : -2;
@@ -342,7 +310,6 @@ export default function Flashcards() {
             try {
               const data = await fetchVocabulary();
               const prepared = mode === "random" ? shuffleArray(data) : data;
-              setBaseVocab(data);
               setVocab(prepared);
               setCurrent(0);
               setFlipped(false);

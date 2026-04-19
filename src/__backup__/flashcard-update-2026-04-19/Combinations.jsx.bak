@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import ExamplesPanel from "../components/ExamplesPanel";
-import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import ModeSelector from "../components/ModeSelector";
 import { addXP, recordCorrect, recordIncorrect, playSound } from "../lib/gameState";
 
@@ -100,8 +98,6 @@ export default function Combinations() {
   const [roundComplete, setRoundComplete] = useState(false);
   const [errors, setErrors] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [showExamples, setShowExamples] = useState(false);
-  const [focusedPair, setFocusedPair] = useState(null);
 
   const difficultyMap = useRef({});
 
@@ -165,14 +161,6 @@ export default function Combinations() {
     const pairs = weightedSample(pool, difficultyMap.current, PAIRS_PER_ROUND);
 
     setRoundPairs(pairs);
-    setFocusedPair(
-      pairs[0]
-        ? {
-            vocabId: pairs[0].vocabId,
-            meaningIdx: pairs[0].meaningIdx,
-          }
-        : null
-    );
 
     const left = shuffleArray(
       pairs.map((p, i) => ({
@@ -200,7 +188,6 @@ export default function Combinations() {
     setRoundComplete(false);
     setErrors(0);
     setErrorPair(null);
-    setShowExamples(false);
   };
 
   const checkMatch = (leftIdx, rightIdx) => {
@@ -213,13 +200,6 @@ export default function Combinations() {
     if (matched.has(`l${idx}`) || roundComplete) return;
 
     playSound("selection");
-    const left = leftItems[idx];
-    if (left) {
-      setFocusedPair({
-        vocabId: left.vocabId,
-        meaningIdx: left.meaningIdx,
-      });
-    }
     setSelectedLeft(idx);
 
     if (selectedRight !== null) {
@@ -231,13 +211,6 @@ export default function Combinations() {
     if (matched.has(`r${idx}`) || roundComplete) return;
 
     playSound("selection");
-    const right = rightItems[idx];
-    if (right) {
-      setFocusedPair({
-        vocabId: right.vocabId,
-        meaningIdx: right.meaningIdx,
-      });
-    }
     setSelectedRight(idx);
 
     if (selectedLeft !== null) {
@@ -315,11 +288,6 @@ export default function Combinations() {
 
   const totalPairs = roundPairs.length;
   const xpGained = Math.max(totalPairs - errors, 0);
-  const focusedCard = allVocab.find((item) => item.id === focusedPair?.vocabId);
-  const focusedMeaning =
-    focusedCard?.meanings?.[focusedPair?.meaningIdx]?.meaning || null;
-  const hasFocusedExamples =
-    Array.isArray(focusedCard?.meanings) && focusedCard.meanings.length > 0;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -390,24 +358,6 @@ export default function Combinations() {
           })}
         </div>
       </div>
-
-      {hasFocusedExamples && (
-        <div className="mt-4">
-          <ExamplesToggleButton
-            expanded={showExamples}
-            onClick={() => setShowExamples((prev) => !prev)}
-          />
-
-          {showExamples && (
-            <ExamplesPanel
-              allMeanings={focusedCard.meanings}
-              activeMeaning={focusedMeaning}
-              titleTerm={focusedCard.term}
-              onClose={() => setShowExamples(false)}
-            />
-          )}
-        </div>
-      )}
 
       {roundComplete && (
         <div className="mt-5 text-center">

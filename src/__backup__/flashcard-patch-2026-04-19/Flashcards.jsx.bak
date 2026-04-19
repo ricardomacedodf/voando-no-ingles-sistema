@@ -60,7 +60,6 @@ function mapVocabularyRow(row) {
 export default function Flashcards() {
   const { user } = useAuth();
 
-  const [baseVocab, setBaseVocab] = useState([]);
   const [vocab, setVocab] = useState([]);
   const [mode, setMode] = useState("en_pt");
   const [current, setCurrent] = useState(0);
@@ -74,7 +73,6 @@ export default function Flashcards() {
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
   const responseLockRef = useRef(false);
-  const prevModeRef = useRef(mode);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -108,7 +106,6 @@ export default function Flashcards() {
 
         if (!isMounted) return;
 
-        setBaseVocab(data);
         setVocab(prepared);
         setCurrent(0);
         setFlipped(false);
@@ -119,7 +116,6 @@ export default function Flashcards() {
       } catch (error) {
         console.error("Erro ao carregar vocabulário no Flashcards:", error);
         if (!isMounted) return;
-        setBaseVocab([]);
         setVocab([]);
       } finally {
         if (isMounted) {
@@ -133,24 +129,7 @@ export default function Flashcards() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (loading || baseVocab.length === 0) return;
-    if (prevModeRef.current === mode) return;
-
-    prevModeRef.current = mode;
-
-    const prepared = mode === "random" ? shuffleArray(baseVocab) : [...baseVocab];
-    setVocab(prepared);
-    setCurrent(0);
-    setFlipped(false);
-    setShowExamples(false);
-    setSessionDone(false);
-    setIsSubmittingResponse(false);
-    responseLockRef.current = false;
-    updateDominatedCount(prepared);
-  }, [mode, baseVocab, loading]);
+  }, [mode, user?.id]);
 
   useEffect(() => {
     const card = vocab[current];
@@ -257,17 +236,6 @@ export default function Flashcards() {
       );
 
       setVocab(updatedVocab);
-      setBaseVocab((previous) =>
-        previous.map((item) =>
-          item.id === card.id
-            ? {
-                ...item,
-                stats: updatedStats,
-                updatedAt: now,
-              }
-            : item
-        )
-      );
       updateDominatedCount(updatedVocab);
 
       const xpDelta = correct ? 1 : -2;
@@ -342,7 +310,6 @@ export default function Flashcards() {
             try {
               const data = await fetchVocabulary();
               const prepared = mode === "random" ? shuffleArray(data) : data;
-              setBaseVocab(data);
               setVocab(prepared);
               setCurrent(0);
               setFlipped(false);
@@ -394,7 +361,7 @@ export default function Flashcards() {
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1 text-[#25B15F]">
             <Check className="h-3.5 w-3.5" />
             Acertei: {card?.stats?.correct || 0}
@@ -403,17 +370,18 @@ export default function Flashcards() {
             <X className="h-3.5 w-3.5" />
             Errei: {card?.stats?.incorrect || 0}
           </span>
-          {xpFeedback ? (
-            <span
-              className={`ml-4 font-bold animate-in fade-in slide-in-from-bottom-1 duration-200 ${
-                xpFeedback.includes("+") ? "text-primary" : "text-destructive"
-              }`}
-            >
-              {xpFeedback}
-            </span>
-          ) : null}
         </div>
       </div>
+
+      {xpFeedback ? (
+        <p
+          className={`text-right text-xs font-bold animate-in fade-in slide-in-from-bottom-1 duration-200 ${
+            xpFeedback.includes("+") ? "text-primary" : "text-destructive"
+          }`}
+        >
+          {xpFeedback}
+        </p>
+      ) : null}
 
       <div
         className="flip-card w-full cursor-pointer select-none"
@@ -431,6 +399,9 @@ export default function Flashcards() {
             <p className="break-words text-3xl font-bold leading-tight text-foreground md:text-5xl">
               {front}
             </p>
+            {card?.pronunciation && cardDir !== "pt_en" ? (
+              <p className="mt-4 font-mono text-base text-muted-foreground">/{card.pronunciation}/</p>
+            ) : null}
             <p className="mt-4 text-xs text-muted-foreground">Clique para revelar</p>
           </div>
 
@@ -441,9 +412,7 @@ export default function Flashcards() {
             <p className="break-words text-3xl font-bold leading-tight text-foreground md:text-5xl">
               {back}
             </p>
-            {card?.pronunciation ? (
-              <p className="mt-4 font-mono text-base text-muted-foreground">/{card.pronunciation}/</p>
-            ) : null}
+            <p className="mt-4 text-xs text-muted-foreground">Use os botões abaixo para avaliar</p>
           </div>
         </div>
       </div>
@@ -491,4 +460,3 @@ export default function Flashcards() {
     </div>
   );
 }
-
