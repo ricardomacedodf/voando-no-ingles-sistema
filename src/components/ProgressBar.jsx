@@ -1,4 +1,9 @@
-export default function ProgressBar({ current, total, variant = "default" }) {
+export default function ProgressBar({
+  current,
+  total,
+  variant = "default",
+  labelPrefix = ""
+}) {
   const pct = total > 0 ? (current / total) * 100 : 0;
   const isQuiz = variant === "quiz";
 
@@ -11,7 +16,7 @@ export default function ProgressBar({ current, total, variant = "default" }) {
             : "whitespace-nowrap text-xs font-medium text-muted-foreground"
         }
       >
-        {current} de {total}
+        {labelPrefix ? `${labelPrefix} ${current} de ${total}` : `${current} de ${total}`}
       </span>
 
       <div

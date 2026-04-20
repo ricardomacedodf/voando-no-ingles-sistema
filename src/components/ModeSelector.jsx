@@ -19,7 +19,9 @@ export default function ModeSelector({ mode, setMode, variant = "default" }) {
         <button
           key={item.key}
           type="button"
-          onClick={() => setMode(item.key)}
+          onClick={() => {
+            if (item.key !== mode) setMode(item.key);
+          }}
           className={`rounded-full px-4 py-1.5 transition-colors duration-200 ${
             isQuiz ? "text-sm font-medium" : "text-xs font-semibold"
           } ${

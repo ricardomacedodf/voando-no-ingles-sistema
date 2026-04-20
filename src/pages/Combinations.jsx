@@ -392,20 +392,22 @@ export default function Combinations() {
       </div>
 
       {hasFocusedExamples && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-0">
           <ExamplesToggleButton
             expanded={showExamples}
             onClick={() => setShowExamples((prev) => !prev)}
+            variant="flashcard"
           />
 
-          {showExamples && (
+          {showExamples ? (
             <ExamplesPanel
               allMeanings={focusedCard.meanings}
               activeMeaning={focusedMeaning}
               titleTerm={focusedCard.term}
+              variant="flashcard"
               onClose={() => setShowExamples(false)}
             />
-          )}
+          ) : null}
         </div>
       )}
 
