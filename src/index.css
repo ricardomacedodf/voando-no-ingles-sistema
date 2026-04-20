@@ -153,4 +153,58 @@
   text-align: center;
   padding: 32px;
   line-height: 24px;
+  overflow: hidden;
+}
+
+.flashcard-language-label {
+  margin-bottom: 16px;
+}
+
+.flashcard-main-text-slot {
+  display: flex;
+  width: 100%;
+  min-height: 132px;
+  height: 132px;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 8px;
+  overflow: hidden;
+}
+
+.flashcard-main-text {
+  width: 100%;
+}
+
+.flashcard-reveal-hint {
+  margin-top: 16px;
+}
+
+.flashcard-pronunciation {
+  margin-top: 16px;
+}
+
+@media (max-width: 767px) {
+  .flashcard-context-box {
+    padding: 24px 16px 22px;
+  }
+
+  .flashcard-language-label {
+    margin-top: 6px;
+    margin-bottom: 14px;
+  }
+
+  .flashcard-main-text-slot {
+    min-height: 148px;
+    height: 148px;
+    padding-inline: 4px;
+  }
+
+  .flashcard-reveal-hint {
+    margin-top: 18px;
+    margin-bottom: 4px;
+  }
+
+  .flashcard-pronunciation {
+    margin-top: 18px;
+  }
 }

@@ -341,44 +341,44 @@ export default function Quiz() {
   const letters = ["A", "B", "C", "D"];
 
   return (
-    <div className="max-w-xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-foreground">Quiz</h1>
+    <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Quiz</h1>
           <button
             onClick={toggleSound}
-            className="p-1 rounded-lg hover:bg-muted transition-colors"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             title={soundEnabled ? "Desativar áudio" : "Ativar áudio"}
           >
             {soundEnabled ? (
-              <Volume2 className="w-4 h-4 text-primary" />
+              <Volume2 className="h-5 w-5 text-muted-foreground" />
             ) : (
-              <VolumeX className="w-4 h-4 text-muted-foreground" />
+              <VolumeX className="h-5 w-5 text-muted-foreground" />
             )}
           </button>
         </div>
-        <ModeSelector mode={mode} setMode={setMode} />
+        <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
       </div>
 
-      <ProgressBar current={current + 1} total={queue.length} />
+      <ProgressBar current={current + 1} total={queue.length} variant="quiz" />
 
-      <div className="bg-card rounded-2xl border border-border/60 p-6 md:p-8 mt-5 text-center">
-        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">
+      <div className="space-y-4 rounded-2xl border bg-white p-8 text-center shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Qual o significado?
         </p>
-        <p className="text-xl md:text-2xl font-bold text-foreground leading-relaxed break-words">
+        <p className="break-words text-3xl font-bold leading-tight text-foreground md:text-4xl">
           {questionText}
         </p>
       </div>
 
-      <div className="space-y-2 mt-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {options.map((opt, idx) => {
-          let classes = "bg-card border border-border/60 text-foreground hover:border-primary/50";
+          let classes = "border-border text-foreground hover:border-primary";
 
           if (answered) {
-            if (opt.correct) classes = "bg-emerald-50 border-primary text-foreground";
-            else if (idx === selected && !opt.correct) classes = "bg-red-50 border-destructive text-foreground";
-            else classes = "bg-card border border-border/40 text-muted-foreground opacity-60";
+            if (opt.correct) classes = "border-primary bg-emerald-50 text-foreground";
+            else if (idx === selected && !opt.correct) classes = "border-destructive bg-red-50 text-foreground";
+            else classes = "border-border/60 text-muted-foreground opacity-60";
           }
 
           return (
@@ -386,12 +386,12 @@ export default function Quiz() {
               key={idx}
               onClick={() => handleSelect(idx)}
               disabled={answered}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200 ${classes}`}
+              className={`flex w-full items-center gap-3 rounded-xl border-2 bg-white p-4 text-left text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes}`}
             >
-              <span className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground flex-shrink-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
                 {letters[idx]}
               </span>
-              <span className="text-left break-words">{opt.text}</span>
+              <span className="break-words">{opt.text}</span>
             </button>
           );
         })}
@@ -399,30 +399,28 @@ export default function Quiz() {
 
       {answered && (
         <div
-          className={`mt-4 p-4 rounded-xl text-sm font-medium ${
+          className={`rounded-xl p-4 text-sm font-medium ${
             isCorrect ? "bg-emerald-50 text-primary" : "bg-red-50 text-destructive"
           }`}
         >
-          {isCorrect ? "Correto! 🎉" : "Errou! Tente novamente 💪"}{" "}
+          {isCorrect ? "Correto!" : "Errou! Tente novamente."}{" "}
           <span className="font-bold">{xpFeedback}</span>
         </div>
       )}
 
       {answered && card?.meanings?.length > 0 && (
-        <div className="mt-3">
-          <ExamplesToggleButton
-            expanded={showExamples}
-            onClick={() => setShowExamples((prev) => !prev)}
-          />
-        </div>
+        <ExamplesToggleButton
+          expanded={showExamples}
+          onClick={() => setShowExamples((prev) => !prev)}
+        />
       )}
 
       {answered && (
         <button
           onClick={handleNext}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Próximo <ArrowRight className="w-4 h-4" />
+          Pr�ximo <ArrowRight className="h-4 w-4" />
         </button>
       )}
 

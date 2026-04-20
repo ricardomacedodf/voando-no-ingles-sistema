@@ -1,14 +1,28 @@
-export default function ProgressBar({ current, total }) {
+export default function ProgressBar({ current, total, variant = "default" }) {
   const pct = total > 0 ? (current / total) * 100 : 0;
+  const isQuiz = variant === "quiz";
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">
+    <div className={isQuiz ? "flex items-center gap-4 text-sm font-medium" : "flex items-center gap-3"}>
+      <span
+        className={
+          isQuiz
+            ? "whitespace-nowrap text-muted-foreground"
+            : "whitespace-nowrap text-xs font-medium text-muted-foreground"
+        }
+      >
         {current} de {total}
       </span>
-      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+
+      <div
+        className={
+          isQuiz
+            ? "h-2 flex-1 overflow-hidden rounded-full bg-muted"
+            : "h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+        }
+      >
         <div
-          className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+          className={`h-full rounded-full bg-primary transition-all ${isQuiz ? "duration-300" : "duration-500 ease-out"}`}
           style={{ width: `${pct}%` }}
         />
       </div>

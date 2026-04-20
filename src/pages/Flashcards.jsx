@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Check, X, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
@@ -20,8 +20,10 @@ import {
 
 const FLASHCARD_CARD_WIDTH = 671.2;
 const FLASHCARD_CARD_HEIGHT = 335.3;
-const FLASHCARD_MAIN_TEXT_MIN_SIZE = 30;
-const FLASHCARD_MAIN_TEXT_MAX_SIZE = 56;
+const FLASHCARD_MAIN_TEXT_MIN_SIZE = 22;
+const FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE = 18;
+const FLASHCARD_MAIN_TEXT_MAX_SIZE = 47;
+const FLASHCARD_MOBILE_BREAKPOINT = 767;
 
 function shuffleArray(arr) {
   const shuffled = [...arr];
@@ -63,6 +65,13 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function getAdaptiveLineHeightMultiplier(fontSize) {
+  if (fontSize >= 42) return 1.12;
+  if (fontSize >= 34) return 1.16;
+  if (fontSize >= 28) return 1.2;
+  return 1.24;
+}
+
 function getAdaptiveMainTextStyle(content) {
   const text = typeof content === "string" ? content.trim() : "";
   const length = text.length;
@@ -86,22 +95,61 @@ function getAdaptiveMainTextStyle(content) {
   if (longestWord >= 20) size -= 2;
 
   const fontSize = clamp(size, FLASHCARD_MAIN_TEXT_MIN_SIZE, FLASHCARD_MAIN_TEXT_MAX_SIZE);
-  const lineHeightMultiplier = fontSize >= 48 ? 1.12 : fontSize >= 40 ? 1.16 : 1.22;
+  const lineHeightMultiplier = getAdaptiveLineHeightMultiplier(fontSize);
 
   let maxWidth = "95%";
   if (length > 35) maxWidth = "92%";
   if (length > 55) maxWidth = "90%";
 
   return {
-    fontSize: `${fontSize}px`,
-    lineHeight: `${Math.round(fontSize * lineHeightMultiplier)}px`,
+    fontSize,
+    lineHeight: Math.round(fontSize * lineHeightMultiplier),
     maxWidth,
-    marginInline: "auto",
-    textWrap: "balance",
     overflowWrap: longestWord >= 16 ? "anywhere" : "break-word",
     wordBreak: longestWord >= 16 ? "break-word" : "normal",
     hyphens: "auto",
   };
+}
+
+function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
+  if (!textElement || !slotElement) return;
+
+  const isMobile =
+    typeof window !== "undefined" &&
+    window.innerWidth <= FLASHCARD_MOBILE_BREAKPOINT;
+
+  const minFontSize = isMobile
+    ? FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE
+    : FLASHCARD_MAIN_TEXT_MIN_SIZE;
+
+  let currentSize = clamp(
+    Math.round(preferredFontSize),
+    minFontSize,
+    FLASHCARD_MAIN_TEXT_MAX_SIZE
+  );
+
+  const applySize = (size) => {
+    textElement.style.fontSize = `${size}px`;
+    textElement.style.lineHeight = `${Math.round(
+      size * getAdaptiveLineHeightMultiplier(size)
+    )}px`;
+  };
+
+  applySize(currentSize);
+
+  let safetyCounter = 0;
+  while (safetyCounter < 64 && currentSize > minFontSize) {
+    const overflowHeight = textElement.scrollHeight > slotElement.clientHeight;
+    const overflowWidth = textElement.scrollWidth > slotElement.clientWidth;
+
+    if (!overflowHeight && !overflowWidth) {
+      break;
+    }
+
+    currentSize -= 1;
+    applySize(currentSize);
+    safetyCounter += 1;
+  }
 }
 
 export default function Flashcards() {
@@ -115,13 +163,16 @@ export default function Flashcards() {
   const [showExamples, setShowExamples] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sessionDone, setSessionDone] = useState(false);
-  const [xpFeedback, setXpFeedback] = useState(null);
   const [activeMeaning, setActiveMeaning] = useState(null);
   const [cardDir, setCardDir] = useState("en_pt");
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
   const responseLockRef = useRef(false);
   const prevModeRef = useRef(mode);
+  const frontTextRef = useRef(null);
+  const backTextRef = useRef(null);
+  const frontTextSlotRef = useRef(null);
+  const backTextSlotRef = useRef(null);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -228,6 +279,45 @@ export default function Flashcards() {
   const backLabel = cardDir === "en_pt" ? "PORTUGUÊS" : "INGLÊS";
   const progressPct = vocab.length > 0 ? ((current + 1) / vocab.length) * 100 : 0;
 
+  useLayoutEffect(() => {
+    const fitVisibleTexts = () => {
+      fitMainTextToSlot(
+        frontTextRef.current,
+        frontTextSlotRef.current,
+        frontTextStyle.fontSize
+      );
+      fitMainTextToSlot(
+        backTextRef.current,
+        backTextSlotRef.current,
+        backTextStyle.fontSize
+      );
+    };
+
+    const animationFrame = requestAnimationFrame(fitVisibleTexts);
+    window.addEventListener("resize", fitVisibleTexts);
+
+    let observer = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(fitVisibleTexts);
+
+      if (frontTextSlotRef.current) observer.observe(frontTextSlotRef.current);
+      if (backTextSlotRef.current) observer.observe(backTextSlotRef.current);
+    }
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", fitVisibleTexts);
+      if (observer) observer.disconnect();
+    };
+  }, [
+    front,
+    back,
+    frontTextStyle.fontSize,
+    backTextStyle.fontSize,
+    flipped,
+    cardDir,
+  ]);
+
   const toggleSound = () => {
     const state = getSoundState();
     const newEnabled = !state.enabled;
@@ -321,8 +411,6 @@ export default function Flashcards() {
 
       const xpDelta = correct ? 1 : -2;
       addXP(xpDelta);
-      setXpFeedback(correct ? "+1 XP" : "-2 XP");
-      setTimeout(() => setXpFeedback(null), 1500);
 
       if (correct) recordCorrect();
       else recordIncorrect();
@@ -418,24 +506,26 @@ export default function Flashcards() {
       className="mx-auto w-full max-w-2xl space-y-6 overflow-x-hidden md:overflow-x-visible"
       style={{ touchAction: "pan-y" }}
     >
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
+        <h1 className="flex min-w-0 items-center gap-1.5 text-[1.12rem] font-bold text-foreground sm:gap-2 sm:text-2xl">
           Flashcards
           <button
             type="button"
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted sm:h-9 sm:w-9"
             title={soundEnabled ? "Desativar áudio" : "Ativar áudio"}
           >
             {soundEnabled ? (
-              <Volume2 className="h-5 w-5 text-muted-foreground" />
+              <Volume2 className="h-4 w-4 text-muted-foreground sm:h-5 sm:w-5" />
             ) : (
-              <VolumeX className="h-5 w-5 text-muted-foreground" />
+              <VolumeX className="h-4 w-4 text-muted-foreground sm:h-5 sm:w-5" />
             )}
           </button>
         </h1>
 
-        <FlashcardModeSelector mode={mode} setMode={setMode} />
+        <div className="min-w-0 shrink-0">
+          <FlashcardModeSelector mode={mode} setMode={setMode} />
+        </div>
       </div>
 
       <div className="flex items-center gap-4 text-sm font-medium">
@@ -455,15 +545,6 @@ export default function Flashcards() {
             <X className="h-3.5 w-3.5" />
             Errei: {card?.stats?.incorrect || 0}
           </span>
-          {xpFeedback ? (
-            <span
-              className={`ml-4 font-bold animate-in fade-in slide-in-from-bottom-1 duration-200 ${
-                xpFeedback.includes("+") ? "text-primary" : "text-destructive"
-              }`}
-            >
-              {xpFeedback}
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -477,29 +558,59 @@ export default function Flashcards() {
         onClick={handleFlip}
       >
         <div className={`flip-card-inner relative h-full w-full ${flipped ? "flipped" : ""}`}>
-          <div className="flip-card-front absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-border bg-white p-8 text-center shadow-sm">
-            <span className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
+            <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
               {frontLabel}
             </span>
-            <div className="flex min-h-[132px] w-full items-center justify-center px-2">
-              <p className="text-center font-bold text-foreground" style={frontTextStyle}>
+            <div ref={frontTextSlotRef} className="flashcard-main-text-slot">
+              <p
+                ref={frontTextRef}
+                className="flashcard-main-text text-center font-bold text-foreground"
+                style={{
+                  fontSize: `${frontTextStyle.fontSize}px`,
+                  lineHeight: `${frontTextStyle.lineHeight}px`,
+                  maxWidth: frontTextStyle.maxWidth,
+                  marginInline: "auto",
+                  textWrap: "balance",
+                  overflowWrap: frontTextStyle.overflowWrap,
+                  wordBreak: frontTextStyle.wordBreak,
+                  hyphens: frontTextStyle.hyphens,
+                }}
+              >
                 {front}
               </p>
             </div>
-            <p className="mt-4 text-xs text-muted-foreground">Clique para revelar</p>
+            <p className="flashcard-reveal-hint text-xs text-muted-foreground">
+              Clique para revelar
+            </p>
           </div>
 
-          <div className="flip-card-back absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-border bg-white p-8 text-center shadow-sm">
-            <span className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
+            <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
               {backLabel}
             </span>
-            <div className="flex min-h-[132px] w-full items-center justify-center px-2">
-              <p className="text-center font-bold text-foreground" style={backTextStyle}>
+            <div ref={backTextSlotRef} className="flashcard-main-text-slot">
+              <p
+                ref={backTextRef}
+                className="flashcard-main-text text-center font-bold text-foreground"
+                style={{
+                  fontSize: `${backTextStyle.fontSize}px`,
+                  lineHeight: `${backTextStyle.lineHeight}px`,
+                  maxWidth: backTextStyle.maxWidth,
+                  marginInline: "auto",
+                  textWrap: "balance",
+                  overflowWrap: backTextStyle.overflowWrap,
+                  wordBreak: backTextStyle.wordBreak,
+                  hyphens: backTextStyle.hyphens,
+                }}
+              >
                 {back}
               </p>
             </div>
             {card?.pronunciation ? (
-              <p className="mt-4 font-mono text-base text-muted-foreground">/{card.pronunciation}/</p>
+              <p className="flashcard-pronunciation font-mono text-base text-muted-foreground">
+                /{card.pronunciation}/
+              </p>
             ) : null}
           </div>
         </div>

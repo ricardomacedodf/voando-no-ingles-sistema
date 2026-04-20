@@ -1,4 +1,4 @@
-import { Flame, BookOpen, Trophy, Star } from "lucide-react";
+import { BookOpen, Flame, Star, Trophy } from "lucide-react";
 
 export default function StatsGrid({ stats }) {
   const items = [
@@ -7,48 +7,52 @@ export default function StatsGrid({ stats }) {
       value: stats.streak,
       icon: Flame,
       iconColor: "text-red-500",
-      bgColor: "bg-red-50",
+      bgColor: "bg-pink-100",
     },
     {
       label: "Cartões",
       value: stats.totalCards,
       icon: BookOpen,
-      iconColor: "text-primary",
-      bgColor: "bg-emerald-50",
+      iconColor: "text-green-600",
+      bgColor: "bg-green-100",
     },
     {
       label: "Dominados",
       value: stats.dominated,
       icon: Trophy,
       iconColor: "text-orange-500",
-      bgColor: "bg-orange-50",
+      bgColor: "bg-orange-100",
     },
     {
       label: "Nível",
       value: stats.level,
       icon: Star,
       iconColor: "text-purple-500",
-      bgColor: "bg-purple-50",
+      bgColor: "bg-purple-100",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
       {items.map((item) => {
         const Icon = item.icon;
+
         return (
           <div
             key={item.label}
-            className="bg-card rounded-xl p-4 border border-border/60"
+            className="flex items-center gap-4 rounded-xl border border-border/50 bg-white p-5 shadow-sm"
           >
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-lg ${item.bgColor} flex items-center justify-center flex-shrink-0`}>
-                <Icon className={`w-4 h-4 ${item.iconColor}`} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-bold text-foreground leading-tight">{item.value}</p>
-                <p className="text-xs text-muted-foreground font-medium truncate">{item.label}</p>
-              </div>
+            <div
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${item.bgColor} ${item.iconColor}`}
+            >
+              <Icon className="h-6 w-6" />
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-sm text-muted-foreground">{item.label}</p>
+              <p className="mt-0.5 text-2xl font-bold leading-none text-foreground">
+                {item.value}
+              </p>
             </div>
           </div>
         );
