@@ -1,13 +1,25 @@
 import { useState, useEffect, useRef } from "react";
-import { ArrowRight, Check } from "lucide-react";
+import { Check, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import ModeSelector from "../components/ModeSelector";
-import { addXP, recordCorrect, recordIncorrect, playSound } from "../lib/gameState";
+import ProgressBar from "../components/ProgressBar";
+import {
+  addXP,
+  recordCorrect,
+  recordIncorrect,
+  playSound,
+  getSoundState,
+  saveSoundState,
+} from "../lib/gameState";
 
 const PAIRS_PER_ROUND = 5;
+const CHECK_SYMBOL = "\u2713";
+const CROSS_SYMBOL = "\u2715";
+const CORRECT_XP_DELTA = 1;
+const INCORRECT_XP_DELTA = -2;
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -102,6 +114,9 @@ export default function Combinations() {
   const [loading, setLoading] = useState(true);
   const [showExamples, setShowExamples] = useState(false);
   const [focusedPair, setFocusedPair] = useState(null);
+  const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
+  const [xpFeedback, setXpFeedback] = useState(null);
+  const [roundXpBalance, setRoundXpBalance] = useState(0);
 
   const difficultyMap = useRef({});
 
@@ -137,7 +152,7 @@ export default function Combinations() {
         setPool(buildPool(valid));
         setRound(0);
       } catch (error) {
-        console.error("Erro ao carregar vocabulário em Combinações:", error);
+        console.error("Erro ao carregar vocabulario em Combinacoes:", error);
         if (!isMounted) return;
         setAllVocab([]);
         setPool([]);
@@ -201,6 +216,8 @@ export default function Combinations() {
     setErrors(0);
     setErrorPair(null);
     setShowExamples(false);
+    setXpFeedback(null);
+    setRoundXpBalance(0);
   };
 
   const checkMatch = (leftIdx, rightIdx) => {
@@ -249,6 +266,10 @@ export default function Combinations() {
     if (checkMatch(leftIdx, rightIdx)) {
       playSound("correct");
       recordCorrect();
+      addXP(CORRECT_XP_DELTA);
+      setRoundXpBalance((prev) => prev + CORRECT_XP_DELTA);
+      setXpFeedback(`+${CORRECT_XP_DELTA} XP`);
+      setTimeout(() => setXpFeedback(null), 1000);
 
       const newMatched = new Set(matched);
       newMatched.add(`l${leftIdx}`);
@@ -258,14 +279,16 @@ export default function Combinations() {
       setSelectedRight(null);
 
       if (newMatched.size / 2 >= roundPairs.length) {
-        const xpGained = Math.max(roundPairs.length - errors, 0);
-        addXP(xpGained);
         setRoundComplete(true);
         playSound("completion");
       }
     } else {
       playSound("incorrect");
       recordIncorrect();
+      addXP(INCORRECT_XP_DELTA);
+      setRoundXpBalance((prev) => prev + INCORRECT_XP_DELTA);
+      setXpFeedback(`${INCORRECT_XP_DELTA} XP`);
+      setTimeout(() => setXpFeedback(null), 1000);
       setErrors((e) => e + 1);
       setErrorPair({ left: leftIdx, right: rightIdx });
 
@@ -295,47 +318,124 @@ export default function Combinations() {
     playSound("advance");
   };
 
+  const toggleSound = () => {
+    const state = getSoundState();
+    const newEnabled = !state.enabled;
+    saveSoundState({ ...state, enabled: newEnabled });
+    setSoundEnabled(newEnabled);
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-7 h-7 border-3 border-border border-t-primary rounded-full animate-spin" />
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="h-7 w-7 animate-spin rounded-full border-3 border-border border-t-primary" />
       </div>
     );
   }
 
   if (allVocab.length < 2) {
     return (
-      <div className="text-center py-20">
+      <div className="py-20 text-center">
         <p className="text-muted-foreground">
-          Cadastre pelo menos 2 palavras para usar Combinações.
+          Cadastre pelo menos 2 palavras para usar Combinacoes.
         </p>
       </div>
     );
   }
 
-  const totalPairs = roundPairs.length;
-  const xpGained = Math.max(totalPairs - errors, 0);
+  const correctMatches = Math.floor(matched.size / 2);
+  const progressCurrent = Math.min(correctMatches, PAIRS_PER_ROUND);
+  const roundBalanceText = `${roundXpBalance > 0 ? "+" : ""}${roundXpBalance}XP`;
+
   const focusedCard = allVocab.find((item) => item.id === focusedPair?.vocabId);
-  const focusedMeaning =
-    focusedCard?.meanings?.[focusedPair?.meaningIdx]?.meaning || null;
+  const focusedMeaning = focusedCard?.meanings?.[focusedPair?.meaningIdx]?.meaning || null;
   const hasFocusedExamples =
     Array.isArray(focusedCard?.meanings) && focusedCard.meanings.length > 0;
 
-  return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Combinações</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Rodada {round + 1} — contínuo
-          </p>
+  if (roundComplete) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center px-4">
+        <div className="w-full max-w-md text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+            <Check className="h-8 w-8 text-primary" />
+          </div>
+
+          <h2 className="mb-2 text-3xl font-bold text-foreground">Rodada {round + 1} concluida</h2>
+          <p className="mb-5 text-muted-foreground">Voce marcou {PAIRS_PER_ROUND} pares nesta rodada.</p>
+
+          <div
+            className={`mx-auto mb-6 flex max-w-sm items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${
+              roundXpBalance >= 0
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            <span>{CHECK_SYMBOL}</span>
+            <span>Balanco da rodada: {roundBalanceText}</span>
+          </div>
+
+          <button
+            onClick={nextRound}
+            className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Proxima rodada
+          </button>
         </div>
-        <ModeSelector mode={mode} setMode={setMode} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Combinacoes</h1>
+          <button
+            onClick={toggleSound}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            title={soundEnabled ? "Desativar audio" : "Ativar audio"}
+          >
+            {soundEnabled ? (
+              <Volume2 className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <VolumeX className="h-5 w-5 text-muted-foreground" />
+            )}
+          </button>
+        </div>
+        <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
       </div>
 
-      <p className="text-sm text-muted-foreground mb-5">
-        Conecte cada palavra ao seu significado correto.
-      </p>
+      <div className="space-y-2">
+        <ProgressBar current={progressCurrent} total={PAIRS_PER_ROUND} variant="quiz" />
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-primary">{CHECK_SYMBOL}</span>
+              <span>
+                Acertei: <span className="font-semibold">{correctMatches}</span>
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-destructive">{CROSS_SYMBOL}</span>
+              <span>
+                Errei: <span className="font-semibold">{errors}</span>
+                {xpFeedback ? (
+                  <>
+                    {"\u00A0\u00A0"}
+                    <span
+                      className={`font-bold transition-opacity duration-200 ${
+                        xpFeedback?.startsWith("+") ? "text-primary" : "text-destructive"
+                      }`}
+                    >
+                      {xpFeedback}
+                    </span>
+                  </>
+                ) : null}
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -355,9 +455,9 @@ export default function Combinations() {
                 key={idx}
                 onClick={() => handleLeftClick(idx)}
                 disabled={isMatched}
-                className={`w-full px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 text-left break-words ${cls}`}
+                className={`w-full break-words rounded-xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
               >
-                {isMatched && <Check className="w-3 h-3 inline mr-1.5 text-primary" />}
+                {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
                 {item.text}
               </button>
             );
@@ -381,9 +481,9 @@ export default function Combinations() {
                 key={idx}
                 onClick={() => handleRightClick(idx)}
                 disabled={isMatched}
-                className={`w-full px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 text-left break-words ${cls}`}
+                className={`w-full break-words rounded-xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
               >
-                {isMatched && <Check className="w-3 h-3 inline mr-1.5 text-primary" />}
+                {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
                 {item.text}
               </button>
             );
@@ -391,8 +491,8 @@ export default function Combinations() {
         </div>
       </div>
 
-      {hasFocusedExamples && (
-        <div className="mt-4 space-y-0">
+      {hasFocusedExamples ? (
+        <div className="space-y-0">
           <ExamplesToggleButton
             expanded={showExamples}
             onClick={() => setShowExamples((prev) => !prev)}
@@ -409,29 +509,8 @@ export default function Combinations() {
             />
           ) : null}
         </div>
-      )}
-
-      {roundComplete && (
-        <div className="mt-5 text-center">
-          <div className="bg-emerald-50 rounded-xl p-4 mb-3">
-            <p className="text-sm font-semibold text-primary mb-1">Rodada completa! 🎉</p>
-            <p className="text-xs text-muted-foreground">
-              +{xpGained} XP ganho{" "}
-              {errors > 0
-                ? `• ${errors} erro(s) — esses itens voltarão com prioridade`
-                : "• Perfeito!"}
-            </p>
-          </div>
-
-          <button
-            onClick={nextRound}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
-          >
-            Próxima Rodada
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
+
