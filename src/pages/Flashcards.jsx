@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+﻿import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Check, X, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
@@ -24,7 +24,12 @@ const FLASHCARD_MAIN_TEXT_MIN_SIZE = 22;
 const FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE = 18;
 const FLASHCARD_MAIN_TEXT_MAX_SIZE = 47;
 const FLASHCARD_MOBILE_BREAKPOINT = 767;
-const FLASHCARD_DISCARD_ANIMATION_MS = 320;
+const FLASHCARD_DISCARD_TRANSITION_MS = 940;
+const FLASHCARD_DISCARD_CLEANUP_MS = 1040;
+const FLASHCARD_DISCARD_TRANSLATE_X = 520;
+const FLASHCARD_DISCARD_ROTATE_DEG = 20;
+const FLASHCARD_DISCARD_SCALE = 0.9;
+const FLASHCARD_DISCARD_EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
 
 function shuffleArray(arr) {
   const shuffled = [...arr];
@@ -168,13 +173,86 @@ export default function Flashcards() {
   const [cardDir, setCardDir] = useState("en_pt");
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
-  const [discardDirection, setDiscardDirection] = useState(null);
   const responseLockRef = useRef(false);
   const prevModeRef = useRef(mode);
   const frontTextRef = useRef(null);
   const backTextRef = useRef(null);
   const frontTextSlotRef = useRef(null);
   const backTextSlotRef = useRef(null);
+  const flashcardStageRef = useRef(null);
+  const flashcardRef = useRef(null);
+  const discardTimersRef = useRef([]);
+  const discardNodesRef = useRef([]);
+
+  const clearDiscardOverlays = () => {
+    discardTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+    discardTimersRef.current = [];
+    discardNodesRef.current.forEach((node) => {
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    });
+    discardNodesRef.current = [];
+  };
+
+  const spawnDiscardOverlay = (direction) => {
+    const stageElement = flashcardStageRef.current;
+    const sourceElement = flashcardRef.current;
+    if (!stageElement || !sourceElement) return;
+
+    const stageRect = stageElement.getBoundingClientRect();
+    const sourceRect = sourceElement.getBoundingClientRect();
+    const discardNode = sourceElement.cloneNode(true);
+
+    discardNode.removeAttribute("id");
+    discardNode.style.position = "absolute";
+    discardNode.style.top = `${sourceRect.top - stageRect.top}px`;
+    discardNode.style.left = `${sourceRect.left - stageRect.left}px`;
+    discardNode.style.width = `${sourceRect.width}px`;
+    discardNode.style.height = `${sourceRect.height}px`;
+    discardNode.style.maxWidth = "none";
+    discardNode.style.aspectRatio = "auto";
+    discardNode.style.margin = "0";
+    discardNode.style.zIndex = "20";
+    discardNode.style.pointerEvents = "none";
+    discardNode.style.transform = "translateX(0) rotate(0deg) scale(1)";
+    discardNode.style.opacity = "1";
+    discardNode.style.willChange = "transform, opacity";
+    discardNode.style.transition = "none";
+
+    stageElement.appendChild(discardNode);
+    discardNodesRef.current.push(discardNode);
+
+    requestAnimationFrame(() => {
+      discardNode.style.transition = `transform ${FLASHCARD_DISCARD_TRANSITION_MS}ms ${FLASHCARD_DISCARD_EASING}, opacity ${FLASHCARD_DISCARD_TRANSITION_MS}ms ${FLASHCARD_DISCARD_EASING}`;
+      discardNode.style.transform = `translateX(${
+        direction === "left"
+          ? `-${FLASHCARD_DISCARD_TRANSLATE_X}px`
+          : `${FLASHCARD_DISCARD_TRANSLATE_X}px`
+      }) rotate(${
+        direction === "left"
+          ? `-${FLASHCARD_DISCARD_ROTATE_DEG}deg`
+          : `${FLASHCARD_DISCARD_ROTATE_DEG}deg`
+      }) scale(${FLASHCARD_DISCARD_SCALE})`;
+      discardNode.style.opacity = "0";
+    });
+
+    const cleanupTimer = setTimeout(() => {
+      if (discardNode.parentNode) discardNode.parentNode.removeChild(discardNode);
+      discardNodesRef.current = discardNodesRef.current.filter(
+        (node) => node !== discardNode
+      );
+      discardTimersRef.current = discardTimersRef.current.filter(
+        (timerId) => timerId !== cleanupTimer
+      );
+    }, FLASHCARD_DISCARD_CLEANUP_MS);
+
+    discardTimersRef.current.push(cleanupTimer);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearDiscardOverlays();
+    };
+  }, []);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -215,10 +293,10 @@ export default function Flashcards() {
         setShowExamples(false);
         setSessionDone(false);
         setIsSubmittingResponse(false);
-        setDiscardDirection(null);
+        clearDiscardOverlays();
         responseLockRef.current = false;
       } catch (error) {
-        console.error("Erro ao carregar vocabulário no Flashcards:", error);
+        console.error("Erro ao carregar vocabulÃ¡rio no Flashcards:", error);
         if (!isMounted) return;
         setBaseVocab([]);
         setVocab([]);
@@ -249,7 +327,7 @@ export default function Flashcards() {
     setShowExamples(false);
     setSessionDone(false);
     setIsSubmittingResponse(false);
-    setDiscardDirection(null);
+    clearDiscardOverlays();
     responseLockRef.current = false;
     updateDominatedCount(prepared);
   }, [mode, baseVocab, loading]);
@@ -271,7 +349,6 @@ export default function Flashcards() {
     setFlipped(false);
     setShowExamples(false);
     setIsSubmittingResponse(false);
-    setDiscardDirection(null);
     responseLockRef.current = false;
   }, [current, vocab, mode]);
 
@@ -280,8 +357,8 @@ export default function Flashcards() {
   const back = cardDir === "en_pt" ? activeMeaning?.meaning : card?.term;
   const frontTextStyle = getAdaptiveMainTextStyle(front);
   const backTextStyle = getAdaptiveMainTextStyle(back);
-  const frontLabel = cardDir === "en_pt" ? "INGLÊS" : "PORTUGUÊS";
-  const backLabel = cardDir === "en_pt" ? "PORTUGUÊS" : "INGLÊS";
+  const frontLabel = cardDir === "en_pt" ? "INGLÃŠS" : "PORTUGUÃŠS";
+  const backLabel = cardDir === "en_pt" ? "PORTUGUÃŠS" : "INGLÃŠS";
   const progressPct = vocab.length > 0 ? ((current + 1) / vocab.length) * 100 : 0;
 
   useLayoutEffect(() => {
@@ -319,7 +396,6 @@ export default function Flashcards() {
     back,
     frontTextStyle.fontSize,
     backTextStyle.fontSize,
-    flipped,
     cardDir,
   ]);
 
@@ -331,20 +407,19 @@ export default function Flashcards() {
   };
 
   const handleFlip = () => {
-    if (responseLockRef.current || isSubmittingResponse || discardDirection) return;
+    if (responseLockRef.current || isSubmittingResponse) return;
     setFlipped((value) => !value);
     playSound("flip");
   };
 
-  const handleResponse = async (correct) => {
+  const handleResponse = (correct) => {
     if (!card || !user?.id || responseLockRef.current) return;
 
     responseLockRef.current = true;
     setIsSubmittingResponse(true);
-    setDiscardDirection(correct ? "right" : "left");
-    const discardAnimationPromise = new Promise((resolve) =>
-      setTimeout(resolve, FLASHCARD_DISCARD_ANIMATION_MS)
-    );
+
+    const discardDirectionValue = correct ? "right" : "left";
+    spawnDiscardOverlay(discardDirectionValue);
 
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
     playSound(correct ? "correct" : "incorrect");
@@ -371,31 +446,29 @@ export default function Flashcards() {
       else if (rate < 0.5) newStatus = "difícil";
     }
 
+    const now = new Date().toISOString();
     const updatedStats = {
       correct: newCorrect,
       incorrect: newIncorrect,
       total_reviews: newTotal,
       avg_response_time: Math.round(newAvg),
-      last_reviewed: new Date().toISOString(),
+      last_reviewed: now,
       status: newStatus,
     };
 
-    try {
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from("vocabulary")
-        .update({
-          stats: updatedStats,
-          updated_at: now,
-        })
-        .eq("id", card.id)
-        .eq("user_id", user.id);
+    const updatedVocab = vocab.map((item) =>
+      item.id === card.id
+        ? {
+            ...item,
+            stats: updatedStats,
+            updatedAt: now,
+          }
+        : item
+    );
 
-      if (error) {
-        throw error;
-      }
-
-      const updatedVocab = vocab.map((item) =>
+    setVocab(updatedVocab);
+    setBaseVocab((previous) =>
+      previous.map((item) =>
         item.id === card.id
           ? {
               ...item,
@@ -403,48 +476,43 @@ export default function Flashcards() {
               updatedAt: now,
             }
           : item
-      );
+      )
+    );
+    updateDominatedCount(updatedVocab);
 
-      setVocab(updatedVocab);
-      setBaseVocab((previous) =>
-        previous.map((item) =>
-          item.id === card.id
-            ? {
-                ...item,
-                stats: updatedStats,
-                updatedAt: now,
-              }
-            : item
-        )
-      );
-      updateDominatedCount(updatedVocab);
+    const xpDelta = correct ? 1 : -2;
+    addXP(xpDelta);
 
-      const xpDelta = correct ? 1 : -2;
-      addXP(xpDelta);
+    if (correct) recordCorrect();
+    else recordIncorrect();
+    updateStreak();
 
-      if (correct) recordCorrect();
-      else recordIncorrect();
-      updateStreak();
-
-      await discardAnimationPromise;
-      setDiscardDirection(null);
-      setFlipped(false);
-
-      if (current < vocab.length - 1) {
-        setCurrent((index) => index + 1);
-        playSound("advance");
-      } else {
-        setSessionDone(true);
-        playSound("completion");
-      }
-    } catch (error) {
-      console.error("Erro ao atualizar estatísticas no Supabase:", error);
-      alert("Não foi possível salvar seu progresso desta carta.");
-    } finally {
-      setDiscardDirection(null);
-      responseLockRef.current = false;
-      setIsSubmittingResponse(false);
+    if (current < vocab.length - 1) {
+      setCurrent((index) => index + 1);
+      playSound("advance");
+    } else {
+      setSessionDone(true);
+      playSound("completion");
     }
+
+    void supabase
+      .from("vocabulary")
+      .update({
+        stats: updatedStats,
+        updated_at: now,
+      })
+      .eq("id", card.id)
+      .eq("user_id", user.id)
+      .then(({ error }) => {
+        if (error) throw error;
+      })
+      .catch((error) => {
+        console.error("Erro ao atualizar estatísticas no Supabase:", error);
+        alert("Não foi possível salvar seu progresso desta carta.");
+      });
+
+    responseLockRef.current = false;
+    setIsSubmittingResponse(false);
   };
 
   useEffect(() => {
@@ -475,7 +543,7 @@ export default function Flashcards() {
       <div className="py-20 text-center">
         <p className="text-muted-foreground">Nenhuma palavra cadastrada ainda.</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Acesse o Gerenciador para adicionar vocabulário.
+          Acesse o Gerenciador para adicionar vocabulÃ¡rio.
         </p>
       </div>
     );
@@ -487,8 +555,8 @@ export default function Flashcards() {
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <Check className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="mb-2 text-xl font-bold text-foreground">Sessão completa.</h2>
-        <p className="mb-4 text-muted-foreground">Você revisou {vocab.length} cartões.</p>
+        <h2 className="mb-2 text-xl font-bold text-foreground">SessÃ£o completa.</h2>
+        <p className="mb-4 text-muted-foreground">VocÃª revisou {vocab.length} cartÃµes.</p>
         <button
           onClick={async () => {
             try {
@@ -501,17 +569,17 @@ export default function Flashcards() {
               setSessionDone(false);
               setShowExamples(false);
               setIsSubmittingResponse(false);
-              setDiscardDirection(null);
+              clearDiscardOverlays();
               responseLockRef.current = false;
               updateDominatedCount(prepared);
             } catch (error) {
               console.error("Erro ao recarregar flashcards:", error);
-              alert("Não foi possível recarregar os flashcards.");
+              alert("NÃ£o foi possÃ­vel recarregar os flashcards.");
             }
           }}
           className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Recomeçar
+          RecomeÃ§ar
         </button>
       </div>
     );
@@ -519,7 +587,7 @@ export default function Flashcards() {
 
   return (
     <div
-      className="mx-auto w-full max-w-2xl space-y-6 overflow-x-hidden md:overflow-x-visible"
+      className="mx-auto w-full max-w-2xl space-y-6 overflow-x-hidden"
       style={{ touchAction: "pan-y" }}
     >
       <div className="flex items-center justify-between gap-2 sm:gap-4">
@@ -529,7 +597,7 @@ export default function Flashcards() {
             type="button"
             onClick={toggleSound}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted sm:h-9 sm:w-9"
-            title={soundEnabled ? "Desativar áudio" : "Ativar áudio"}
+            title={soundEnabled ? "Desativar Ã¡udio" : "Ativar Ã¡udio"}
           >
             {soundEnabled ? (
               <Volume2 className="h-4 w-4 text-muted-foreground sm:h-5 sm:w-5" />
@@ -565,77 +633,79 @@ export default function Flashcards() {
       </div>
 
       <div
-        className={`flip-card w-full select-none overflow-hidden ${
-          isSubmittingResponse ? "cursor-default" : "cursor-pointer"
-        } ${
-          discardDirection === "left"
-            ? "flashcard-discard-left"
-            : discardDirection === "right"
-              ? "flashcard-discard-right"
-              : ""
-        }`}
-        style={{
-          maxWidth: `${FLASHCARD_CARD_WIDTH}px`,
-          aspectRatio: `${FLASHCARD_CARD_WIDTH} / ${FLASHCARD_CARD_HEIGHT}`,
-          touchAction: "pan-y",
-        }}
-        onClick={handleFlip}
+        ref={flashcardStageRef}
+        className="relative w-full overflow-hidden"
+        style={{ isolation: "isolate" }}
       >
-        <div className={`flip-card-inner relative h-full w-full ${flipped ? "flipped" : ""}`}>
-          <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
-            <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              {frontLabel}
-            </span>
-            <div ref={frontTextSlotRef} className="flashcard-main-text-slot">
-              <p
-                ref={frontTextRef}
-                className="flashcard-main-text text-center font-bold text-foreground"
-                style={{
-                  fontSize: `${frontTextStyle.fontSize}px`,
-                  lineHeight: `${frontTextStyle.lineHeight}px`,
-                  maxWidth: frontTextStyle.maxWidth,
-                  marginInline: "auto",
-                  textWrap: "balance",
-                  overflowWrap: frontTextStyle.overflowWrap,
-                  wordBreak: frontTextStyle.wordBreak,
-                  hyphens: frontTextStyle.hyphens,
-                }}
-              >
-                {front}
+        <div
+          id="meu-flashcard"
+          ref={flashcardRef}
+          className={`flip-card w-full select-none overflow-hidden ${
+            isSubmittingResponse ? "cursor-default" : "cursor-pointer"
+          }`}
+          style={{
+            maxWidth: `${FLASHCARD_CARD_WIDTH}px`,
+            aspectRatio: `${FLASHCARD_CARD_WIDTH} / ${FLASHCARD_CARD_HEIGHT}`,
+            touchAction: "pan-y",
+          }}
+          onClick={handleFlip}
+        >
+          <div className={`flip-card-inner relative h-full w-full ${flipped ? "flipped" : ""}`}>
+            <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
+              <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {frontLabel}
+              </span>
+              <div ref={frontTextSlotRef} className="flashcard-main-text-slot">
+                <p
+                  ref={frontTextRef}
+                  className="flashcard-main-text text-center font-bold text-foreground"
+                  style={{
+                    fontSize: `${frontTextStyle.fontSize}px`,
+                    lineHeight: `${frontTextStyle.lineHeight}px`,
+                    maxWidth: frontTextStyle.maxWidth,
+                    marginInline: "auto",
+                    textWrap: "balance",
+                    overflowWrap: frontTextStyle.overflowWrap,
+                    wordBreak: frontTextStyle.wordBreak,
+                    hyphens: frontTextStyle.hyphens,
+                  }}
+                >
+                  {front}
+                </p>
+              </div>
+              <p className="flashcard-reveal-hint text-xs text-muted-foreground">
+                Clique para revelar
               </p>
             </div>
-            <p className="flashcard-reveal-hint text-xs text-muted-foreground">
-              Clique para revelar
-            </p>
-          </div>
 
-          <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
-            <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              {backLabel}
-            </span>
-            <div ref={backTextSlotRef} className="flashcard-main-text-slot">
-              <p
-                ref={backTextRef}
-                className="flashcard-main-text text-center font-bold text-foreground"
-                style={{
-                  fontSize: `${backTextStyle.fontSize}px`,
-                  lineHeight: `${backTextStyle.lineHeight}px`,
-                  maxWidth: backTextStyle.maxWidth,
-                  marginInline: "auto",
-                  textWrap: "balance",
-                  overflowWrap: backTextStyle.overflowWrap,
-                  wordBreak: backTextStyle.wordBreak,
-                  hyphens: backTextStyle.hyphens,
-                }}
-              >
-                {back}
-              </p>
+            <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
+              <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {backLabel}
+              </span>
+              <div ref={backTextSlotRef} className="flashcard-main-text-slot">
+                <p
+                  ref={backTextRef}
+                  className="flashcard-main-text text-center font-bold text-foreground"
+                  style={{
+                    fontSize: `${backTextStyle.fontSize}px`,
+                    lineHeight: `${backTextStyle.lineHeight}px`,
+                    maxWidth: backTextStyle.maxWidth,
+                    marginInline: "auto",
+                    textWrap: "balance",
+                    overflowWrap: backTextStyle.overflowWrap,
+                    wordBreak: backTextStyle.wordBreak,
+                    hyphens: backTextStyle.hyphens,
+                  }}
+                >
+                  {back}
+                </p>
+              </div>
+              {card?.pronunciation ? (
+                <p className="flashcard-pronunciation font-mono text-base text-muted-foreground">
+                  /{card.pronunciation}/
+                </p>
+              ) : null}
             </div>
-            {card?.pronunciation ? (
-              <p className="flashcard-pronunciation font-mono text-base text-muted-foreground">
-                /{card.pronunciation}/
-              </p>
-            ) : null}
           </div>
         </div>
       </div>
@@ -647,7 +717,7 @@ export default function Flashcards() {
           disabled={isSubmittingResponse}
           className="inline-flex h-14 items-center justify-center gap-2 rounded-md border border-red-500 px-4 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Ainda aprendendo
+          Não sei
         </button>
 
         <button
@@ -657,7 +727,7 @@ export default function Flashcards() {
           className="inline-flex h-14 items-center justify-center gap-2 rounded-md bg-[#25B15F] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Check className="mr-1 h-4 w-4" />
-          Já sei
+          JÃ¡ sei
         </button>
       </div>
 
@@ -683,4 +753,5 @@ export default function Flashcards() {
     </div>
   );
 }
+
 
