@@ -464,16 +464,18 @@ export default function Combinations() {
 
             let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
 
-            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary";
-            else if (isError) cls = "bg-red-50 border border-destructive text-destructive";
-            else if (isSelected) cls = "bg-emerald-50/50 border-primary/60 text-foreground";
+            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary ring-1 ring-primary/50";
+            else if (isError)
+              cls = "bg-red-50 border border-destructive text-destructive ring-1 ring-destructive/50";
+            else if (isSelected)
+              cls = "bg-emerald-50/50 border border-primary/60 text-foreground ring-1 ring-primary/50";
 
             return (
               <button
                 key={idx}
                 onClick={() => handleLeftClick(idx)}
                 disabled={isMatched}
-                className={`w-full break-words rounded-xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
+                className={`h-[65px] w-[330px] break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
               >
                 {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
                 {item.text}
@@ -490,16 +492,18 @@ export default function Combinations() {
 
             let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
 
-            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary";
-            else if (isError) cls = "bg-red-50 border border-destructive text-destructive";
-            else if (isSelected) cls = "bg-emerald-50/50 border-primary/60 text-foreground";
+            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary ring-1 ring-primary/50";
+            else if (isError)
+              cls = "bg-red-50 border border-destructive text-destructive ring-1 ring-destructive/50";
+            else if (isSelected)
+              cls = "bg-emerald-50/50 border border-primary/60 text-foreground ring-1 ring-primary/50";
 
             return (
               <button
                 key={idx}
                 onClick={() => handleRightClick(idx)}
                 disabled={isMatched}
-                className={`w-full break-words rounded-xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
+                className={`h-[65px] w-[330px] break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
               >
                 {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
                 {item.text}

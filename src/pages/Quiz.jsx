@@ -426,7 +426,7 @@ export default function Quiz() {
 
   const card = queue[current];
   const questionText = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
-  const letters = ["A", "B", "C", "D"];
+  const letters = ["A", "B", "C", "D", "E"];
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -497,6 +497,7 @@ export default function Quiz() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {options.map((opt, idx) => {
           let classes = "border-border text-foreground hover:border-primary";
+          const isWrongSelection = answered && idx === selected && !opt.correct;
 
           if (answered) {
             if (opt.correct) classes = "border-primary bg-emerald-50 text-foreground";
@@ -510,7 +511,9 @@ export default function Quiz() {
               key={idx}
               onClick={() => handleSelect(idx)}
               disabled={answered}
-              className={`flex w-full items-center gap-3 rounded-xl border-2 bg-white p-4 text-left text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes}`}
+              className={`flex h-[65px] w-[330px] items-center gap-3 rounded-[10px] border bg-white p-4 text-left text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+                isWrongSelection ? "shake-top" : ""
+              }`}
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
                 {letters[idx]}
