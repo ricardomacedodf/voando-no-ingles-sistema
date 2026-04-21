@@ -13,10 +13,10 @@ export default function Logo({ variant = "sidebar", className = "" }) {
         className={
           isMobile
             ? "flex-shrink-0 rounded-md bg-[#25B15F] p-1.5 text-white"
-            : "flex-shrink-0 rounded-lg bg-[#25B15F] p-2 text-white"
+            : "flex h-[50px] w-[50px] flex-shrink-0 items-center justify-center rounded-lg bg-[#25B15F] text-white"
         }
       >
-        <PlaneTakeoff className={isMobile ? "h-[18px] w-[18px]" : "h-6 w-6"} strokeWidth={2} />
+        <PlaneTakeoff className={isMobile ? "h-[18px] w-[18px]" : "h-7 w-7"} strokeWidth={2} />
       </div>
 
       {isMobile ? (

@@ -6,16 +6,12 @@ import {
   HelpCircle,
   Puzzle,
   Database,
-  Settings,
-  Volume2,
-  VolumeX,
   LogOut,
   ChevronDown,
-  UserCircle2,
+  User,
 } from "lucide-react";
 import Logo from "./Logo";
-import { getSoundState, saveSoundState } from "../lib/gameState";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
 const navItems = [
@@ -25,23 +21,19 @@ const navItems = [
   { label: "Quiz", path: "/quiz", icon: HelpCircle },
   { label: "Combinações", path: "/combinacoes", icon: Puzzle },
   { label: "Gerenciador", path: "/gerenciador", icon: Database },
-  { label: "Personalizar", path: "/personalizar", icon: Settings },
 ];
 
 export default function Sidebar({ onClose }) {
   const location = useLocation();
   const { user, logout } = useAuth();
-  const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [avatarError, setAvatarError] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+  const profileAreaRef = useRef(null);
 
-  const toggleSound = () => {
-    const state = getSoundState();
-    state.enabled = !state.enabled;
-    saveSoundState(state);
-    setSoundEnabled(state.enabled);
-  };
+  const displayName = user?.firstName || user?.name || user?.full_name || "Usuário";
+  const displayEmail = user?.email || "";
+  const avatarUrl = user?.avatar_url || "";
 
   const handleLogout = async () => {
     try {
@@ -56,79 +48,68 @@ export default function Sidebar({ onClose }) {
     }
   };
 
-  const displayName = user?.firstName || user?.name || user?.full_name || "Usuário";
-  const displayEmail = user?.email || "";
-  const avatarUrl = user?.avatar_url || "";
+  useEffect(() => {
+    if (!isProfileMenuOpen) return undefined;
+
+    const handleOutsidePointerDown = (event) => {
+      const profileNode = profileAreaRef.current;
+      if (!profileNode) return;
+      if (profileNode.contains(event.target)) return;
+      setIsProfileMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", handleOutsidePointerDown);
+    document.addEventListener("touchstart", handleOutsidePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsidePointerDown);
+      document.removeEventListener("touchstart", handleOutsidePointerDown);
+    };
+  }, [isProfileMenuOpen]);
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="px-5 py-5">
-        <Logo variant="sidebar" />
+      <div className="border-b border-border px-4 py-5">
+        <Logo variant="sidebar" className="mx-auto w-[228px]" />
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path;
+      <nav className="flex-1 overflow-y-auto pt-6 pb-2">
+        <div className="mx-auto flex w-[222px] flex-col gap-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
 
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={onClose}
-              className={`group flex items-center gap-2.5 rounded-md px-2.5 py-2.5 text-sm font-medium transition-colors ${
-                isActive ? "bg-[#25B15F] text-white" : "text-foreground hover:bg-muted"
-              }`}
-            >
-              <Icon
-                className={`h-[18px] w-[18px] flex-shrink-0 transition-colors ${
-                  isActive ? "text-white" : "text-muted-foreground"
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                className={`group flex h-[45px] w-[222px] items-center gap-2.5 rounded-xl px-3.5 text-sm font-medium transition-colors ${
+                  isActive ? "bg-[#25B15F] text-white" : "text-foreground hover:bg-muted"
                 }`}
-              />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+              >
+                <Icon
+                  className={`h-[18px] w-[18px] flex-shrink-0 transition-colors ${
+                    isActive ? "text-white" : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="border-t border-border px-3 py-3">
-        <button
-          onClick={toggleSound}
-          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-        >
-          {soundEnabled ? (
-            <Volume2 className="h-[18px] w-[18px] text-[#25B15F]" />
-          ) : (
-            <VolumeX className="h-[18px] w-[18px] text-muted-foreground" />
-          )}
-          <span>{soundEnabled ? "Som Ligado" : "Som Desligado"}</span>
-        </button>
-
-        <div className="relative mt-2">
+      <div className="border-t border-border px-4 py-3">
+        <div ref={profileAreaRef} className="relative mx-auto w-[222px]">
           <button
             type="button"
             onClick={() => setIsProfileMenuOpen((open) => !open)}
-            className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted"
+            className="mx-auto flex h-[52px] w-[222px] items-center justify-between rounded-xl px-3.5 text-left text-sm font-medium transition-colors hover:bg-muted"
           >
             <div className="flex min-w-0 items-center gap-2.5">
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
-                {avatarUrl && !avatarError ? (
-                  <img
-                    src={avatarUrl}
-                    alt={displayName}
-                    className="h-full w-full object-cover"
-                    referrerPolicy="no-referrer"
-                    onError={() => setAvatarError(true)}
-                  />
-                ) : (
-                  <UserCircle2 className="h-4 w-4" />
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium leading-tight text-foreground">{displayName}</p>
-                <p className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">{displayEmail}</p>
-              </div>
+              <User className="h-[18px] w-[18px] flex-shrink-0 text-muted-foreground" />
+              <span className="truncate text-foreground">Perfil</span>
             </div>
 
             <ChevronDown
@@ -139,17 +120,41 @@ export default function Sidebar({ onClose }) {
           </button>
 
           {isProfileMenuOpen && (
-            <button
-              onClick={async () => {
-                setIsProfileMenuOpen(false);
-                await handleLogout();
-              }}
-              disabled={isLoggingOut}
-              className="absolute bottom-full left-2 right-2 mb-2 flex items-center justify-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-50"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
-            </button>
+            <div className="absolute bottom-full left-0 right-0 z-10 mb-2 rounded-xl border border-border bg-white p-3 shadow-sm">
+              <div className="flex items-center gap-2.5 rounded-md bg-muted/40 px-2.5 py-2">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-muted-foreground">
+                  {avatarUrl && !avatarError ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName}
+                      className="h-full w-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={() => setAvatarError(true)}
+                    />
+                  ) : (
+                    <User className="h-4 w-4" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
+                  {displayEmail ? (
+                    <p className="truncate text-xs text-muted-foreground">{displayEmail}</p>
+                  ) : null}
+                </div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  setIsProfileMenuOpen(false);
+                  await handleLogout();
+                }}
+                disabled={isLoggingOut}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
