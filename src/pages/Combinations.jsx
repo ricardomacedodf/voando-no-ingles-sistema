@@ -95,6 +95,24 @@ function weightedSample(pool, difficultyMap, count) {
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
+function buildRoundDirections(mode, pairCount) {
+  if (mode !== "random") {
+    return Array(pairCount).fill(mode);
+  }
+
+  const directions = Array.from({ length: pairCount }, () =>
+    Math.random() > 0.5 ? "en_pt" : "pt_en"
+  );
+
+  const allSameDirection = directions.every((dir) => dir === directions[0]);
+  if (pairCount > 1 && allSameDirection) {
+    const forcedIdx = Math.floor(Math.random() * pairCount);
+    directions[forcedIdx] = directions[0] === "en_pt" ? "pt_en" : "en_pt";
+  }
+
+  return directions;
+}
+
 export default function Combinations() {
   const { user } = useAuth();
 
@@ -176,8 +194,8 @@ export default function Combinations() {
   }, [round, pool, mode]);
 
   const setupRound = () => {
-    const dir = mode === "random" ? (Math.random() > 0.5 ? "en_pt" : "pt_en") : mode;
     const pairs = weightedSample(pool, difficultyMap.current, PAIRS_PER_ROUND);
+    const directions = buildRoundDirections(mode, pairs.length);
 
     setRoundPairs(pairs);
     setFocusedPair(
@@ -192,7 +210,7 @@ export default function Combinations() {
     const left = shuffleArray(
       pairs.map((p, i) => ({
         id: i,
-        text: dir === "en_pt" ? p.term : p.meaning,
+        text: directions[i] === "en_pt" ? p.term : p.meaning,
         vocabId: p.vocabId,
         meaningIdx: p.meaningIdx,
       }))
@@ -201,7 +219,7 @@ export default function Combinations() {
     const right = shuffleArray(
       pairs.map((p, i) => ({
         id: i,
-        text: dir === "en_pt" ? p.meaning : p.term,
+        text: directions[i] === "en_pt" ? p.meaning : p.term,
         vocabId: p.vocabId,
         meaningIdx: p.meaningIdx,
       }))
@@ -446,8 +464,8 @@ export default function Combinations() {
 
             let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
 
-            if (isMatched) cls = "bg-emerald-50 border-primary text-primary";
-            else if (isError) cls = "bg-red-50 border-destructive text-destructive";
+            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary";
+            else if (isError) cls = "bg-red-50 border border-destructive text-destructive";
             else if (isSelected) cls = "bg-emerald-50/50 border-primary/60 text-foreground";
 
             return (
@@ -472,8 +490,8 @@ export default function Combinations() {
 
             let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
 
-            if (isMatched) cls = "bg-emerald-50 border-primary text-primary";
-            else if (isError) cls = "bg-red-50 border-destructive text-destructive";
+            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary";
+            else if (isError) cls = "bg-red-50 border border-destructive text-destructive";
             else if (isSelected) cls = "bg-emerald-50/50 border-primary/60 text-foreground";
 
             return (

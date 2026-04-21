@@ -24,6 +24,7 @@ const FLASHCARD_MAIN_TEXT_MIN_SIZE = 22;
 const FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE = 18;
 const FLASHCARD_MAIN_TEXT_MAX_SIZE = 47;
 const FLASHCARD_MOBILE_BREAKPOINT = 767;
+const FLASHCARD_DISCARD_ANIMATION_MS = 320;
 
 function shuffleArray(arr) {
   const shuffled = [...arr];
@@ -167,6 +168,7 @@ export default function Flashcards() {
   const [cardDir, setCardDir] = useState("en_pt");
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+  const [discardDirection, setDiscardDirection] = useState(null);
   const responseLockRef = useRef(false);
   const prevModeRef = useRef(mode);
   const frontTextRef = useRef(null);
@@ -213,6 +215,7 @@ export default function Flashcards() {
         setShowExamples(false);
         setSessionDone(false);
         setIsSubmittingResponse(false);
+        setDiscardDirection(null);
         responseLockRef.current = false;
       } catch (error) {
         console.error("Erro ao carregar vocabulário no Flashcards:", error);
@@ -246,6 +249,7 @@ export default function Flashcards() {
     setShowExamples(false);
     setSessionDone(false);
     setIsSubmittingResponse(false);
+    setDiscardDirection(null);
     responseLockRef.current = false;
     updateDominatedCount(prepared);
   }, [mode, baseVocab, loading]);
@@ -267,6 +271,7 @@ export default function Flashcards() {
     setFlipped(false);
     setShowExamples(false);
     setIsSubmittingResponse(false);
+    setDiscardDirection(null);
     responseLockRef.current = false;
   }, [current, vocab, mode]);
 
@@ -326,6 +331,7 @@ export default function Flashcards() {
   };
 
   const handleFlip = () => {
+    if (responseLockRef.current || isSubmittingResponse || discardDirection) return;
     setFlipped((value) => !value);
     playSound("flip");
   };
@@ -335,6 +341,10 @@ export default function Flashcards() {
 
     responseLockRef.current = true;
     setIsSubmittingResponse(true);
+    setDiscardDirection(correct ? "right" : "left");
+    const discardAnimationPromise = new Promise((resolve) =>
+      setTimeout(resolve, FLASHCARD_DISCARD_ANIMATION_MS)
+    );
 
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
     playSound(correct ? "correct" : "incorrect");
@@ -416,6 +426,10 @@ export default function Flashcards() {
       else recordIncorrect();
       updateStreak();
 
+      await discardAnimationPromise;
+      setDiscardDirection(null);
+      setFlipped(false);
+
       if (current < vocab.length - 1) {
         setCurrent((index) => index + 1);
         playSound("advance");
@@ -427,6 +441,7 @@ export default function Flashcards() {
       console.error("Erro ao atualizar estatísticas no Supabase:", error);
       alert("Não foi possível salvar seu progresso desta carta.");
     } finally {
+      setDiscardDirection(null);
       responseLockRef.current = false;
       setIsSubmittingResponse(false);
     }
@@ -486,6 +501,7 @@ export default function Flashcards() {
               setSessionDone(false);
               setShowExamples(false);
               setIsSubmittingResponse(false);
+              setDiscardDirection(null);
               responseLockRef.current = false;
               updateDominatedCount(prepared);
             } catch (error) {
@@ -549,7 +565,15 @@ export default function Flashcards() {
       </div>
 
       <div
-        className="flip-card w-full cursor-pointer select-none overflow-hidden"
+        className={`flip-card w-full select-none overflow-hidden ${
+          isSubmittingResponse ? "cursor-default" : "cursor-pointer"
+        } ${
+          discardDirection === "left"
+            ? "flashcard-discard-left"
+            : discardDirection === "right"
+              ? "flashcard-discard-right"
+              : ""
+        }`}
         style={{
           maxWidth: `${FLASHCARD_CARD_WIDTH}px`,
           aspectRatio: `${FLASHCARD_CARD_WIDTH} / ${FLASHCARD_CARD_HEIGHT}`,
