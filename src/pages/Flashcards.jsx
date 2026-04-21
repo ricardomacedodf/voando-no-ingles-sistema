@@ -173,6 +173,7 @@ export default function Flashcards() {
   const [cardDir, setCardDir] = useState("en_pt");
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+  const [suppressFlipResetTransition, setSuppressFlipResetTransition] = useState(false);
   const responseLockRef = useRef(false);
   const prevModeRef = useRef(mode);
   const frontTextRef = useRef(null);
@@ -293,6 +294,7 @@ export default function Flashcards() {
         setShowExamples(false);
         setSessionDone(false);
         setIsSubmittingResponse(false);
+        setSuppressFlipResetTransition(false);
         clearDiscardOverlays();
         responseLockRef.current = false;
       } catch (error) {
@@ -327,10 +329,21 @@ export default function Flashcards() {
     setShowExamples(false);
     setSessionDone(false);
     setIsSubmittingResponse(false);
+    setSuppressFlipResetTransition(false);
     clearDiscardOverlays();
     responseLockRef.current = false;
     updateDominatedCount(prepared);
   }, [mode, baseVocab, loading]);
+
+  useEffect(() => {
+    if (!suppressFlipResetTransition) return;
+
+    const frameId = requestAnimationFrame(() => {
+      setSuppressFlipResetTransition(false);
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [suppressFlipResetTransition, current]);
 
   useEffect(() => {
     const card = vocab[current];
@@ -418,8 +431,16 @@ export default function Flashcards() {
     responseLockRef.current = true;
     setIsSubmittingResponse(true);
 
+    if (flipped) {
+      setSuppressFlipResetTransition(true);
+    }
+
     const discardDirectionValue = correct ? "right" : "left";
     spawnDiscardOverlay(discardDirectionValue);
+
+    if (flipped) {
+      setFlipped(false);
+    }
 
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
     playSound(correct ? "correct" : "incorrect");
@@ -569,6 +590,7 @@ export default function Flashcards() {
               setSessionDone(false);
               setShowExamples(false);
               setIsSubmittingResponse(false);
+              setSuppressFlipResetTransition(false);
               clearDiscardOverlays();
               responseLockRef.current = false;
               updateDominatedCount(prepared);
@@ -650,7 +672,11 @@ export default function Flashcards() {
           }}
           onClick={handleFlip}
         >
-          <div className={`flip-card-inner relative h-full w-full ${flipped ? "flipped" : ""}`}>
+          <div
+            className={`flip-card-inner relative h-full w-full ${flipped ? "flipped" : ""} ${
+              suppressFlipResetTransition ? "!transition-none" : ""
+            }`}
+          >
             <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
               <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 {frontLabel}
