@@ -426,8 +426,28 @@ export default function Flashcards() {
     setSoundEnabled(newEnabled);
   };
 
+  const hasActiveSelectionInsideCard = () => {
+    if (typeof window === "undefined") return false;
+
+    const selection = window.getSelection();
+    const cardNode = flashcardRef.current;
+    if (!selection || !cardNode || selection.isCollapsed || selection.rangeCount === 0) {
+      return false;
+    }
+
+    const anchorNode = selection.anchorNode;
+    const focusNode = selection.focusNode;
+    if (!anchorNode || !focusNode) return false;
+
+    const hasText = selection.toString().trim().length > 0;
+    const isInsideCard = cardNode.contains(anchorNode) && cardNode.contains(focusNode);
+
+    return hasText && isInsideCard;
+  };
+
   const handleFlip = () => {
     if (responseLockRef.current || isSubmittingResponse) return;
+    if (hasActiveSelectionInsideCard()) return;
     setFlipped((value) => !value);
     playSound("flip");
   };
@@ -691,7 +711,7 @@ export default function Flashcards() {
               <div ref={frontTextSlotRef} className="flashcard-main-text-slot">
                 <p
                   ref={frontTextRef}
-                  className="flashcard-main-text text-center font-bold text-foreground"
+                  className="flashcard-main-text select-text text-center font-bold text-foreground"
                   style={{
                     fontSize: `${frontTextStyle.fontSize}px`,
                     lineHeight: `${frontTextStyle.lineHeight}px`,
@@ -718,7 +738,7 @@ export default function Flashcards() {
               <div ref={backTextSlotRef} className="flashcard-main-text-slot">
                 <p
                   ref={backTextRef}
-                  className="flashcard-main-text text-center font-bold text-foreground"
+                  className="flashcard-main-text select-text text-center font-bold text-foreground"
                   style={{
                     fontSize: `${backTextStyle.fontSize}px`,
                     lineHeight: `${backTextStyle.lineHeight}px`,
@@ -734,7 +754,7 @@ export default function Flashcards() {
                 </p>
               </div>
               {card?.pronunciation ? (
-                <p className="flashcard-pronunciation font-mono text-base text-muted-foreground">
+                <p className="flashcard-pronunciation select-text font-mono text-base text-muted-foreground">
                   /{card.pronunciation}/
                 </p>
               ) : null}
