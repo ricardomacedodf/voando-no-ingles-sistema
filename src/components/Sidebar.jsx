@@ -61,12 +61,12 @@ export default function Sidebar({ onClose }) {
   const avatarUrl = user?.avatar_url || "";
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-white">
-      <div className="p-6">
+    <div className="flex h-full w-full flex-col">
+      <div className="px-5 py-5">
         <Logo variant="sidebar" />
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -76,7 +76,7 @@ export default function Sidebar({ onClose }) {
               key={item.path}
               to={item.path}
               onClick={onClose}
-              className={`group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`group flex items-center gap-2.5 rounded-md px-2.5 py-2.5 text-sm font-medium transition-colors ${
                 isActive ? "bg-[#25B15F] text-white" : "text-foreground hover:bg-muted"
               }`}
             >
@@ -91,10 +91,10 @@ export default function Sidebar({ onClose }) {
         })}
       </nav>
 
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border px-3 py-3">
         <button
           onClick={toggleSound}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
         >
           {soundEnabled ? (
             <Volume2 className="h-[18px] w-[18px] text-[#25B15F]" />
@@ -108,7 +108,7 @@ export default function Sidebar({ onClose }) {
           <button
             type="button"
             onClick={() => setIsProfileMenuOpen((open) => !open)}
-            className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors hover:bg-muted"
+            className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted"
           >
             <div className="flex min-w-0 items-center gap-2.5">
               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">

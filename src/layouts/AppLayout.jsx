@@ -91,7 +91,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 md:flex">
+      <aside className="fixed inset-y-0 left-0 z-50 hidden border-r border-border bg-white md:flex md:w-[250px] md:min-w-[250px] md:max-w-[250px]">
         <Sidebar />
       </aside>
 
@@ -232,7 +232,7 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      <div className="md:ml-64">
+      <div className="md:ml-[250px]">
         <main className="min-h-screen p-4 pb-24 pt-4 md:p-6 md:pt-6 lg:p-8">
           <div className="mx-auto max-w-6xl">
             <Outlet />
