@@ -6,6 +6,7 @@ import ModeSelector from "../components/ModeSelector";
 import ProgressBar from "../components/ProgressBar";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
+import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
 import {
   addXP,
   recordCorrect,
@@ -102,6 +103,7 @@ export default function Quiz() {
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const startTime = useRef(Date.now());
   const prevModeRef = useRef(mode);
+  const examplesPanelRef = useRef(null);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -232,6 +234,11 @@ export default function Quiz() {
     setShowExamples(false);
     startTime.current = Date.now();
   }, [current, mode, queue.length, allVocab.length]);
+
+  useEffect(() => {
+    if (!showExamples) return;
+    return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
+  }, [showExamples]);
 
   const toggleSound = () => {
     const state = getSoundState();
@@ -542,13 +549,15 @@ export default function Quiz() {
           />
 
           {showExamples ? (
-            <ExamplesPanel
-              allMeanings={card?.meanings}
-              activeMeaning={activeMeaning?.meaning}
-              titleTerm={card?.term}
-              variant="flashcard"
-              onClose={() => setShowExamples(false)}
-            />
+            <div ref={examplesPanelRef}>
+              <ExamplesPanel
+                allMeanings={card?.meanings}
+                activeMeaning={activeMeaning?.meaning}
+                titleTerm={card?.term}
+                variant="flashcard"
+                onClose={() => setShowExamples(false)}
+              />
+            </div>
           ) : null}
         </div>
       ) : null}

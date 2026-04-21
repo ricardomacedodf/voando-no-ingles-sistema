@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import FlashcardModeSelector from "../components/FlashcardModeSelector";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
+import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
 import {
   addXP,
   recordCorrect,
@@ -184,6 +185,7 @@ export default function Flashcards() {
   const flashcardRef = useRef(null);
   const discardTimersRef = useRef([]);
   const discardNodesRef = useRef([]);
+  const examplesPanelRef = useRef(null);
 
   const clearDiscardOverlays = () => {
     discardTimersRef.current.forEach((timerId) => clearTimeout(timerId));
@@ -411,6 +413,11 @@ export default function Flashcards() {
     backTextStyle.fontSize,
     cardDir,
   ]);
+
+  useEffect(() => {
+    if (!showExamples) return;
+    return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
+  }, [showExamples]);
 
   const toggleSound = () => {
     const state = getSoundState();
@@ -766,13 +773,15 @@ export default function Flashcards() {
           />
 
           {showExamples ? (
-            <ExamplesPanel
-              allMeanings={card.meanings}
-              activeMeaning={activeMeaning?.meaning}
-              titleTerm={card?.term}
-              variant="flashcard"
-              onClose={() => setShowExamples(false)}
-            />
+            <div ref={examplesPanelRef}>
+              <ExamplesPanel
+                allMeanings={card.meanings}
+                activeMeaning={activeMeaning?.meaning}
+                titleTerm={card?.term}
+                variant="flashcard"
+                onClose={() => setShowExamples(false)}
+              />
+            </div>
           ) : null}
         </div>
       ) : null}

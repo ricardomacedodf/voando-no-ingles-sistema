@@ -6,6 +6,7 @@ import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import ModeSelector from "../components/ModeSelector";
 import ProgressBar from "../components/ProgressBar";
+import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
 import {
   addXP,
   recordCorrect,
@@ -137,6 +138,7 @@ export default function Combinations() {
   const [roundXpBalance, setRoundXpBalance] = useState(0);
 
   const difficultyMap = useRef({});
+  const examplesPanelRef = useRef(null);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -192,6 +194,11 @@ export default function Combinations() {
     if (pool.length === 0) return;
     setupRound();
   }, [round, pool, mode]);
+
+  useEffect(() => {
+    if (!showExamples) return;
+    return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
+  }, [showExamples]);
 
   const setupRound = () => {
     const pairs = weightedSample(pool, difficultyMap.current, PAIRS_PER_ROUND);
@@ -522,13 +529,15 @@ export default function Combinations() {
           />
 
           {showExamples ? (
-            <ExamplesPanel
-              allMeanings={focusedCard.meanings}
-              activeMeaning={focusedMeaning}
-              titleTerm={focusedCard.term}
-              variant="flashcard"
-              onClose={() => setShowExamples(false)}
-            />
+            <div ref={examplesPanelRef}>
+              <ExamplesPanel
+                allMeanings={focusedCard.meanings}
+                activeMeaning={focusedMeaning}
+                titleTerm={focusedCard.term}
+                variant="flashcard"
+                onClose={() => setShowExamples(false)}
+              />
+            </div>
           ) : null}
         </div>
       ) : null}
