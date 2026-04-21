@@ -33,10 +33,10 @@ export default function ActivityCards() {
         {activities.map((item) => {
           const Icon = item.icon;
           return (
-            <Link key={item.path} to={item.path} className="group block">
-              <div className="flex h-full flex-col rounded-xl border border-border bg-white p-6 shadow-sm transition-all duration-200 hover:border-primary hover:shadow-md">
+            <Link key={item.path} to={item.path} className="group block touch-manipulation">
+              <div className="flex h-full flex-col rounded-xl border border-border bg-white p-6 shadow-sm transition-colors duration-200 md:transition-all md:hover:border-primary md:hover:shadow-md">
                 <div
-                  className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl ${item.color} text-white transition-transform duration-200 group-hover:scale-110`}
+                  className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl ${item.color} text-white transition-transform duration-200 md:group-hover:scale-110`}
                 >
                   <Icon className="h-6 w-6" />
                 </div>
@@ -44,7 +44,7 @@ export default function ActivityCards() {
                 <h4 className="mb-2 text-lg font-bold text-foreground">{item.label}</h4>
                 <p className="mb-4 flex-1 text-sm text-muted-foreground">{item.desc}</p>
 
-                <div className="mt-auto flex items-center gap-1 text-sm font-medium text-primary transition-all duration-200 group-hover:gap-2">
+                <div className="mt-auto flex items-center gap-1 text-sm font-medium text-primary transition-[gap] duration-200 md:group-hover:gap-2">
                   <span>Começar</span>
                   <ArrowRight className="h-4 w-4" />
                 </div>

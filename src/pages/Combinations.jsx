@@ -411,7 +411,7 @@ export default function Combinations() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Combinacoes</h1>
@@ -462,7 +462,7 @@ export default function Combinations() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
         <div className="space-y-2">
           {leftItems.map((item, idx) => {
             const isMatched = matched.has(`l${idx}`);
@@ -482,7 +482,7 @@ export default function Combinations() {
                 key={idx}
                 onClick={() => handleLeftClick(idx)}
                 disabled={isMatched}
-                className={`h-[65px] w-[330px] break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
+                className={`h-[65px] w-full break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:max-w-[330px] ${cls}`}
               >
                 {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
                 {item.text}
@@ -510,7 +510,7 @@ export default function Combinations() {
                 key={idx}
                 onClick={() => handleRightClick(idx)}
                 disabled={isMatched}
-                className={`h-[65px] w-[330px] break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 ${cls}`}
+                className={`h-[65px] w-full break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:max-w-[330px] ${cls}`}
               >
                 {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
                 {item.text}

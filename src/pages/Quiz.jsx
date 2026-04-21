@@ -436,7 +436,7 @@ export default function Quiz() {
   const letters = ["A", "B", "C", "D", "E"];
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Quiz</h1>
@@ -492,7 +492,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="space-y-4 rounded-2xl border bg-white p-8 text-center shadow-sm">
+      <div className="space-y-4 rounded-2xl border bg-white p-5 text-center shadow-sm sm:p-8">
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Qual o significado?
         </p>
@@ -501,7 +501,7 @@ export default function Quiz() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
         {options.map((opt, idx) => {
           let classes = "border-border text-foreground hover:border-primary";
           const isWrongSelection = answered && idx === selected && !opt.correct;
@@ -518,7 +518,7 @@ export default function Quiz() {
               key={idx}
               onClick={() => handleSelect(idx)}
               disabled={answered}
-              className={`flex h-[65px] w-[330px] items-center gap-3 rounded-[10px] border bg-white p-4 text-left text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+              className={`flex h-[65px] w-full items-center gap-3 rounded-[10px] border bg-white p-4 text-left text-sm font-medium transition-all duration-200 md:max-w-[330px] md:justify-self-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >

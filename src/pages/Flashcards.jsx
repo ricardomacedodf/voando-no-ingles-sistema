@@ -636,7 +636,7 @@ export default function Flashcards() {
 
   return (
     <div
-      className="mx-auto w-full max-w-2xl space-y-6 overflow-x-hidden"
+      className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6"
       style={{ touchAction: "pan-y" }}
     >
       <div className="flex items-center justify-between gap-2 sm:gap-4">
@@ -661,15 +661,15 @@ export default function Flashcards() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-sm font-medium">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium">
         <span className="text-muted-foreground">{current + 1} de {vocab.length}</span>
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+        <div className="h-2 min-w-[140px] flex-1 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full bg-[#25B15F] transition-all duration-300"
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="flex items-center gap-1 text-[#25B15F]">
             <Check className="h-3.5 w-3.5" />
             Acertei: {card?.stats?.correct || 0}

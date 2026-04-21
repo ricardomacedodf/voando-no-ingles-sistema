@@ -281,6 +281,20 @@
 }
 
 @media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+
+  body {
+    position: relative;
+    touch-action: pan-y;
+  }
+
   .flashcard-context-box {
     padding: 24px 16px 22px;
   }
