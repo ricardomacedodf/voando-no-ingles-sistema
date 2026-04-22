@@ -13,10 +13,10 @@ export default function ExamplesToggleButton({
       <button
         type="button"
         onClick={onClick}
-        className={`group flex h-12 w-full items-center justify-center gap-2 rounded-md border border-[#47556966] bg-white px-4 py-2 text-center text-sm font-medium leading-5 text-[#1A1A1A] transition-colors hover:border-[#ED9A0A] hover:bg-[#ED9A0A] hover:text-white ${expanded ? "mb-6" : ""} ${className}`}
+        className={`group flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-[#D6DEE8] bg-[#F5F7FA] px-4 py-2 text-center text-sm font-semibold leading-5 text-[#475569] transition-colors sm:h-12 sm:rounded-md sm:bg-white sm:font-medium sm:text-[#1A1A1A] sm:hover:border-[#ED9A0A] sm:hover:bg-[#ED9A0A] sm:hover:text-white ${expanded ? "mb-6" : ""} ${className}`}
       >
         <Lightbulb
-          className={`h-[18px] w-[18px] transition-colors group-hover:text-white ${
+          className={`h-[18px] w-[18px] transition-colors sm:group-hover:text-white ${
             expanded ? "text-[#ED9A0A]" : "text-[#64748B]"
           }`}
         />

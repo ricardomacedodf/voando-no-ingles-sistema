@@ -398,19 +398,19 @@ export default function Quiz() {
 
   if (roundDone) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center px-4">
+      <div className="flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
         <div className="w-full max-w-md text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-            <Check className="h-8 w-8 text-primary" />
+          <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 sm:h-16 sm:w-16">
+            <Check className="h-10 w-10 text-primary sm:h-8 sm:w-8" />
           </div>
 
-          <h2 className="mb-2 text-3xl font-bold text-foreground">Rodada {roundNumber} concluida!🎯</h2>
-          <p className="mb-5 text-muted-foreground">
+          <h2 className="mb-2 text-[2rem] font-bold leading-tight text-foreground sm:text-3xl">Rodada {roundNumber} concluida!🎯</h2>
+          <p className="mb-5 text-lg text-muted-foreground sm:text-base">
             Voce respondeu {QUESTIONS_PER_ROUND} perguntas nesta rodada.
           </p>
 
           <div
-            className={`mx-auto mb-6 flex max-w-sm items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${
+            className={`mx-auto mb-6 flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-base font-semibold sm:rounded-xl sm:py-3 sm:text-sm ${
               roundXpBalance >= 0
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border-red-200 bg-red-50 text-red-700"
@@ -422,7 +422,7 @@ export default function Quiz() {
 
           <button
             onClick={handleNextRound}
-            className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
           >
             {isLastRound ? "Recomecar" : "Proxima rodada"}
           </button>
@@ -437,7 +437,7 @@ export default function Quiz() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Quiz</h1>
           <button
@@ -452,7 +452,9 @@ export default function Quiz() {
             )}
           </button>
         </div>
-        <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
+        <div className="min-w-0 shrink-0">
+          <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -492,11 +494,11 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="space-y-4 rounded-2xl border bg-white p-5 text-center shadow-sm sm:p-8">
+      <div className="space-y-4 rounded-3xl border bg-white p-5 text-center shadow-sm sm:rounded-2xl sm:p-8">
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Qual o significado?
         </p>
-        <p className="break-words text-3xl font-bold leading-tight text-foreground md:text-4xl">
+        <p className="min-h-[86px] break-words text-3xl font-bold leading-tight text-foreground md:min-h-0 md:text-4xl">
           {questionText}
         </p>
       </div>
@@ -518,11 +520,11 @@ export default function Quiz() {
               key={idx}
               onClick={() => handleSelect(idx)}
               disabled={answered}
-              className={`flex h-[65px] w-full items-center gap-3 rounded-[10px] border bg-white p-4 text-left text-sm font-medium transition-all duration-200 md:max-w-[330px] md:justify-self-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+              className={`flex h-[74px] w-full items-center gap-3 rounded-2xl border bg-white p-4 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-base font-bold text-muted-foreground md:h-8 md:w-8 md:text-sm">
                 {letters[idx]}
               </span>
               <span className="break-words">{opt.text}</span>

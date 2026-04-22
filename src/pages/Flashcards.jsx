@@ -372,8 +372,6 @@ export default function Flashcards() {
   const back = cardDir === "en_pt" ? activeMeaning?.meaning : card?.term;
   const frontTextStyle = getAdaptiveMainTextStyle(front);
   const backTextStyle = getAdaptiveMainTextStyle(back);
-  const frontLabel = cardDir === "en_pt" ? "INGLÃŠS" : "PORTUGUÃŠS";
-  const backLabel = cardDir === "en_pt" ? "PORTUGUÃŠS" : "INGLÃŠS";
   const progressPct = vocab.length > 0 ? ((current + 1) / vocab.length) * 100 : 0;
 
   useLayoutEffect(() => {
@@ -661,15 +659,38 @@ export default function Flashcards() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium">
+      <div className="space-y-2 sm:hidden">
+        <div className="flex items-center gap-3 text-sm font-medium">
+          <span className="text-muted-foreground">{current + 1} de {vocab.length}</span>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-[#25B15F] transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="flex items-center gap-1 text-[#25B15F]">
+            <Check className="h-3.5 w-3.5" />
+            Acertei: {card?.stats?.correct || 0}
+          </span>
+          <span className="flex items-center gap-1 text-red-500">
+            <X className="h-3.5 w-3.5" />
+            Errei: {card?.stats?.incorrect || 0}
+          </span>
+        </div>
+      </div>
+
+      <div className="hidden items-center gap-4 text-sm font-medium sm:flex">
         <span className="text-muted-foreground">{current + 1} de {vocab.length}</span>
-        <div className="h-2 min-w-[140px] flex-1 overflow-hidden rounded-full bg-muted">
+        <div className="h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full bg-[#25B15F] transition-all duration-300"
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 text-xs">
           <span className="flex items-center gap-1 text-[#25B15F]">
             <Check className="h-3.5 w-3.5" />
             Acertei: {card?.stats?.correct || 0}
@@ -704,10 +725,7 @@ export default function Flashcards() {
               suppressFlipResetTransition ? "!transition-none" : ""
             }`}
           >
-            <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
-              <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                {frontLabel}
-              </span>
+            <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center">
               <div ref={frontTextSlotRef} className="flashcard-main-text-slot">
                 <p
                   ref={frontTextRef}
@@ -731,10 +749,7 @@ export default function Flashcards() {
               </p>
             </div>
 
-            <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center shadow-sm">
-              <span className="flashcard-language-label text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                {backLabel}
-              </span>
+            <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center">
               <div ref={backTextSlotRef} className="flashcard-main-text-slot">
                 <p
                   ref={backTextRef}
@@ -768,7 +783,7 @@ export default function Flashcards() {
           type="button"
           onClick={() => handleResponse(false)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-14 items-center justify-center gap-2 rounded-md border border-red-500 px-4 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-2xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
           Não sei
         </button>
@@ -777,10 +792,10 @@ export default function Flashcards() {
           type="button"
           onClick={() => handleResponse(true)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-14 items-center justify-center gap-2 rounded-md bg-[#25B15F] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-2xl bg-[#25B15F] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
           <Check className="mr-1 h-4 w-4" />
-          JÃ¡ sei
+          Já sei
         </button>
       </div>
 

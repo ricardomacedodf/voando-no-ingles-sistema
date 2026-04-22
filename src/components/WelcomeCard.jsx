@@ -16,25 +16,25 @@ export default function WelcomeCard() {
     "Usuário";
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-emerald-600 p-8 text-white shadow-sm">
+    <div className="relative mx-auto h-auto w-full max-w-[960px] overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-emerald-600 px-5 py-4 text-white shadow-sm sm:px-6 sm:py-5 md:h-[182px] md:px-7 md:py-6">
       <div className="absolute -mr-10 -mt-10 h-64 w-64 rounded-full bg-white/5 blur-3xl top-0 right-0" />
 
-      <div className="relative z-10 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-        <div>
-          <div className="mb-2 text-4xl">Olá, {firstName}</div>
-          <h2 className="text-2xl font-bold opacity-90">
+      <div className="relative z-10 flex h-full flex-col justify-between gap-4 md:flex-row md:items-center md:gap-6">
+        <div className="max-w-[560px]">
+          <div className="mb-1 text-3xl leading-tight sm:mb-2 sm:text-4xl">Olá, {firstName}</div>
+          <h2 className="text-xl font-bold leading-tight opacity-90 sm:text-2xl">
             Pronto para aprender inglês hoje?
           </h2>
         </div>
 
-        <div className="w-full min-w-[280px] rounded-xl border border-white/10 bg-white/20 p-5 backdrop-blur-md md:w-auto">
-          <div className="mb-4 flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-400 shadow-inner">
-              <Star className="h-6 w-6 fill-yellow-700 text-yellow-700" />
+        <div className="w-full rounded-xl border border-white/10 bg-white/20 p-4 backdrop-blur-md sm:p-5 md:w-[290px] md:min-w-[290px] md:p-4">
+          <div className="mb-3 flex items-center gap-3 sm:mb-4 sm:gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-400 shadow-inner sm:h-12 sm:w-12">
+              <Star className="h-5 w-5 fill-yellow-700 text-yellow-700 sm:h-6 sm:w-6" />
             </div>
 
             <div>
-              <div className="text-lg font-bold">Nível {game.level}</div>
+              <div className="text-base font-bold sm:text-lg">Nível {game.level}</div>
               <div className="text-sm opacity-80">{xpInLevel} / 100 XP</div>
             </div>
           </div>

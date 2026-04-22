@@ -220,10 +220,7 @@
   background-color: #ffffff;
   border: 1px solid #e6ebf1;
   border-radius: 16px;
-  box-shadow:
-    0 20px 36px -26px rgba(15, 23, 42, 0.5),
-    0 3px 10px rgba(15, 23, 42, 0.06),
-    -6px -6px 14px rgba(255, 255, 255, 0.95);
+  box-shadow: none;
   color: #1a1a1a;
   display: flex;
   flex-direction: column;
@@ -239,18 +236,12 @@
 @media (hover: hover) and (pointer: fine) {
   .flip-card:hover .flashcard-context-box {
     border-color: #ffffff;
-    box-shadow:
-      0 24px 42px -28px rgba(15, 23, 42, 0.55),
-      0 4px 12px rgba(15, 23, 42, 0.08),
-      -6px -6px 14px rgba(255, 255, 255, 1);
+    box-shadow: none;
   }
 }
 
 .flip-card:active .flashcard-context-box {
-  box-shadow:
-    0 14px 26px -20px rgba(15, 23, 42, 0.42),
-    0 2px 7px rgba(15, 23, 42, 0.05),
-    -4px -4px 11px rgba(255, 255, 255, 0.92);
+  box-shadow: none;
 }
 
 .flashcard-language-label {

@@ -362,7 +362,7 @@ export default function Combinations() {
     return (
       <div className="py-20 text-center">
         <p className="text-muted-foreground">
-          Cadastre pelo menos 2 palavras para usar Combinacoes.
+          Cadastre pelo menos 2 palavras para usar Combinações.
         </p>
       </div>
     );
@@ -379,17 +379,17 @@ export default function Combinations() {
 
   if (roundComplete) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center px-4">
+      <div className="flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
         <div className="w-full max-w-md text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-            <Check className="h-8 w-8 text-primary" />
+          <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 sm:h-16 sm:w-16">
+            <Check className="h-10 w-10 text-primary sm:h-8 sm:w-8" />
           </div>
 
-          <h2 className="mb-2 text-3xl font-bold text-foreground">Rodada {round + 1} concluida</h2>
-          <p className="mb-5 text-muted-foreground">Voce marcou {PAIRS_PER_ROUND} pares nesta rodada.</p>
+          <h2 className="mb-2 text-[2rem] font-bold leading-tight text-foreground sm:text-3xl">Rodada {round + 1} concluida</h2>
+          <p className="mb-5 text-lg text-muted-foreground sm:text-base">Voce marcou {PAIRS_PER_ROUND} pares nesta rodada.</p>
 
           <div
-            className={`mx-auto mb-6 flex max-w-sm items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${
+            className={`mx-auto mb-6 flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-base font-semibold sm:rounded-xl sm:py-3 sm:text-sm ${
               roundXpBalance >= 0
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border-red-200 bg-red-50 text-red-700"
@@ -401,7 +401,7 @@ export default function Combinations() {
 
           <button
             onClick={nextRound}
-            className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
           >
             Proxima rodada
           </button>
@@ -412,9 +412,9 @@ export default function Combinations() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-foreground">Combinacoes</h1>
+          <h1 className="text-2xl font-bold text-foreground">Combinações</h1>
           <button
             onClick={toggleSound}
             className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -427,7 +427,9 @@ export default function Combinations() {
             )}
           </button>
         </div>
-        <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
+        <div className="min-w-0 shrink-0">
+          <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -482,10 +484,16 @@ export default function Combinations() {
                 key={idx}
                 onClick={() => handleLeftClick(idx)}
                 disabled={isMatched}
-                className={`h-[65px] w-full break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:max-w-[330px] ${cls}`}
+                className={`flex h-[74px] w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] ${cls}`}
               >
-                {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
-                {item.text}
+                {isMatched ? <Check className="mr-1.5 hidden h-3 w-3 text-primary md:inline" /> : null}
+                <span className="hidden break-words md:inline">{item.text}</span>
+
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-lg font-bold text-muted-foreground md:hidden">
+                  {idx * 2 + 1}
+                </span>
+                <span className="min-w-0 break-words md:hidden">{item.text}</span>
+                {isMatched ? <Check className="ml-auto h-4 w-4 shrink-0 text-primary md:hidden" /> : null}
               </button>
             );
           })}
@@ -510,10 +518,16 @@ export default function Combinations() {
                 key={idx}
                 onClick={() => handleRightClick(idx)}
                 disabled={isMatched}
-                className={`h-[65px] w-full break-words rounded-[10px] px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:max-w-[330px] ${cls}`}
+                className={`flex h-[74px] w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] ${cls}`}
               >
-                {isMatched && <Check className="mr-1.5 inline h-3 w-3 text-primary" />}
-                {item.text}
+                {isMatched ? <Check className="mr-1.5 hidden h-3 w-3 text-primary md:inline" /> : null}
+                <span className="hidden break-words md:inline">{item.text}</span>
+
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-lg font-bold text-muted-foreground md:hidden">
+                  {idx * 2 + 2}
+                </span>
+                <span className="min-w-0 break-words md:hidden">{item.text}</span>
+                {isMatched ? <Check className="ml-auto h-4 w-4 shrink-0 text-primary md:hidden" /> : null}
               </button>
             );
           })}
