@@ -1,4 +1,6 @@
 import { Lightbulb, X } from "lucide-react";
+import { playSound } from "../lib/gameState";
+import { SFX_EVENTS } from "../lib/sfx";
 
 export default function ExamplesPanel({
   allMeanings,
@@ -28,6 +30,11 @@ export default function ExamplesPanel({
   const isFlashcard = variant === "flashcard";
   const title = titleTerm ? `Exemplos — ${titleTerm}` : "Exemplos";
 
+  const handleClose = () => {
+    playSound(SFX_EVENTS.EXAMPLES_CLOSE);
+    onClose?.();
+  };
+
   return (
     <div
       className={
@@ -50,7 +57,7 @@ export default function ExamplesPanel({
 
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           className={
             isFlashcard
               ? "inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"

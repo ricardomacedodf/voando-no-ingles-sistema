@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Plus, Search, Pencil, Trash2, FileJson, AlertTriangle } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { playSound } from "../lib/gameState";
 import ManagerForm from "../components/ManagerForm";
 import ManagerImport from "../components/ManagerImport";
 import {
@@ -90,7 +89,6 @@ export default function Manager() {
         throw error;
       }
 
-      playSound("critical_action");
       loadVocab();
     } catch (error) {
       console.error("Erro ao apagar item:", error);
@@ -109,7 +107,6 @@ export default function Manager() {
         throw error;
       }
 
-      playSound("critical_action");
       setShowDeleteAll(false);
       loadVocab();
     } catch (error) {
@@ -131,13 +128,11 @@ export default function Manager() {
   const handleSaved = () => {
     setView("list");
     setEditItem(null);
-    playSound("admin_action");
     loadVocab();
   };
 
   const handleImportDone = () => {
     setView("list");
-    playSound("import_done");
     loadVocab();
   };
 

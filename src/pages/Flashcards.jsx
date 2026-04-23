@@ -6,6 +6,7 @@ import FlashcardModeSelector from "../components/FlashcardModeSelector";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
+import { SFX_EVENTS } from "../lib/sfx";
 import {
   addXP,
   recordCorrect,
@@ -493,7 +494,7 @@ export default function Flashcards() {
     if (responseLockRef.current || isSubmittingResponse) return;
     if (hasActiveSelectionInsideCard()) return;
     setFlipped((value) => !value);
-    playSound("flip");
+    playSound(SFX_EVENTS.FLASHCARD_FLIP);
   };
 
   const handleResponse = async (correct) => {
@@ -514,7 +515,7 @@ export default function Flashcards() {
     }
 
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
-    playSound(correct ? "correct" : "incorrect");
+    playSound(SFX_EVENTS.FLASHCARD_DISCARD);
 
     const stats = normalizeStats(card.stats);
 
@@ -592,10 +593,8 @@ export default function Flashcards() {
     } finally {
       if (current < vocab.length - 1) {
         setCurrent((index) => index + 1);
-        playSound("advance");
       } else {
         setSessionDone(true);
-        playSound("completion");
       }
 
       responseLockRef.current = false;

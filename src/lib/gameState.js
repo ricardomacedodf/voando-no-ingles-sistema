@@ -1,3 +1,5 @@
+import { playSfxEvent, SFX_EVENTS } from "./sfx";
+
 const GAME_STATE_KEY = "voando_game_state";
 const SOUND_STATE_KEY = "voando_sound_state";
 export const GAME_STATE_UPDATED_EVENT = "voando:game-state-updated";
@@ -17,19 +19,24 @@ const defaultGameState = {
 const defaultSoundState = {
   enabled: true,
   volume: 0.5,
-  profile: "minimal_pop",
   interactions: {
-    selection: true,
-    correct: true,
-    incorrect: true,
-    advance: true,
-    flip: true,
-    completion: true,
-    import_done: true,
-    admin_action: true,
-    critical_action: true,
+    [SFX_EVENTS.FLASHCARD_FLIP]: true,
+    [SFX_EVENTS.FLASHCARD_DISCARD]: true,
+    [SFX_EVENTS.QUIZ_SUCCESS]: true,
+    [SFX_EVENTS.QUIZ_ERROR]: true,
+    [SFX_EVENTS.MATCH_SELECT]: true,
+    [SFX_EVENTS.MATCH_SUCCESS]: true,
+    [SFX_EVENTS.MATCH_ERROR]: true,
+    [SFX_EVENTS.EXAMPLES_OPEN]: true,
+    [SFX_EVENTS.EXAMPLES_CLOSE]: true,
   },
 };
+
+function clampVolume(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0.5;
+  return Math.min(Math.max(numeric, 0), 1);
+}
 
 export function getDefaultGameState() {
   return { ...defaultGameState };
@@ -200,7 +207,18 @@ export function getSoundState() {
   try {
     const stored = localStorage.getItem(SOUND_STATE_KEY);
     if (stored) {
-      return { ...defaultSoundState, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored);
+      const mergedInteractions = {
+        ...defaultSoundState.interactions,
+        ...(parsed?.interactions || {}),
+      };
+
+      return {
+        ...defaultSoundState,
+        ...parsed,
+        interactions: mergedInteractions,
+        volume: clampVolume(parsed?.volume ?? defaultSoundState.volume),
+      };
     }
   } catch (error) {
     console.error("Erro ao ler sound state:", error);
@@ -210,67 +228,24 @@ export function getSoundState() {
 }
 
 export function saveSoundState(state) {
-  localStorage.setItem(SOUND_STATE_KEY, JSON.stringify(state));
+  const safeState = {
+    ...defaultSoundState,
+    ...(state || {}),
+    interactions: {
+      ...defaultSoundState.interactions,
+      ...((state && state.interactions) || {}),
+    },
+    volume: clampVolume(state?.volume ?? defaultSoundState.volume),
+  };
+
+  localStorage.setItem(SOUND_STATE_KEY, JSON.stringify(safeState));
 }
 
 export function playSound(type) {
+  if (typeof window === "undefined") return;
+
   const soundState = getSoundState();
   if (!soundState.enabled) return;
-  if (!soundState.interactions[type]) return;
-
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!AudioCtx) return;
-
-  const ctx = new AudioCtx();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  gain.gain.value = soundState.volume * 0.3;
-
-  const profiles = {
-    minimal_pop: {
-      correct: { freq: 880, type: "sine", dur: 0.15 },
-      incorrect: { freq: 220, type: "triangle", dur: 0.2 },
-      selection: { freq: 600, type: "sine", dur: 0.08 },
-      advance: { freq: 700, type: "sine", dur: 0.12 },
-      flip: { freq: 500, type: "sine", dur: 0.1 },
-      completion: { freq: 1000, type: "sine", dur: 0.25 },
-      import_done: { freq: 900, type: "sine", dur: 0.2 },
-      admin_action: { freq: 650, type: "sine", dur: 0.1 },
-      critical_action: { freq: 300, type: "sawtooth", dur: 0.15 },
-    },
-    soft_glass: {
-      correct: { freq: 1200, type: "sine", dur: 0.12 },
-      incorrect: { freq: 180, type: "sine", dur: 0.25 },
-      selection: { freq: 800, type: "sine", dur: 0.06 },
-      advance: { freq: 900, type: "sine", dur: 0.1 },
-      flip: { freq: 700, type: "sine", dur: 0.08 },
-      completion: { freq: 1400, type: "sine", dur: 0.2 },
-      import_done: { freq: 1100, type: "sine", dur: 0.18 },
-      admin_action: { freq: 850, type: "sine", dur: 0.08 },
-      critical_action: { freq: 250, type: "sine", dur: 0.2 },
-    },
-    clean_tap: {
-      correct: { freq: 1000, type: "square", dur: 0.05 },
-      incorrect: { freq: 200, type: "square", dur: 0.08 },
-      selection: { freq: 700, type: "square", dur: 0.03 },
-      advance: { freq: 800, type: "square", dur: 0.05 },
-      flip: { freq: 600, type: "square", dur: 0.04 },
-      completion: { freq: 1200, type: "square", dur: 0.1 },
-      import_done: { freq: 1000, type: "square", dur: 0.08 },
-      admin_action: { freq: 750, type: "square", dur: 0.04 },
-      critical_action: { freq: 280, type: "square", dur: 0.06 },
-    },
-  };
-
-  const profile = profiles[soundState.profile] || profiles.minimal_pop;
-  const sound = profile[type] || { freq: 600, type: "sine", dur: 0.1 };
-
-  osc.frequency.value = sound.freq;
-  osc.type = sound.type;
-  osc.start();
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + sound.dur);
-  osc.stop(ctx.currentTime + sound.dur + 0.05);
+  if (soundState.interactions?.[type] === false) return;
+  playSfxEvent(type, { volume: clampVolume(soundState.volume) });
 }

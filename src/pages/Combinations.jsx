@@ -7,6 +7,7 @@ import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import ModeSelector from "../components/ModeSelector";
 import ProgressBar from "../components/ProgressBar";
 import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
+import { SFX_EVENTS } from "../lib/sfx";
 import {
   addXP,
   recordCorrect,
@@ -293,7 +294,7 @@ export default function Combinations() {
   const handleLeftClick = (idx) => {
     if (matched.has(`l${idx}`) || roundComplete) return;
 
-    playSound("selection");
+    playSound(SFX_EVENTS.MATCH_SELECT);
     const left = leftItems[idx];
     if (left) {
       setFocusedPair({
@@ -311,7 +312,7 @@ export default function Combinations() {
   const handleRightClick = (idx) => {
     if (matched.has(`r${idx}`) || roundComplete) return;
 
-    playSound("selection");
+    playSound(SFX_EVENTS.MATCH_SELECT);
     const right = rightItems[idx];
     if (right) {
       setFocusedPair({
@@ -328,7 +329,7 @@ export default function Combinations() {
 
   const tryMatch = (leftIdx, rightIdx) => {
     if (checkMatch(leftIdx, rightIdx)) {
-      playSound("correct");
+      playSound(SFX_EVENTS.MATCH_SUCCESS);
       recordCorrect();
       addXP(CORRECT_XP_DELTA);
       setRoundXpBalance((prev) => prev + CORRECT_XP_DELTA);
@@ -344,10 +345,9 @@ export default function Combinations() {
 
       if (newMatched.size / 2 >= roundPairs.length) {
         setRoundComplete(true);
-        playSound("completion");
       }
     } else {
-      playSound("incorrect");
+      playSound(SFX_EVENTS.MATCH_ERROR);
       recordIncorrect();
       addXP(INCORRECT_XP_DELTA);
       setRoundXpBalance((prev) => prev + INCORRECT_XP_DELTA);
@@ -379,7 +379,6 @@ export default function Combinations() {
 
   const nextRound = () => {
     setRound((r) => r + 1);
-    playSound("advance");
   };
 
   const toggleSound = () => {

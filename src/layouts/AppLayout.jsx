@@ -26,6 +26,7 @@ const mobilePrimaryNavItems = [
 const mobilePanelNavItems = [
   { label: "Progresso", path: "/progresso", icon: BarChart3 },
   { label: "Vocabul\u00E1rio", path: "/gerenciador", icon: Database },
+  { label: "Configura\u00E7\u00E3o", path: "/configuracao", icon: Settings },
 ];
 
 export default function AppLayout() {
@@ -73,7 +74,9 @@ export default function AppLayout() {
   const displayEmail = user?.email || "";
   const avatarUrl = user?.avatar_url || "";
   const isPersonalizeActive =
-    isPersonalizeOpen || location.pathname.startsWith("/personalizar");
+    isPersonalizeOpen ||
+    location.pathname.startsWith("/configuracao") ||
+    location.pathname.startsWith("/personalizar");
 
   return (
     <div className="min-h-screen bg-background">

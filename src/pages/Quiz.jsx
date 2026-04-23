@@ -7,6 +7,7 @@ import ProgressBar from "../components/ProgressBar";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
+import { SFX_EVENTS } from "../lib/sfx";
 import {
   addXP,
   recordCorrect,
@@ -375,7 +376,7 @@ export default function Quiz() {
     const correct = options[idx].correct;
     const xpDelta = correct ? CORRECT_XP_DELTA : INCORRECT_XP_DELTA;
 
-    playSound(correct ? "correct" : "incorrect");
+    playSound(correct ? SFX_EVENTS.QUIZ_SUCCESS : SFX_EVENTS.QUIZ_ERROR);
 
     addXP(xpDelta);
     setXpFeedback(xpDelta > 0 ? `+${xpDelta} XP` : `${xpDelta} XP`);
@@ -465,10 +466,8 @@ export default function Quiz() {
   const handleNext = () => {
     if (current < queue.length - 1 && current < QUESTIONS_PER_ROUND - 1) {
       setCurrent((c) => c + 1);
-      playSound("advance");
     } else {
       setRoundDone(true);
-      playSound("completion");
     }
   };
 
@@ -486,7 +485,6 @@ export default function Quiz() {
       return;
     }
 
-    playSound("advance");
     startRound(roundNumber + 1, allVocab);
   };
 
