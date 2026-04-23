@@ -10,8 +10,7 @@ export default function StatsGrid({ stats }) {
       bgColor: "bg-pink-100",
     },
     {
-      label: "Cart\u00F5es",
-      mobileLabel: "Em aprendizado",
+      label: "Em aprendizado",
       value: stats.totalCards,
       icon: BookOpen,
       iconColor: "text-green-600",

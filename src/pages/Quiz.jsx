@@ -28,6 +28,9 @@ const CROSS_SYMBOL = "\u2715";
 const QUIZ_MOBILE_BREAKPOINT = 767;
 const QUIZ_TEXT_MIN_SIZE_MOBILE = 20;
 const QUIZ_TEXT_MAX_SIZE_MOBILE = 34;
+const STATUS_NOVA = "nova";
+const STATUS_DOMINADA = "dominada";
+const STATUS_DIFICIL = "dificil";
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -146,9 +149,39 @@ function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
 function updateDominatedCount(items) {
   const game = getGameState();
   game.dominatedCount = items.filter(
-    (item) => item?.stats?.status === "dominada"
+    (item) => item?.stats?.status === STATUS_DOMINADA
   ).length;
   saveGameState(game);
+}
+
+function normalizeStatus(rawStatus) {
+  const status = String(rawStatus || "")
+    .trim()
+    .toLowerCase();
+
+  if (status === STATUS_DOMINADA) return STATUS_DOMINADA;
+  if (status === STATUS_DIFICIL || status === "difícil") return STATUS_DIFICIL;
+  return STATUS_NOVA;
+}
+
+function normalizeStats(rawStats) {
+  const merged = {
+    correct: 0,
+    incorrect: 0,
+    total_reviews: 0,
+    avg_response_time: 0,
+    status: STATUS_NOVA,
+    ...(rawStats || {}),
+  };
+
+  return {
+    ...merged,
+    correct: Number(merged.correct) || 0,
+    incorrect: Number(merged.incorrect) || 0,
+    total_reviews: Number(merged.total_reviews) || 0,
+    avg_response_time: Number(merged.avg_response_time) || 0,
+    status: normalizeStatus(merged.status),
+  };
 }
 
 function mapVocabularyRow(row) {
@@ -158,13 +191,7 @@ function mapVocabularyRow(row) {
     term: row.term || "",
     pronunciation: row.pronunciation || "",
     meanings: Array.isArray(row.meanings) ? row.meanings : [],
-    stats: row.stats || {
-      correct: 0,
-      incorrect: 0,
-      total_reviews: 0,
-      avg_response_time: 0,
-      status: "nova",
-    },
+    stats: normalizeStats(row.stats),
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
@@ -367,13 +394,7 @@ export default function Quiz() {
     const card = queue[current];
     const responseTime = Date.now() - startTime.current;
 
-    const stats = card.stats || {
-      correct: 0,
-      incorrect: 0,
-      total_reviews: 0,
-      avg_response_time: 0,
-      status: "nova"
-    };
+    const stats = normalizeStats(card.stats);
 
     const newCorrect = stats.correct + (correct ? 1 : 0);
     const newIncorrect = stats.incorrect + (correct ? 0 : 1);
@@ -382,11 +403,11 @@ export default function Quiz() {
       ((stats.avg_response_time || 0) * (stats.total_reviews || 0) + responseTime) /
       newTotal;
 
-    let newStatus = "nova";
+    let newStatus = STATUS_NOVA;
     if (newTotal >= 3) {
       const rate = newCorrect / newTotal;
-      if (rate >= 0.8) newStatus = "dominada";
-      else if (rate < 0.5) newStatus = "dificil";
+      if (rate >= 0.8) newStatus = STATUS_DOMINADA;
+      else if (rate < 0.5) newStatus = STATUS_DIFICIL;
     }
 
     const updatedStats = {

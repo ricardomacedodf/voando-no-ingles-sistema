@@ -32,6 +32,9 @@ const FLASHCARD_DISCARD_TRANSLATE_X = 520;
 const FLASHCARD_DISCARD_ROTATE_DEG = 20;
 const FLASHCARD_DISCARD_SCALE = 0.9;
 const FLASHCARD_DISCARD_EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
+const STATUS_NOVA = "nova";
+const STATUS_DOMINADA = "dominada";
+const STATUS_DIFICIL = "dificil";
 
 function shuffleArray(arr) {
   const shuffled = [...arr];
@@ -45,9 +48,39 @@ function shuffleArray(arr) {
 function updateDominatedCount(items) {
   const game = getGameState();
   game.dominatedCount = items.filter(
-    (item) => item?.stats?.status === "dominada"
+    (item) => item?.stats?.status === STATUS_DOMINADA
   ).length;
   saveGameState(game);
+}
+
+function normalizeStatus(rawStatus) {
+  const status = String(rawStatus || "")
+    .trim()
+    .toLowerCase();
+
+  if (status === STATUS_DOMINADA) return STATUS_DOMINADA;
+  if (status === STATUS_DIFICIL || status === "difícil") return STATUS_DIFICIL;
+  return STATUS_NOVA;
+}
+
+function normalizeStats(rawStats) {
+  const merged = {
+    correct: 0,
+    incorrect: 0,
+    total_reviews: 0,
+    avg_response_time: 0,
+    status: STATUS_NOVA,
+    ...(rawStats || {}),
+  };
+
+  return {
+    ...merged,
+    correct: Number(merged.correct) || 0,
+    incorrect: Number(merged.incorrect) || 0,
+    total_reviews: Number(merged.total_reviews) || 0,
+    avg_response_time: Number(merged.avg_response_time) || 0,
+    status: normalizeStatus(merged.status),
+  };
 }
 
 function mapVocabularyRow(row) {
@@ -57,13 +90,7 @@ function mapVocabularyRow(row) {
     term: row.term || "",
     pronunciation: row.pronunciation || "",
     meanings: Array.isArray(row.meanings) ? row.meanings : [],
-    stats: row.stats || {
-      correct: 0,
-      incorrect: 0,
-      total_reviews: 0,
-      avg_response_time: 0,
-      status: "nova",
-    },
+    stats: normalizeStats(row.stats),
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
@@ -469,7 +496,7 @@ export default function Flashcards() {
     playSound("flip");
   };
 
-  const handleResponse = (correct) => {
+  const handleResponse = async (correct) => {
     if (!card || !user?.id || responseLockRef.current) return;
 
     responseLockRef.current = true;
@@ -489,13 +516,7 @@ export default function Flashcards() {
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
     playSound(correct ? "correct" : "incorrect");
 
-    const stats = card.stats || {
-      correct: 0,
-      incorrect: 0,
-      total_reviews: 0,
-      avg_response_time: 0,
-      status: "nova",
-    };
+    const stats = normalizeStats(card.stats);
 
     const newCorrect = stats.correct + (correct ? 1 : 0);
     const newIncorrect = stats.incorrect + (correct ? 0 : 1);
@@ -504,11 +525,11 @@ export default function Flashcards() {
       ((stats.avg_response_time || 0) * (stats.total_reviews || 0) + responseTime) /
       newTotal;
 
-    let newStatus = "nova";
+    let newStatus = STATUS_NOVA;
     if (newTotal >= 3) {
       const rate = newCorrect / newTotal;
-      if (rate >= 0.8) newStatus = "dominada";
-      else if (rate < 0.5) newStatus = "difícil";
+      if (rate >= 0.8) newStatus = STATUS_DOMINADA;
+      else if (rate < 0.5) newStatus = STATUS_DIFICIL;
     }
 
     const now = new Date().toISOString();
@@ -521,30 +542,6 @@ export default function Flashcards() {
       status: newStatus,
     };
 
-    const updatedVocab = vocab.map((item) =>
-      item.id === card.id
-        ? {
-            ...item,
-            stats: updatedStats,
-            updatedAt: now,
-          }
-        : item
-    );
-
-    setVocab(updatedVocab);
-    setBaseVocab((previous) =>
-      previous.map((item) =>
-        item.id === card.id
-          ? {
-              ...item,
-              stats: updatedStats,
-              updatedAt: now,
-            }
-          : item
-      )
-    );
-    updateDominatedCount(updatedVocab);
-
     const xpDelta = correct ? 1 : -2;
     addXP(xpDelta);
 
@@ -552,32 +549,58 @@ export default function Flashcards() {
     else recordIncorrect();
     updateStreak();
 
-    if (current < vocab.length - 1) {
-      setCurrent((index) => index + 1);
-      playSound("advance");
-    } else {
-      setSessionDone(true);
-      playSound("completion");
+    try {
+      const { error } = await supabase
+        .from("vocabulary")
+        .update({
+          stats: updatedStats,
+          updated_at: now,
+        })
+        .eq("id", card.id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      const updatedVocab = vocab.map((item) =>
+        item.id === card.id
+          ? {
+              ...item,
+              stats: updatedStats,
+              updatedAt: now,
+            }
+          : item
+      );
+
+      setVocab(updatedVocab);
+      setBaseVocab((previous) =>
+        previous.map((item) =>
+          item.id === card.id
+            ? {
+                ...item,
+                stats: updatedStats,
+                updatedAt: now,
+              }
+            : item
+        )
+      );
+      updateDominatedCount(updatedVocab);
+    } catch (error) {
+      console.error("Erro ao atualizar estatísticas no Supabase:", error);
+      alert("Nao foi possivel salvar seu progresso desta carta.");
+    } finally {
+      if (current < vocab.length - 1) {
+        setCurrent((index) => index + 1);
+        playSound("advance");
+      } else {
+        setSessionDone(true);
+        playSound("completion");
+      }
+
+      responseLockRef.current = false;
+      setIsSubmittingResponse(false);
     }
-
-    void supabase
-      .from("vocabulary")
-      .update({
-        stats: updatedStats,
-        updated_at: now,
-      })
-      .eq("id", card.id)
-      .eq("user_id", user.id)
-      .then(({ error }) => {
-        if (error) throw error;
-      })
-      .catch((error) => {
-        console.error("Erro ao atualizar estatísticas no Supabase:", error);
-        alert("Não foi possível salvar seu progresso desta carta.");
-      });
-
-    responseLockRef.current = false;
-    setIsSubmittingResponse(false);
   };
 
   useEffect(() => {
@@ -620,8 +643,10 @@ export default function Flashcards() {
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <Check className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="mb-2 text-xl font-bold text-foreground">SessÃ£o completa.</h2>
-        <p className="mb-4 text-muted-foreground">VocÃª revisou {vocab.length} cartÃµes.</p>
+        <h2 className="mb-2 text-xl font-bold text-foreground">Sessão completa.</h2>
+        <p className="mb-4 text-muted-foreground">
+          {`Você revisou ${vocab.length} ${vocab.length === 1 ? "cartão" : "cartões"}.`}
+        </p>
         <button
           onClick={async () => {
             try {
@@ -645,7 +670,7 @@ export default function Flashcards() {
           }}
           className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          RecomeÃ§ar
+          Recomeçar
         </button>
       </div>
     );

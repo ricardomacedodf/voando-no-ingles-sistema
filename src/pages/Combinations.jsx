@@ -114,6 +114,44 @@ function buildRoundDirections(mode, pairCount) {
   return directions;
 }
 
+function getPairKey(item) {
+  return `${item.vocabId}_${item.meaningIdx}`;
+}
+
+function buildDerangedOrder(keys) {
+  if (keys.length <= 1) return [...keys];
+
+  const maxAttempts = 24;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const candidate = shuffleArray(keys);
+    const hasAlignedPair = candidate.some((key, idx) => key === keys[idx]);
+    if (!hasAlignedPair) {
+      return candidate;
+    }
+  }
+
+  const shift = 1 + Math.floor(Math.random() * (keys.length - 1));
+  return keys.map((_, idx) => keys[(idx + shift) % keys.length]);
+}
+
+function shuffleRightItemsAvoidingAlignedPairs(leftItems, rightCandidates) {
+  if (leftItems.length <= 1 || leftItems.length !== rightCandidates.length) {
+    return shuffleArray(rightCandidates);
+  }
+
+  const leftKeys = leftItems.map(getPairKey);
+  const rightByKey = new Map(rightCandidates.map((item) => [getPairKey(item), item]));
+
+  const hasUniqueKeys = rightByKey.size === rightCandidates.length;
+  const hasAllLeftKeys = leftKeys.every((key) => rightByKey.has(key));
+  if (!hasUniqueKeys || !hasAllLeftKeys) {
+    return shuffleArray(rightCandidates);
+  }
+
+  const derangedKeys = buildDerangedOrder(leftKeys);
+  return derangedKeys.map((key) => rightByKey.get(key));
+}
+
 export default function Combinations() {
   const { user } = useAuth();
 
@@ -223,7 +261,8 @@ export default function Combinations() {
       }))
     );
 
-    const right = shuffleArray(
+    const right = shuffleRightItemsAvoidingAlignedPairs(
+      left,
       pairs.map((p, i) => ({
         id: i,
         text: directions[i] === "en_pt" ? p.meaning : p.term,
