@@ -412,7 +412,27 @@ export default function Combinations() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:hidden">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Comb.</h1>
+          <button
+            onClick={toggleSound}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            title={soundEnabled ? "Desativar audio" : "Ativar audio"}
+          >
+            {soundEnabled ? (
+              <Volume2 className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <VolumeX className="h-5 w-5 text-muted-foreground" />
+            )}
+          </button>
+        </div>
+        <div className="min-w-0 shrink-0 self-start">
+          <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
+        </div>
+      </div>
+
+      <div className="hidden flex-wrap items-center justify-between gap-3 sm:flex">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Combinações</h1>
           <button
@@ -471,29 +491,27 @@ export default function Combinations() {
             const isSelected = selectedLeft === idx;
             const isError = errorPair?.left === idx;
 
-            let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
+            let cls = "bg-card border border-border/60 text-foreground hover:border-[#0000FF] hover:bg-blue-50/30";
 
-            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary ring-1 ring-primary/50";
+            if (isMatched)
+              cls = "bg-emerald-50 border border-primary text-primary ring-0 md:ring-1 md:ring-primary/50";
             else if (isError)
-              cls = "bg-red-50 border border-destructive text-destructive ring-1 ring-destructive/50";
+              cls =
+                "bg-red-50 border border-destructive text-destructive ring-0 md:ring-1 md:ring-destructive/50";
             else if (isSelected)
-              cls = "bg-emerald-50/50 border border-primary/60 text-foreground ring-1 ring-primary/50";
+              cls = "bg-blue-50 border border-[#0000FF] text-foreground";
 
             return (
               <button
                 key={idx}
                 onClick={() => handleLeftClick(idx)}
                 disabled={isMatched}
-                className={`flex h-[74px] w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] md:text-center ${cls}`}
               >
-                {isMatched ? <Check className="mr-1.5 hidden h-3 w-3 text-primary md:inline" /> : null}
-                <span className="hidden break-words md:inline">{item.text}</span>
+                <span className="hidden break-words md:mx-auto md:block md:max-w-[90%]">{item.text}</span>
 
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-lg font-bold text-muted-foreground md:hidden">
-                  {idx * 2 + 1}
-                </span>
-                <span className="min-w-0 break-words md:hidden">{item.text}</span>
-                {isMatched ? <Check className="ml-auto h-4 w-4 shrink-0 text-primary md:hidden" /> : null}
+                <span className="mx-auto max-w-[92%] break-words leading-snug md:hidden">{item.text}</span>
+                {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
               </button>
             );
           })}
@@ -505,29 +523,27 @@ export default function Combinations() {
             const isSelected = selectedRight === idx;
             const isError = errorPair?.right === idx;
 
-            let cls = "bg-card border border-border/60 text-foreground hover:border-primary/50";
+            let cls = "bg-card border border-border/60 text-foreground hover:border-[#0000FF] hover:bg-blue-50/30";
 
-            if (isMatched) cls = "bg-emerald-50 border border-primary text-primary ring-1 ring-primary/50";
+            if (isMatched)
+              cls = "bg-emerald-50 border border-primary text-primary ring-0 md:ring-1 md:ring-primary/50";
             else if (isError)
-              cls = "bg-red-50 border border-destructive text-destructive ring-1 ring-destructive/50";
+              cls =
+                "bg-red-50 border border-destructive text-destructive ring-0 md:ring-1 md:ring-destructive/50";
             else if (isSelected)
-              cls = "bg-emerald-50/50 border border-primary/60 text-foreground ring-1 ring-primary/50";
+              cls = "bg-blue-50 border border-[#0000FF] text-foreground";
 
             return (
               <button
                 key={idx}
                 onClick={() => handleRightClick(idx)}
                 disabled={isMatched}
-                className={`flex h-[74px] w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] md:text-center ${cls}`}
               >
-                {isMatched ? <Check className="mr-1.5 hidden h-3 w-3 text-primary md:inline" /> : null}
-                <span className="hidden break-words md:inline">{item.text}</span>
+                <span className="hidden break-words md:mx-auto md:block md:max-w-[90%]">{item.text}</span>
 
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-lg font-bold text-muted-foreground md:hidden">
-                  {idx * 2 + 2}
-                </span>
-                <span className="min-w-0 break-words md:hidden">{item.text}</span>
-                {isMatched ? <Check className="ml-auto h-4 w-4 shrink-0 text-primary md:hidden" /> : null}
+                <span className="mx-auto max-w-[92%] break-words leading-snug md:hidden">{item.text}</span>
+                {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
               </button>
             );
           })}

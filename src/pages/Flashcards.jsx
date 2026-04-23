@@ -24,6 +24,7 @@ const FLASHCARD_CARD_HEIGHT = 335.3;
 const FLASHCARD_MAIN_TEXT_MIN_SIZE = 22;
 const FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE = 18;
 const FLASHCARD_MAIN_TEXT_MAX_SIZE = 47;
+const FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE = 40;
 const FLASHCARD_MOBILE_BREAKPOINT = 767;
 const FLASHCARD_DISCARD_TRANSITION_MS = 940;
 const FLASHCARD_DISCARD_CLEANUP_MS = 1040;
@@ -83,11 +84,20 @@ function getAdaptiveMainTextStyle(content) {
   const text = typeof content === "string" ? content.trim() : "";
   const length = text.length;
   const words = text ? text.split(/\s+/).length : 1;
+  const isMobileViewport =
+    typeof window !== "undefined" &&
+    window.innerWidth <= FLASHCARD_MOBILE_BREAKPOINT;
+  const minFontSize = isMobileViewport
+    ? FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE
+    : FLASHCARD_MAIN_TEXT_MIN_SIZE;
+  const maxFontSize = isMobileViewport
+    ? FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE
+    : FLASHCARD_MAIN_TEXT_MAX_SIZE;
   const longestWord = text
     ? text.split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0)
     : 0;
 
-  let size = FLASHCARD_MAIN_TEXT_MAX_SIZE;
+  let size = maxFontSize;
 
   if (length > 10) size -= 2;
   if (length > 18) size -= 2;
@@ -101,12 +111,12 @@ function getAdaptiveMainTextStyle(content) {
   if (longestWord >= 14) size -= 2;
   if (longestWord >= 20) size -= 2;
 
-  const fontSize = clamp(size, FLASHCARD_MAIN_TEXT_MIN_SIZE, FLASHCARD_MAIN_TEXT_MAX_SIZE);
+  const fontSize = clamp(size, minFontSize, maxFontSize);
   const lineHeightMultiplier = getAdaptiveLineHeightMultiplier(fontSize);
 
-  let maxWidth = "95%";
-  if (length > 35) maxWidth = "92%";
-  if (length > 55) maxWidth = "90%";
+  let maxWidth = isMobileViewport ? "92%" : "95%";
+  if (length > 35) maxWidth = isMobileViewport ? "89%" : "92%";
+  if (length > 55) maxWidth = isMobileViewport ? "86%" : "90%";
 
   return {
     fontSize,
@@ -128,11 +138,14 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
   const minFontSize = isMobile
     ? FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE
     : FLASHCARD_MAIN_TEXT_MIN_SIZE;
+  const maxFontSize = isMobile
+    ? FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE
+    : FLASHCARD_MAIN_TEXT_MAX_SIZE;
 
   let currentSize = clamp(
     Math.round(preferredFontSize),
     minFontSize,
-    FLASHCARD_MAIN_TEXT_MAX_SIZE
+    maxFontSize
   );
 
   const applySize = (size) => {
@@ -146,8 +159,14 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
 
   let safetyCounter = 0;
   while (safetyCounter < 64 && currentSize > minFontSize) {
-    const overflowHeight = textElement.scrollHeight > slotElement.clientHeight;
-    const overflowWidth = textElement.scrollWidth > slotElement.clientWidth;
+    const targetHeight = isMobile
+      ? Math.floor(slotElement.clientHeight * 0.82)
+      : slotElement.clientHeight;
+    const targetWidth = isMobile
+      ? Math.floor(slotElement.clientWidth * 0.9)
+      : slotElement.clientWidth;
+    const overflowHeight = textElement.scrollHeight > targetHeight;
+    const overflowWidth = textElement.scrollWidth > targetWidth;
 
     if (!overflowHeight && !overflowWidth) {
       break;
@@ -769,7 +788,7 @@ export default function Flashcards() {
                 </p>
               </div>
               {card?.pronunciation ? (
-                <p className="flashcard-pronunciation select-text font-mono text-base text-muted-foreground">
+                <p className="flashcard-pronunciation select-text text-xs text-muted-foreground">
                   /{card.pronunciation}/
                 </p>
               ) : null}
@@ -783,7 +802,7 @@ export default function Flashcards() {
           type="button"
           onClick={() => handleResponse(false)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-2xl border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
+          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
           Não sei
         </button>
@@ -792,7 +811,7 @@ export default function Flashcards() {
           type="button"
           onClick={() => handleResponse(true)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-2xl bg-[#25B15F] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
+          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#25B15F] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
           <Check className="mr-1 h-4 w-4" />
           Já sei

@@ -263,6 +263,13 @@
   width: 100%;
 }
 
+.flashcard-reveal-hint,
+.flashcard-pronunciation {
+  width: 100%;
+  margin-inline: auto;
+  text-align: center;
+}
+
 .flashcard-reveal-hint {
   margin-top: 16px;
 }
@@ -286,6 +293,13 @@
     touch-action: pan-y;
   }
 
+  .flip-card,
+  .flip-card-front,
+  .flip-card-back,
+  .flashcard-context-box {
+    border-radius: 10px;
+  }
+
   .flashcard-context-box {
     padding: 24px 16px 22px;
   }
@@ -298,15 +312,16 @@
   .flashcard-main-text-slot {
     min-height: 148px;
     height: 148px;
-    padding-inline: 4px;
+    max-width: 92%;
+    margin-inline: auto;
+    padding-inline: 8px;
+    transform: translateY(8px);
   }
 
-  .flashcard-reveal-hint {
-    margin-top: 18px;
-    margin-bottom: 4px;
-  }
-
+  .flashcard-reveal-hint,
   .flashcard-pronunciation {
-    margin-top: 18px;
+    margin-top: 14px;
+    margin-bottom: 4px;
+    padding-inline: 2px;
   }
 }

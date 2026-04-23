@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Volume2, VolumeX, ArrowRight, Check } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
@@ -25,6 +25,9 @@ const CORRECT_XP_DELTA = 1;
 const INCORRECT_XP_DELTA = -2;
 const CHECK_SYMBOL = "\u2713";
 const CROSS_SYMBOL = "\u2715";
+const QUIZ_MOBILE_BREAKPOINT = 767;
+const QUIZ_TEXT_MIN_SIZE_MOBILE = 20;
+const QUIZ_TEXT_MAX_SIZE_MOBILE = 34;
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -51,6 +54,93 @@ function buildRoundQueue(vocab, size = QUESTIONS_PER_ROUND) {
   }
 
   return shuffleArray(queue);
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getAdaptiveQuizPreferredSize(content) {
+  const text = typeof content === "string" ? content.trim() : "";
+  const length = text.length;
+  const words = text ? text.split(/\s+/).length : 1;
+  const longestWord = text
+    ? text.split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0)
+    : 0;
+
+  let size = QUIZ_TEXT_MAX_SIZE_MOBILE;
+
+  if (length > 12) size -= 1;
+  if (length > 20) size -= 2;
+  if (length > 30) size -= 2;
+  if (length > 42) size -= 2;
+  if (length > 56) size -= 3;
+
+  if (words >= 5) size -= 1;
+  if (words >= 8) size -= 2;
+  if (longestWord >= 14) size -= 1;
+  if (longestWord >= 20) size -= 2;
+
+  return clamp(size, QUIZ_TEXT_MIN_SIZE_MOBILE, QUIZ_TEXT_MAX_SIZE_MOBILE);
+}
+
+function getAdaptiveQuizLineHeight(fontSize) {
+  if (fontSize >= 32) return 1.14;
+  if (fontSize >= 27) return 1.18;
+  return 1.24;
+}
+
+function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
+  if (!textElement || !slotElement) return;
+
+  const isMobile =
+    typeof window !== "undefined" &&
+    window.innerWidth <= QUIZ_MOBILE_BREAKPOINT;
+
+  if (!isMobile) {
+    textElement.style.removeProperty("font-size");
+    textElement.style.removeProperty("line-height");
+    textElement.style.removeProperty("max-width");
+    textElement.style.removeProperty("transform");
+    textElement.style.removeProperty("overflow-wrap");
+    textElement.style.removeProperty("word-break");
+    textElement.style.removeProperty("hyphens");
+    return;
+  }
+
+  const applySize = (size) => {
+    textElement.style.fontSize = `${size}px`;
+    textElement.style.lineHeight = `${Math.round(
+      size * getAdaptiveQuizLineHeight(size)
+    )}px`;
+  };
+
+  const minFontSize = QUIZ_TEXT_MIN_SIZE_MOBILE;
+  let currentSize = clamp(
+    Math.round(preferredFontSize),
+    QUIZ_TEXT_MIN_SIZE_MOBILE,
+    QUIZ_TEXT_MAX_SIZE_MOBILE
+  );
+
+  textElement.style.maxWidth = "90%";
+  textElement.style.overflowWrap = "anywhere";
+  textElement.style.wordBreak = "break-word";
+  textElement.style.hyphens = "auto";
+  applySize(currentSize);
+
+  let safetyCounter = 0;
+  while (safetyCounter < 64 && currentSize > minFontSize) {
+    const targetHeight = Math.floor(slotElement.clientHeight * 0.84);
+    const targetWidth = Math.floor(slotElement.clientWidth * 0.9);
+    const overflowHeight = textElement.scrollHeight > targetHeight;
+    const overflowWidth = textElement.scrollWidth > targetWidth;
+
+    if (!overflowHeight && !overflowWidth) break;
+
+    currentSize -= 1;
+    applySize(currentSize);
+    safetyCounter += 1;
+  }
 }
 
 function updateDominatedCount(items) {
@@ -104,6 +194,8 @@ export default function Quiz() {
   const startTime = useRef(Date.now());
   const prevModeRef = useRef(mode);
   const examplesPanelRef = useRef(null);
+  const questionTextRef = useRef(null);
+  const questionTextSlotRef = useRef(null);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -377,6 +469,36 @@ export default function Quiz() {
     startRound(roundNumber + 1, allVocab);
   };
 
+  const card = queue[current];
+  const questionText = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
+  const questionTextPreferredSize = getAdaptiveQuizPreferredSize(questionText);
+  const letters = ["A", "B", "C", "D", "E"];
+
+  useLayoutEffect(() => {
+    const fitPromptText = () => {
+      fitQuizPromptText(
+        questionTextRef.current,
+        questionTextSlotRef.current,
+        questionTextPreferredSize
+      );
+    };
+
+    const animationFrame = requestAnimationFrame(fitPromptText);
+    window.addEventListener("resize", fitPromptText);
+
+    let observer = null;
+    if (typeof ResizeObserver !== "undefined" && questionTextSlotRef.current) {
+      observer = new ResizeObserver(fitPromptText);
+      observer.observe(questionTextSlotRef.current);
+    }
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", fitPromptText);
+      if (observer) observer.disconnect();
+    };
+  }, [questionText, questionTextPreferredSize, cardDir]);
+
   if (loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -430,10 +552,6 @@ export default function Quiz() {
       </div>
     );
   }
-
-  const card = queue[current];
-  const questionText = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
-  const letters = ["A", "B", "C", "D", "E"];
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
@@ -494,16 +612,21 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="space-y-4 rounded-3xl border bg-white p-5 text-center shadow-sm sm:rounded-2xl sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-          Qual o significado?
-        </p>
-        <p className="min-h-[86px] break-words text-3xl font-bold leading-tight text-foreground md:min-h-0 md:text-4xl">
-          {questionText}
-        </p>
+      <div className="mx-auto w-full rounded-xl border bg-white p-5 text-center shadow-sm sm:w-full sm:rounded-2xl sm:p-8">
+        <div
+          ref={questionTextSlotRef}
+          className="mx-auto flex min-h-[120px] w-full items-center justify-center md:min-h-[170px]"
+        >
+          <p
+            ref={questionTextRef}
+            className="mx-auto w-full break-words text-center text-[30px] font-bold leading-tight text-foreground [text-wrap:balance] md:text-4xl"
+          >
+            {questionText}
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
+      <div className="grid grid-cols-1 gap-[0.675rem] md:grid-cols-2 md:gap-4">
         {options.map((opt, idx) => {
           let classes = "border-border text-foreground hover:border-primary";
           const isWrongSelection = answered && idx === selected && !opt.correct;

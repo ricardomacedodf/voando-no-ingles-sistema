@@ -10,7 +10,8 @@ export default function StatsGrid({ stats }) {
       bgColor: "bg-pink-100",
     },
     {
-      label: "Cartões",
+      label: "Cart\u00F5es",
+      mobileLabel: "Em aprendizado",
       value: stats.totalCards,
       icon: BookOpen,
       iconColor: "text-green-600",
@@ -49,7 +50,16 @@ export default function StatsGrid({ stats }) {
             </div>
 
             <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">{item.label}</p>
+              <p className="text-sm text-muted-foreground">
+                {item.mobileLabel ? (
+                  <>
+                    <span className="md:hidden">{item.mobileLabel}</span>
+                    <span className="hidden md:inline">{item.label}</span>
+                  </>
+                ) : (
+                  item.label
+                )}
+              </p>
               <p className="mt-0.5 text-2xl font-bold leading-none text-foreground">
                 {item.value}
               </p>
@@ -60,3 +70,4 @@ export default function StatsGrid({ stats }) {
     </div>
   );
 }
+
