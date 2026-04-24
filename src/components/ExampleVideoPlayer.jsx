@@ -1,19 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
 
 const FALLBACK_MESSAGE = "Este vídeo não permite reprodução direta aqui.";
 
 function VideoFallback() {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-black p-4 text-center text-xs font-medium text-white">
+    <div className="flex h-full w-full flex-col items-center justify-center bg-black p-4 text-center text-xs font-medium text-white">
       <p>{FALLBACK_MESSAGE}</p>
     </div>
   );
 }
 
+function addAutoplayToUrl(src) {
+  if (!src || typeof src !== "string") return src;
+
+  try {
+    const url = new URL(src, window.location.origin);
+
+    url.searchParams.set("autoplay", "1");
+
+    return url.toString();
+  } catch {
+    return src;
+  }
+}
+
 export default function ExampleVideoPlayer({
   video,
   title = "Vídeo do exemplo",
+  autoPlay = false,
 }) {
   const [playback, setPlayback] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -58,6 +73,11 @@ export default function ExampleVideoPlayer({
     };
   }, [video]);
 
+  const iframeSrc = useMemo(() => {
+    if (!playback?.src) return "";
+    return autoPlay ? addAutoplayToUrl(playback.src) : playback.src;
+  }, [playback?.src, autoPlay]);
+
   if (!playback) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-black text-xs font-medium text-white">
@@ -74,12 +94,12 @@ export default function ExampleVideoPlayer({
     return (
       <div className="relative h-full w-full overflow-hidden bg-black">
         <iframe
-          src={playback.src}
+          src={iframeSrc}
           title={title}
           className="h-full w-full border-0 bg-black"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowFullScreen
-          loading="lazy"
+          loading="eager"
           referrerPolicy="strict-origin-when-cross-origin"
           onError={() => setFailed(true)}
         />
@@ -91,10 +111,18 @@ export default function ExampleVideoPlayer({
     <div className="relative h-full w-full overflow-hidden bg-black">
       <video
         controls
+        autoPlay={autoPlay}
         playsInline
-        preload="metadata"
+        preload="auto"
         src={playback.src}
         className="h-full w-full bg-black object-cover"
+        onCanPlay={(event) => {
+          if (!autoPlay) return;
+
+          event.currentTarget.play().catch(() => {
+            // Alguns navegadores bloqueiam autoplay com som.
+          });
+        }}
         onError={() => setFailed(true)}
       />
     </div>

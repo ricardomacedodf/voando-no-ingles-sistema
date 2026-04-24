@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Lightbulb, X } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
 import { playSound } from "../lib/gameState";
 import { SFX_EVENTS } from "../lib/sfx";
@@ -11,6 +10,9 @@ const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
 
 const VIDEO_FRAME_CLASS =
   "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover";
+
+const MOBILE_VIDEO_FRAME_CLASS =
+  "overflow-hidden rounded-xl bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover";
 
 const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -69,6 +71,24 @@ export default function ExamplesPanel({
     setMobileVideo(null);
   }, [allMeanings, activeMeaning]);
 
+  useEffect(() => {
+    if (!mobileVideo?.video) return;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setMobileVideo(null);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [mobileVideo]);
+
   const isFlashcard = variant === "flashcard";
   const title = titleTerm ? `Exemplos - ${titleTerm}` : "Exemplos";
 
@@ -106,6 +126,10 @@ export default function ExamplesPanel({
       ...current,
       [videoKey]: false,
     }));
+  };
+
+  const closeMobileVideo = () => {
+    setMobileVideo(null);
   };
 
   const openVideo = (video, videoKey, videoTitle) => {
@@ -281,7 +305,7 @@ export default function ExamplesPanel({
                             className="inline-flex items-center rounded-md border border-border/80 bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
                           >
                             {isMobile || !isDesktopVideoOpen
-                              ? "▶ Ver vídeo"
+                              ? "▶ Ver exemplo em vídeo"
                               : "Ocultar vídeo"}
                           </button>
                         </div>
@@ -328,33 +352,38 @@ export default function ExamplesPanel({
         </div>
       </div>
 
-      <Sheet
-        open={Boolean(mobileVideo?.video)}
-        onOpenChange={(open) => {
-          if (!open) setMobileVideo(null);
-        }}
-      >
-        <SheetContent
-          side="bottom"
-          className="max-h-[90vh] overflow-y-auto rounded-t-2xl border-border bg-background px-0 pb-5 pt-0"
+      {mobileVideo?.video ? (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/45 px-[5px] py-6 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Vídeo do exemplo"
+          onClick={closeMobileVideo}
         >
-          <SheetHeader className="border-b border-border px-4 py-3 text-left">
-            <SheetTitle className="text-base font-semibold text-foreground">
-              Vídeo do exemplo
-            </SheetTitle>
-          </SheetHeader>
+          <button
+            type="button"
+            onClick={closeMobileVideo}
+            className="absolute right-3 top-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-foreground shadow-lg"
+            aria-label="Fechar vídeo"
+          >
+            <X className="h-5 w-5" />
+          </button>
 
-          <div className="px-4 pt-4">
-            <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
+          <div
+            className="relative w-full max-w-none"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <AspectRatio ratio={8 / 9} className={MOBILE_VIDEO_FRAME_CLASS}>
               <ExampleVideoPlayer
                 key={mobileVideo?.key || "mobile-video"}
                 video={mobileVideo?.video || ""}
                 title=""
+                autoPlay
               />
             </AspectRatio>
           </div>
-        </SheetContent>
-      </Sheet>
+        </div>
+      ) : null}
     </>
   );
 }
