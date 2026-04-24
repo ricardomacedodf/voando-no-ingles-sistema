@@ -6,7 +6,6 @@ import {
   HelpCircle,
   Puzzle,
   Database,
-  Settings,
   LogOut,
   ChevronDown,
   User,
@@ -22,7 +21,6 @@ const navItems = [
   { label: "Quiz", path: "/quiz", icon: HelpCircle },
   { label: "Combinações", path: "/combinacoes", icon: Puzzle },
   { label: "Gerenciador", path: "/gerenciador", icon: Database },
-  { label: "Configuração", path: "/configuracao", icon: Settings },
 ];
 
 export default function Sidebar({ onClose }) {

@@ -18,7 +18,6 @@ import Quiz from "./pages/Quiz";
 import Combinations from "./pages/Combinations";
 import Manager from "./pages/Manager";
 import Progress from "./pages/Progress";
-import Configuracao from "./pages/Configuracao";
 
 const PUBLIC_HOME_PATH = "/site";
 
@@ -571,8 +570,6 @@ const AuthenticatedApp = () => {
         <Route path="/combinacoes" element={<Combinations />} />
         <Route path="/gerenciador" element={<Manager />} />
         <Route path="/progresso" element={<Progress />} />
-        <Route path="/configuracao" element={<Configuracao />} />
-        <Route path="/personalizar" element={<Configuracao />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>

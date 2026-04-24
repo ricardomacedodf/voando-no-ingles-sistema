@@ -1,7 +1,6 @@
 import { initSfxSystem, playSfxEvent, SFX_EVENTS } from "./sfx";
 
 const GAME_STATE_KEY = "voando_game_state";
-const SOUND_STATE_KEY = "voando_sound_state";
 export const GAME_STATE_UPDATED_EVENT = "voando:game-state-updated";
 let cachedSoundState = null;
 
@@ -32,6 +31,25 @@ const defaultSoundState = {
     [SFX_EVENTS.EXAMPLES_CLOSE]: true,
   },
 };
+
+function cloneSoundState(state) {
+  return {
+    ...state,
+    interactions: { ...state.interactions },
+  };
+}
+
+function normalizeSoundState(state) {
+  return {
+    ...defaultSoundState,
+    ...(state || {}),
+    interactions: {
+      ...defaultSoundState.interactions,
+      ...((state && state.interactions) || {}),
+    },
+    volume: clampVolume(state?.volume ?? defaultSoundState.volume),
+  };
+}
 
 function clampVolume(value) {
   const numeric = Number(value);
@@ -205,65 +223,15 @@ export function resetStudyHistory() {
 }
 
 export function getSoundState() {
-  if (cachedSoundState) {
-    return {
-      ...cachedSoundState,
-      interactions: { ...cachedSoundState.interactions },
-    };
+  if (!cachedSoundState) {
+    cachedSoundState = normalizeSoundState();
   }
 
-  try {
-    const stored = localStorage.getItem(SOUND_STATE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      const mergedInteractions = {
-        ...defaultSoundState.interactions,
-        ...(parsed?.interactions || {}),
-      };
-
-      const normalizedState = {
-        ...defaultSoundState,
-        ...parsed,
-        interactions: mergedInteractions,
-        volume: clampVolume(parsed?.volume ?? defaultSoundState.volume),
-      };
-      cachedSoundState = normalizedState;
-      return {
-        ...normalizedState,
-        interactions: { ...normalizedState.interactions },
-      };
-    }
-  } catch (error) {
-    console.error("Erro ao ler sound state:", error);
-  }
-
-  cachedSoundState = {
-    ...defaultSoundState,
-    interactions: { ...defaultSoundState.interactions },
-  };
-  return {
-    ...cachedSoundState,
-    interactions: { ...cachedSoundState.interactions },
-  };
+  return cloneSoundState(cachedSoundState);
 }
 
 export function saveSoundState(state) {
-  const safeState = {
-    ...defaultSoundState,
-    ...(state || {}),
-    interactions: {
-      ...defaultSoundState.interactions,
-      ...((state && state.interactions) || {}),
-    },
-    volume: clampVolume(state?.volume ?? defaultSoundState.volume),
-  };
-
-  cachedSoundState = {
-    ...safeState,
-    interactions: { ...safeState.interactions },
-  };
-
-  localStorage.setItem(SOUND_STATE_KEY, JSON.stringify(safeState));
+  cachedSoundState = normalizeSoundState(state);
 }
 
 export function playSound(type) {
