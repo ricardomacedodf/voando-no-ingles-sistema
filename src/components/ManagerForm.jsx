@@ -1,14 +1,19 @@
-import { useRef, useState } from "react";
-import { ArrowLeft, CheckCircle2, Plus, Trash2, Upload } from "lucide-react";
+import { useState } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Hash,
+  Languages,
+  Lightbulb,
+  Plus,
+  Trash2,
+  Volume2,
+} from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
-import {
-  createExampleVideoStorageRef,
-  EXAMPLE_VIDEO_BUCKET,
-  getExampleVideoContentType,
-  getExampleVideoDisplayLabel,
-  getExampleVideoUploadPath,
-} from "@/lib/exampleVideoStorage";
+import { getExampleVideoDisplayLabel } from "@/lib/exampleVideoStorage";
 import { useAuth } from "../contexts/AuthContext";
 
 const categories = [
@@ -32,11 +37,8 @@ const emptyMeaning = {
   meaning: "",
   category: "vocabulário",
   tip: "",
-  examples: [{ ...emptyExample }, { ...emptyExample }, { ...emptyExample }],
+  examples: [{ ...emptyExample }],
 };
-
-const MAX_VIDEO_UPLOAD_BYTES = 50 * 1024 * 1024;
-const VIDEO_MIME_PREFIX = "video/";
 
 const getExampleKey = (mIdx, eIdx) => `${mIdx}-${eIdx}`;
 
@@ -56,27 +58,68 @@ const hasExampleContent = (example) => {
   return Boolean(sentence || translation || video);
 };
 
-const uploadExampleVideoFile = async (file, userId) => {
-  const uploadPath = getExampleVideoUploadPath(userId, file);
+function UsFlagIcon({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      viewBox="0 0 36 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="36" height="24" rx="4" fill="#ffffff" />
+      <path
+        fill="#D22F27"
+        d="M0 0h36v3H0V0Zm0 6h36v3H0V6Zm0 6h36v3H0v-3Zm0 6h36v3H0v-3Z"
+      />
+      <rect width="16" height="12" rx="3" fill="#234B9B" />
+      <circle cx="4" cy="3" r="0.8" fill="#ffffff" />
+      <circle cx="8" cy="3" r="0.8" fill="#ffffff" />
+      <circle cx="12" cy="3" r="0.8" fill="#ffffff" />
+      <circle cx="6" cy="6" r="0.8" fill="#ffffff" />
+      <circle cx="10" cy="6" r="0.8" fill="#ffffff" />
+      <circle cx="4" cy="9" r="0.8" fill="#ffffff" />
+      <circle cx="8" cy="9" r="0.8" fill="#ffffff" />
+      <circle cx="12" cy="9" r="0.8" fill="#ffffff" />
+    </svg>
+  );
+}
 
-  const { error } = await supabase.storage
-    .from(EXAMPLE_VIDEO_BUCKET)
-    .upload(uploadPath, file, {
-      upsert: false,
-      cacheControl: "3600",
-      contentType: getExampleVideoContentType(file),
-    });
+function BrFlagIcon({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      viewBox="0 0 36 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="36" height="24" rx="4" fill="#229E45" />
+      <path d="M18 4 31 12 18 20 5 12 18 4Z" fill="#F8D34B" />
+      <circle cx="18" cy="12" r="5" fill="#234B9B" />
+      <path
+        d="M13.5 11.4c3.5-.9 6.8-.5 9.3 1.2"
+        stroke="#ffffff"
+        strokeWidth="1.2"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
-  if (error) throw error;
-
-  return createExampleVideoStorageRef(EXAMPLE_VIDEO_BUCKET, uploadPath);
-};
+function FieldLabel({ children, icon }) {
+  return (
+    <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+      {icon}
+      <span>{children}</span>
+    </label>
+  );
+}
 
 function ExampleVideoPreview({ video }) {
   if (!video) return null;
 
   return (
-    <div className="mt-2 aspect-video overflow-hidden rounded-lg bg-black">
+    <div className="mt-2 aspect-video overflow-hidden rounded-xl bg-black">
       <ExampleVideoPlayer video={video} />
     </div>
   );
@@ -84,7 +127,6 @@ function ExampleVideoPreview({ video }) {
 
 export default function ManagerForm({ item, onBack, onSaved }) {
   const { user } = useAuth();
-  const fileInputsRef = useRef({});
 
   const [term, setTerm] = useState(item?.term || "");
   const [pronunciation, setPronunciation] = useState(item?.pronunciation || "");
@@ -101,14 +143,31 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                   translation: e?.translation || "",
                   video: normalizeExampleVideo(e),
                 }))
-              : [{ ...emptyExample }, { ...emptyExample }, { ...emptyExample }],
+              : [{ ...emptyExample }],
         }))
       : [{ ...emptyMeaning }]
   );
+
+  const [expandedMeanings, setExpandedMeanings] = useState({});
+  const [expandedExamples, setExpandedExamples] = useState({});
   const [saving, setSaving] = useState(false);
   const [videoEditor, setVideoEditor] = useState({ key: null, value: "" });
-  const [uploadingVideoKey, setUploadingVideoKey] = useState(null);
-  const [videoUploadErrors, setVideoUploadErrors] = useState({});
+
+  const toggleMeaningExpanded = (idx) => {
+    setExpandedMeanings((current) => ({
+      ...current,
+      [idx]: !current[idx],
+    }));
+  };
+
+  const toggleExampleExpanded = (mIdx, eIdx) => {
+    const key = getExampleKey(mIdx, eIdx);
+
+    setExpandedExamples((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
 
   const updateMeaning = (idx, field, value) => {
     const updated = [...meanings];
@@ -119,30 +178,151 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const updateExample = (mIdx, eIdx, field, value) => {
     const updated = [...meanings];
     const examples = [...updated[mIdx].examples];
-    examples[eIdx] = { ...examples[eIdx], [field]: value };
-    updated[mIdx] = { ...updated[mIdx], examples };
+
+    examples[eIdx] = {
+      ...examples[eIdx],
+      [field]: value,
+    };
+
+    updated[mIdx] = {
+      ...updated[mIdx],
+      examples,
+    };
+
     setMeanings(updated);
   };
 
   const addMeaning = () => {
+    const nextIndex = meanings.length;
+
     setMeanings([
       ...meanings,
       {
         meaning: "",
         category: "vocabulário",
         tip: "",
-        examples: [{ ...emptyExample }, { ...emptyExample }, { ...emptyExample }],
+        examples: [{ ...emptyExample }],
       },
     ]);
+
+    setExpandedMeanings((current) => ({
+      ...current,
+      [nextIndex]: true,
+    }));
+
+    setExpandedExamples((current) => ({
+      ...current,
+      [getExampleKey(nextIndex, 0)]: true,
+    }));
   };
 
   const removeMeaning = (idx) => {
     if (meanings.length <= 1) return;
+
     setMeanings(meanings.filter((_, i) => i !== idx));
+
+    setExpandedMeanings((current) => {
+      const next = {};
+
+      meanings.forEach((_, currentIndex) => {
+        if (currentIndex === idx) return;
+
+        const newIndex = currentIndex > idx ? currentIndex - 1 : currentIndex;
+        next[newIndex] = Boolean(current[currentIndex]);
+      });
+
+      return next;
+    });
+
+    setExpandedExamples((current) => {
+      const next = {};
+
+      meanings.forEach((meaning, currentMeaningIndex) => {
+        if (currentMeaningIndex === idx) return;
+
+        const newMeaningIndex =
+          currentMeaningIndex > idx
+            ? currentMeaningIndex - 1
+            : currentMeaningIndex;
+
+        meaning.examples.forEach((_, exampleIndex) => {
+          const oldKey = getExampleKey(currentMeaningIndex, exampleIndex);
+          const newKey = getExampleKey(newMeaningIndex, exampleIndex);
+
+          next[newKey] = Boolean(current[oldKey]);
+        });
+      });
+
+      return next;
+    });
+
     setVideoEditor((current) => {
       if (current.key === null) return current;
+
       const [meaningIdx] = current.key.split("-").map(Number);
       return meaningIdx === idx ? { key: null, value: "" } : current;
+    });
+  };
+
+  const addExample = (mIdx) => {
+    const updated = [...meanings];
+    const nextExampleIndex = updated[mIdx].examples.length;
+
+    updated[mIdx] = {
+      ...updated[mIdx],
+      examples: [...updated[mIdx].examples, { ...emptyExample }],
+    };
+
+    setMeanings(updated);
+
+    setExpandedExamples((current) => ({
+      ...current,
+      [getExampleKey(mIdx, nextExampleIndex)]: true,
+    }));
+  };
+
+  const removeExample = (mIdx, eIdx) => {
+    const updated = [...meanings];
+
+    updated[mIdx] = {
+      ...updated[mIdx],
+      examples: updated[mIdx].examples.filter((_, index) => index !== eIdx),
+    };
+
+    setMeanings(updated);
+
+    setExpandedExamples((current) => {
+      const next = {};
+
+      Object.entries(current).forEach(([key, value]) => {
+        const [meaningIdx, exampleIdx] = key.split("-").map(Number);
+
+        if (Number.isNaN(meaningIdx) || Number.isNaN(exampleIdx)) return;
+
+        if (meaningIdx !== mIdx) {
+          next[key] = value;
+          return;
+        }
+
+        if (exampleIdx === eIdx) return;
+
+        const nextExampleIdx = exampleIdx > eIdx ? exampleIdx - 1 : exampleIdx;
+        next[getExampleKey(mIdx, nextExampleIdx)] = value;
+      });
+
+      return next;
+    });
+
+    setVideoEditor((current) => {
+      if (current.key === null) return current;
+
+      const [meaningIdx, exampleIdx] = current.key.split("-").map(Number);
+
+      if (meaningIdx === mIdx && exampleIdx >= eIdx) {
+        return { key: null, value: "" };
+      }
+
+      return current;
     });
   };
 
@@ -151,6 +331,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       key: getExampleKey(mIdx, eIdx),
       value: typeof currentVideo === "string" ? currentVideo : "",
     });
+
+    setExpandedExamples((current) => ({
+      ...current,
+      [getExampleKey(mIdx, eIdx)]: true,
+    }));
   };
 
   const closeVideoEditor = () => {
@@ -159,75 +344,19 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const saveExampleVideo = (mIdx, eIdx) => {
     const trimmedVideo = videoEditor.value.trim();
-    const key = getExampleKey(mIdx, eIdx);
 
-    setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
     updateExample(mIdx, eIdx, "video", trimmedVideo);
     closeVideoEditor();
   };
 
   const removeExampleVideo = (mIdx, eIdx) => {
     updateExample(mIdx, eIdx, "video", "");
+
     const key = getExampleKey(mIdx, eIdx);
 
-    setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
     setVideoEditor((current) =>
       current.key === key ? { key: null, value: "" } : current
     );
-  };
-
-  const triggerVideoFilePicker = (exampleKey) => {
-    const input = fileInputsRef.current[exampleKey];
-    if (input) input.click();
-  };
-
-  const handleVideoFileSelected = async (mIdx, eIdx, event) => {
-    const file = event?.target?.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    const key = getExampleKey(mIdx, eIdx);
-
-    if (!user?.id) {
-      alert("Usuário não identificado.");
-      return;
-    }
-
-    if (!String(file.type || "").toLowerCase().startsWith(VIDEO_MIME_PREFIX)) {
-      setVideoUploadErrors((current) => ({
-        ...current,
-        [key]: "Arquivo inválido. Selecione um vídeo válido.",
-      }));
-      return;
-    }
-
-    if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
-      setVideoUploadErrors((current) => ({
-        ...current,
-        [key]: "Vídeo muito grande. Limite máximo: 50 MB.",
-      }));
-      return;
-    }
-
-    try {
-      setUploadingVideoKey(key);
-      setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
-
-      const uploadedVideoUrl = await uploadExampleVideoFile(file, user.id);
-      updateExample(mIdx, eIdx, "video", uploadedVideoUrl);
-      setVideoEditor((current) =>
-        current.key === key ? { ...current, value: uploadedVideoUrl } : current
-      );
-    } catch (error) {
-      console.error("Erro ao enviar vídeo do exemplo:", error);
-      setVideoUploadErrors((current) => ({
-        ...current,
-        [key]:
-          "Não foi possível enviar o vídeo. Verifique as permissões do bucket de storage no Supabase.",
-      }));
-    } finally {
-      setUploadingVideoKey((current) => (current === key ? null : current));
-    }
   };
 
   const handleSave = async () => {
@@ -235,11 +364,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
     if (!user?.id) {
       alert("Usuário não identificado.");
-      return;
-    }
-
-    if (uploadingVideoKey) {
-      alert("Aguarde o envio do vídeo terminar para salvar.");
       return;
     }
 
@@ -314,299 +438,450 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto max-w-5xl">
       <button
         onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-orange-500"
+        className="mb-4 flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
       >
         <ArrowLeft className="h-4 w-4" /> Voltar
       </button>
 
-      <h1 className="mb-6 text-xl font-bold text-foreground">
+      <h1 className="mb-6 text-3xl font-bold tracking-tight text-foreground">
         {item ? "Editar palavra ou frase" : "Nova palavra ou frase"}
       </h1>
 
       <div className="space-y-5">
         <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <FieldLabel icon={<UsFlagIcon />}>
             Palavra ou frase em inglês
-          </label>
+          </FieldLabel>
+
           <input
             type="text"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
             placeholder="Ex: break down"
           />
-        </div>
 
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Pronúncia
-          </label>
-          <input
-            type="text"
-            value={pronunciation}
-            onChange={(e) => setPronunciation(e.target.value)}
-            className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-            placeholder="Ex: breik daun"
-          />
+          <div className="mt-2 flex items-center gap-1.5 pl-0 text-sm italic text-[#6A7181]">
+            <Volume2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-medium">Pronúncia:</span>
+
+            <input
+              type="text"
+              value={pronunciation}
+              onChange={(e) => setPronunciation(e.target.value)}
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm italic text-[#6A7181] placeholder:text-[#6A7181]/60 focus:outline-none focus:ring-0"
+              placeholder="Ex: breik daun"
+            />
+          </div>
         </div>
 
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">
               Significados
             </label>
+
             <button
               type="button"
               onClick={addMeaning}
-              className="flex items-center gap-1 text-xs font-semibold text-foreground transition-colors hover:text-orange-500"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-bold text-primary transition-colors hover:bg-primary/10"
             >
-              <Plus className="h-3.5 w-3.5" /> Adicionar
+              <Plus className="h-4 w-4" /> Adicionar
             </button>
           </div>
 
           <div className="space-y-4">
-            {meanings.map((m, mIdx) => (
-              <div
-                key={mIdx}
-                className="rounded-xl border border-border/60 bg-card p-4"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    Significado {mIdx + 1}
-                  </span>
-                  {meanings.length > 1 ? (
+            {meanings.map((m, mIdx) => {
+              const isExpanded = Boolean(expandedMeanings[mIdx]);
+              const meaningTitle = m.meaning.trim();
+
+              return (
+                <div
+                  key={mIdx}
+                  className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-4 border-b border-border/70 bg-primary/5 px-5 py-3">
                     <button
                       type="button"
-                      onClick={() => removeMeaning(mIdx)}
-                      className="rounded p-1 transition-colors hover:bg-red-50"
+                      onClick={() => toggleMeaningExpanded(mIdx)}
+                      className="min-w-0 flex flex-1 items-center gap-2 text-left"
+                      aria-expanded={isExpanded}
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      <span className="shrink-0 text-base font-bold text-foreground">
+                        Significado {mIdx + 1}
+                      </span>
+
+                      {meaningTitle ? (
+                        <span className="min-w-0 truncate text-base font-bold text-primary">
+                          — {meaningTitle}
+                        </span>
+                      ) : (
+                        <span className="min-w-0 truncate text-sm font-semibold text-muted-foreground">
+                          — ainda sem nome
+                        </span>
+                      )}
                     </button>
-                  ) : null}
-                </div>
 
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={m.meaning}
-                    onChange={(e) => updateMeaning(mIdx, "meaning", e.target.value)}
-                    placeholder="Significado em português"
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {meanings.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => removeMeaning(mIdx)}
+                          className="rounded-lg p-1.5 transition-colors hover:bg-red-50"
+                          aria-label={`Remover significado ${mIdx + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </button>
+                      ) : null}
 
-                  <select
-                    value={m.category}
-                    onChange={(e) => updateMeaning(mIdx, "category", e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    {categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                      <button
+                        type="button"
+                        onClick={() => toggleMeaningExpanded(mIdx)}
+                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                        aria-label={
+                          isExpanded
+                            ? `Recolher significado ${mIdx + 1}`
+                            : `Expandir significado ${mIdx + 1}`
+                        }
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
 
-                  <input
-                    type="text"
-                    value={m.tip}
-                    onChange={(e) => updateMeaning(mIdx, "tip", e.target.value)}
-                    placeholder="Dica de aprendizado"
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                  {isExpanded ? (
+                    <div className="space-y-4 p-5">
+                      <div>
+                        <FieldLabel
+                          icon={<Languages className="h-4 w-4 text-primary" />}
+                        >
+                          Significado em português
+                        </FieldLabel>
 
-                  <div className="pt-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Exemplos
-                    </span>
+                        <input
+                          type="text"
+                          value={m.meaning}
+                          onChange={(e) =>
+                            updateMeaning(mIdx, "meaning", e.target.value)
+                          }
+                          placeholder="Significado em português"
+                          className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
 
-                    <div className="mt-2 space-y-2">
-                      {m.examples.map((ex, eIdx) => {
-                        const exampleKey = getExampleKey(mIdx, eIdx);
-                        const isEditingVideo = videoEditor.key === exampleKey;
-                        const isUploadingVideo = uploadingVideoKey === exampleKey;
-                        const videoValue = normalizeExampleVideo(ex);
-                        const hasVideo = Boolean(videoValue);
-                        const uploadError = videoUploadErrors[exampleKey] || "";
+                      <div className="pt-1">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <span className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+                            Exemplos
+                          </span>
 
-                        return (
-                          <div
-                            key={exampleKey}
-                            className="space-y-2 border-l-2 border-orange-200 pl-3"
+                          <button
+                            type="button"
+                            onClick={() => addExample(mIdx)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-muted"
                           >
-                            <input
-                              type="text"
-                              value={ex.sentence}
-                              onChange={(e) =>
-                                updateExample(
-                                  mIdx,
-                                  eIdx,
-                                  "sentence",
-                                  e.target.value
-                                )
-                              }
-                              placeholder={`Exemplo ${eIdx + 1} em inglês`}
-                              className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs transition-all focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            />
+                            <Plus className="h-3.5 w-3.5 text-primary" />
+                            Adicionar exemplo
+                          </button>
+                        </div>
 
-                            <input
-                              type="text"
-                              value={ex.translation}
-                              onChange={(e) =>
-                                updateExample(
-                                  mIdx,
-                                  eIdx,
-                                  "translation",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="Tradução em português"
-                              className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs transition-all focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            />
+                        <div className="space-y-3">
+                          {m.examples.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-border bg-background/70 p-4 text-center text-sm font-semibold text-muted-foreground">
+                              Nenhum exemplo adicionado ainda.
+                            </div>
+                          ) : null}
 
-                            <div className="rounded-lg border border-border/70 bg-background px-2.5 py-2">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                  Vídeo do exemplo
-                                </span>
+                          {m.examples.map((ex, eIdx) => {
+                            const exampleKey = getExampleKey(mIdx, eIdx);
+                            const isEditingVideo =
+                              videoEditor.key === exampleKey;
+                            const videoValue = normalizeExampleVideo(ex);
+                            const hasVideo = Boolean(videoValue);
+                            const isExampleExpanded = Boolean(
+                              expandedExamples[exampleKey]
+                            );
 
-                                {hasVideo ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary">
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    Vídeo anexado
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    Sem vídeo
-                                  </span>
-                                )}
-                              </div>
-
-                              {hasVideo && !isEditingVideo ? (
-                                <>
-                                  <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                                    {getExampleVideoDisplayLabel(videoValue)}
-                                  </p>
-                                  <ExampleVideoPreview video={videoValue} />
-                                </>
-                              ) : null}
-
-                              {isEditingVideo ? (
-                                <div className="mt-2 space-y-2">
-                                  <textarea
-                                    value={videoEditor.value}
-                                    onChange={(e) =>
-                                      setVideoEditor((current) => ({
-                                        ...current,
-                                        value: e.target.value,
-                                      }))
-                                    }
-                                    placeholder="Cole o link do vídeo, iframe/embed completo ou BBCode"
-                                    rows={4}
-                                    spellCheck={false}
-                                    className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-xs transition-all focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                  />
-
-                                  <p className="text-[10px] leading-snug text-muted-foreground">
-                                    Aceita URL simples, vídeo direto, Supabase,
-                                    YouTube, Vimeo, Google Drive, Yarn,
-                                    Clip.Cafe, iframe/embed e BBCode.
-                                  </p>
-
-                                  <div className="flex flex-wrap gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => saveExampleVideo(mIdx, eIdx)}
-                                      disabled={!videoEditor.value.trim()}
-                                      className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                                    >
-                                      {hasVideo ? "Salvar vídeo" : "Anexar vídeo"}
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={closeVideoEditor}
-                                      className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted"
-                                    >
-                                      Cancelar
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="mt-2 flex flex-wrap gap-2">
+                            return (
+                              <div
+                                key={exampleKey}
+                                className="overflow-hidden rounded-2xl border border-border/70 bg-background/70 shadow-sm"
+                              >
+                                <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-card px-4 py-3">
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      openVideoEditor(mIdx, eIdx, videoValue)
+                                      toggleExampleExpanded(mIdx, eIdx)
                                     }
-                                    className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted"
+                                    className="min-w-0 flex flex-1 items-center gap-2 text-left"
+                                    aria-expanded={isExampleExpanded}
                                   >
-                                    {hasVideo ? "Trocar vídeo" : "Adicionar vídeo"}
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+                                      {eIdx + 1}
+                                    </div>
+
+                                    <span className="truncate text-sm font-bold text-foreground">
+                                      Exemplo {eIdx + 1}
+                                    </span>
                                   </button>
 
-                                  <input
-                                    type="file"
-                                    accept="video/*"
-                                    className="hidden"
-                                    ref={(element) => {
-                                      if (element) {
-                                        fileInputsRef.current[exampleKey] = element;
-                                      }
-                                    }}
-                                    onChange={(event) =>
-                                      void handleVideoFileSelected(mIdx, eIdx, event)
-                                    }
-                                  />
-
-                                  <button
-                                    type="button"
-                                    onClick={() => triggerVideoFilePicker(exampleKey)}
-                                    disabled={isUploadingVideo}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                                  >
-                                    <Upload className="h-3 w-3" />
-                                    {isUploadingVideo
-                                      ? "Enviando..."
-                                      : hasVideo
-                                      ? "Trocar por upload"
-                                      : "Enviar arquivo"}
-                                  </button>
-
-                                  {hasVideo ? (
+                                  <div className="flex shrink-0 items-center gap-1.5">
                                     <button
                                       type="button"
-                                      onClick={() => removeExampleVideo(mIdx, eIdx)}
-                                      className="rounded-lg border border-destructive/40 px-2.5 py-1.5 text-[11px] font-semibold text-destructive transition-colors hover:bg-red-50"
+                                      onClick={() =>
+                                        removeExample(mIdx, eIdx)
+                                      }
+                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive"
+                                      aria-label={`Remover exemplo ${eIdx + 1}`}
                                     >
-                                      Remover vídeo
+                                      <Trash2 className="h-4 w-4" />
                                     </button>
-                                  ) : null}
-                                </div>
-                              )}
 
-                              {uploadError ? (
-                                <p className="mt-1.5 text-[11px] text-destructive">
-                                  {uploadError}
-                                </p>
-                              ) : null}
-                            </div>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        toggleExampleExpanded(mIdx, eIdx)
+                                      }
+                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                                      aria-label={
+                                        isExampleExpanded
+                                          ? `Recolher exemplo ${eIdx + 1}`
+                                          : `Expandir exemplo ${eIdx + 1}`
+                                      }
+                                    >
+                                      {isExampleExpanded ? (
+                                        <ChevronUp className="h-4 w-4" />
+                                      ) : (
+                                        <ChevronDown className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {isExampleExpanded ? (
+                                  <div className="p-4">
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                      <div>
+                                        <FieldLabel icon={<UsFlagIcon />}>
+                                          Exemplo em inglês
+                                        </FieldLabel>
+
+                                        <input
+                                          type="text"
+                                          value={ex.sentence}
+                                          onChange={(e) =>
+                                            updateExample(
+                                              mIdx,
+                                              eIdx,
+                                              "sentence",
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder={`Exemplo ${
+                                            eIdx + 1
+                                          } em inglês`}
+                                          className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-xs transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <FieldLabel icon={<BrFlagIcon />}>
+                                          Tradução em português
+                                        </FieldLabel>
+
+                                        <input
+                                          type="text"
+                                          value={ex.translation}
+                                          onChange={(e) =>
+                                            updateExample(
+                                              mIdx,
+                                              eIdx,
+                                              "translation",
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder="Tradução em português"
+                                          className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-xs transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3 rounded-xl border border-border bg-card px-3.5 py-3">
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                                          Vídeo do exemplo
+                                        </span>
+
+                                        {hasVideo ? (
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Vídeo anexado
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] font-medium text-muted-foreground">
+                                            Sem vídeo
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {hasVideo && !isEditingVideo ? (
+                                        <>
+                                          <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
+                                            {getExampleVideoDisplayLabel(
+                                              videoValue
+                                            )}
+                                          </p>
+                                          <ExampleVideoPreview
+                                            video={videoValue}
+                                          />
+                                        </>
+                                      ) : null}
+
+                                      {isEditingVideo ? (
+                                        <div className="mt-3 space-y-2">
+                                          <textarea
+                                            value={videoEditor.value}
+                                            onChange={(e) =>
+                                              setVideoEditor((current) => ({
+                                                ...current,
+                                                value: e.target.value,
+                                              }))
+                                            }
+                                            placeholder="Cole o link do vídeo, iframe/embed completo ou BBCode"
+                                            rows={4}
+                                            spellCheck={false}
+                                            className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-xs transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                          />
+
+                                          <p className="text-[10px] leading-snug text-muted-foreground">
+                                            Aceita URL simples, vídeo direto,
+                                            YouTube, Vimeo, Google Drive, Yarn,
+                                            Clip.Cafe, iframe/embed e BBCode.
+                                          </p>
+
+                                          <div className="flex flex-wrap gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                saveExampleVideo(mIdx, eIdx)
+                                              }
+                                              disabled={
+                                                !videoEditor.value.trim()
+                                              }
+                                              className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                                            >
+                                              {hasVideo
+                                                ? "Salvar vídeo"
+                                                : "Anexar vídeo"}
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={closeVideoEditor}
+                                              className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted"
+                                            >
+                                              Cancelar
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              openVideoEditor(
+                                                mIdx,
+                                                eIdx,
+                                                videoValue
+                                              )
+                                            }
+                                            className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted"
+                                          >
+                                            {hasVideo
+                                              ? "Trocar vídeo"
+                                              : "Adicionar vídeo"}
+                                          </button>
+
+                                          {hasVideo ? (
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                removeExampleVideo(mIdx, eIdx)
+                                              }
+                                              className="rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50"
+                                            >
+                                              Remover vídeo
+                                            </button>
+                                          ) : null}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-3 grid gap-3 rounded-2xl border border-border/70 bg-background/80 p-3.5 md:grid-cols-[220px_1fr] md:items-start">
+                          <div>
+                            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                              <Hash className="h-3.5 w-3.5 text-primary" />
+                              Tag
+                            </label>
+
+                            <select
+                              value={m.category}
+                              onChange={(e) =>
+                                updateMeaning(mIdx, "category", e.target.value)
+                              }
+                              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            >
+                              {categories.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
                           </div>
-                        );
-                      })}
+
+                          <div className="min-w-0 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
+                            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                              <Lightbulb className="h-3.5 w-3.5 text-primary" />
+                              Modo de uso
+                            </div>
+
+                            <input
+                              type="text"
+                              value={m.tip}
+                              onChange={(e) =>
+                                updateMeaning(mIdx, "tip", e.target.value)
+                              }
+                              placeholder="Explique como esse significado é usado no contexto"
+                              className="w-full border-0 bg-transparent p-0 text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         <button
           onClick={handleSave}
-          disabled={saving || !term.trim() || Boolean(uploadingVideoKey)}
-          className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
+          disabled={saving || !term.trim()}
+          className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 disabled:opacity-50"
         >
           {saving ? "Salvando..." : "Salvar"}
         </button>
