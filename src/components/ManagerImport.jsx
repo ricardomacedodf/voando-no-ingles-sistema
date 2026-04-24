@@ -3,6 +3,22 @@ import { ArrowLeft, FileJson, Download, Loader2 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 
+const normalizeExampleVideo = (example) => {
+  const rawVideo =
+    example?.video ?? example?.videoUrl ?? example?.video_url ?? "";
+  return typeof rawVideo === "string" ? rawVideo.trim() : "";
+};
+
+const hasExampleContent = (example) => {
+  const sentence =
+    typeof example?.sentence === "string" ? example.sentence.trim() : "";
+  const translation =
+    typeof example?.translation === "string" ? example.translation.trim() : "";
+  const video = normalizeExampleVideo(example);
+
+  return Boolean(sentence || translation || video);
+};
+
 export default function ManagerImport({ vocab, onBack, onDone }) {
   const { user } = useAuth();
 
@@ -22,6 +38,7 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
         examples: (m.examples || []).map((e) => ({
           sentence: e.sentence,
           translation: e.translation,
+          video: normalizeExampleVideo(e),
         })),
       })),
     }));
@@ -109,8 +126,9 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
               .map((e) => ({
                 sentence: (e.sentence || "").trim(),
                 translation: (e.translation || "").trim(),
+                video: normalizeExampleVideo(e),
               }))
-              .filter((e) => e.sentence),
+              .filter(hasExampleContent),
           }))
           .filter((m) => m.meaning),
         stats: {
