@@ -1,8 +1,9 @@
-import { playSfxEvent, SFX_EVENTS } from "./sfx";
+import { initSfxSystem, playSfxEvent, SFX_EVENTS } from "./sfx";
 
 const GAME_STATE_KEY = "voando_game_state";
 const SOUND_STATE_KEY = "voando_sound_state";
 export const GAME_STATE_UPDATED_EVENT = "voando:game-state-updated";
+let cachedSoundState = null;
 
 const defaultGameState = {
   xp: 0,
@@ -204,6 +205,13 @@ export function resetStudyHistory() {
 }
 
 export function getSoundState() {
+  if (cachedSoundState) {
+    return {
+      ...cachedSoundState,
+      interactions: { ...cachedSoundState.interactions },
+    };
+  }
+
   try {
     const stored = localStorage.getItem(SOUND_STATE_KEY);
     if (stored) {
@@ -213,18 +221,30 @@ export function getSoundState() {
         ...(parsed?.interactions || {}),
       };
 
-      return {
+      const normalizedState = {
         ...defaultSoundState,
         ...parsed,
         interactions: mergedInteractions,
         volume: clampVolume(parsed?.volume ?? defaultSoundState.volume),
+      };
+      cachedSoundState = normalizedState;
+      return {
+        ...normalizedState,
+        interactions: { ...normalizedState.interactions },
       };
     }
   } catch (error) {
     console.error("Erro ao ler sound state:", error);
   }
 
-  return { ...defaultSoundState };
+  cachedSoundState = {
+    ...defaultSoundState,
+    interactions: { ...defaultSoundState.interactions },
+  };
+  return {
+    ...cachedSoundState,
+    interactions: { ...cachedSoundState.interactions },
+  };
 }
 
 export function saveSoundState(state) {
@@ -238,14 +258,24 @@ export function saveSoundState(state) {
     volume: clampVolume(state?.volume ?? defaultSoundState.volume),
   };
 
+  cachedSoundState = {
+    ...safeState,
+    interactions: { ...safeState.interactions },
+  };
+
   localStorage.setItem(SOUND_STATE_KEY, JSON.stringify(safeState));
 }
 
 export function playSound(type) {
   if (typeof window === "undefined") return;
+  initSfxSystem();
 
   const soundState = getSoundState();
   if (!soundState.enabled) return;
   if (soundState.interactions?.[type] === false) return;
   playSfxEvent(type, { volume: clampVolume(soundState.volume) });
+}
+
+if (typeof window !== "undefined") {
+  initSfxSystem();
 }

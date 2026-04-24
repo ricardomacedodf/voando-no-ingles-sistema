@@ -1,6 +1,9 @@
+import { useRef } from "react";
 import { Lightbulb } from "lucide-react";
 import { playSound } from "../lib/gameState";
 import { SFX_EVENTS } from "../lib/sfx";
+
+const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
 
 export default function ExamplesToggleButton({
   expanded,
@@ -10,15 +13,32 @@ export default function ExamplesToggleButton({
   variant = "default",
   className = "",
 }) {
-  const handleToggle = () => {
-    playSound(expanded ? SFX_EVENTS.EXAMPLES_CLOSE : SFX_EVENTS.EXAMPLES_OPEN);
+  const lastPointerSfxAtRef = useRef(0);
+  const sfxEvent = expanded ? SFX_EVENTS.EXAMPLES_CLOSE : SFX_EVENTS.EXAMPLES_OPEN;
+
+  const shouldSkipClickSfxAfterPointer = (event) => {
+    if (!event) return false;
+    if (event.detail === 0) return false;
+    return Date.now() - lastPointerSfxAtRef.current < EXAMPLES_POINTER_SFX_GUARD_MS;
+  };
+
+  const handleToggle = (event) => {
+    if (!shouldSkipClickSfxAfterPointer(event)) {
+      playSound(sfxEvent);
+    }
     onClick?.();
+  };
+
+  const handlePointerDown = () => {
+    lastPointerSfxAtRef.current = Date.now();
+    playSound(sfxEvent);
   };
 
   if (variant === "flashcard") {
     return (
       <button
         type="button"
+        onPointerDown={handlePointerDown}
         onClick={handleToggle}
         className={`group flex h-14 w-full items-center justify-center gap-2 rounded-lg border border-[#D6DEE8] bg-[#F5F7FA] px-4 py-2 text-center text-sm font-semibold leading-5 text-[#475569] transition-colors sm:h-12 sm:rounded-md sm:bg-white sm:font-medium sm:text-[#1A1A1A] sm:hover:border-[#ED9A0A] sm:hover:bg-[#ED9A0A] sm:hover:text-white ${expanded ? "mb-6" : ""} ${className}`}
       >
@@ -35,6 +55,7 @@ export default function ExamplesToggleButton({
   return (
     <button
       type="button"
+      onPointerDown={handlePointerDown}
       onClick={handleToggle}
       className={`w-full flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors duration-200 ${
         expanded

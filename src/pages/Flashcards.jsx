@@ -33,6 +33,7 @@ const FLASHCARD_DISCARD_TRANSLATE_X = 520;
 const FLASHCARD_DISCARD_ROTATE_DEG = 20;
 const FLASHCARD_DISCARD_SCALE = 0.9;
 const FLASHCARD_DISCARD_EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
+const FLASHCARD_POINTER_SFX_GUARD_MS = 700;
 const STATUS_NOVA = "nova";
 const STATUS_DOMINADA = "dominada";
 const STATUS_DIFICIL = "dificil";
@@ -233,6 +234,8 @@ export default function Flashcards() {
   const discardTimersRef = useRef([]);
   const discardNodesRef = useRef([]);
   const examplesPanelRef = useRef(null);
+  const lastFlipPointerSfxAtRef = useRef(0);
+  const lastDiscardPointerSfxAtRef = useRef(0);
 
   const clearDiscardOverlays = () => {
     discardTimersRef.current.forEach((timerId) => clearTimeout(timerId));
@@ -490,16 +493,42 @@ export default function Flashcards() {
     return hasText && isInsideCard;
   };
 
-  const handleFlip = () => {
+  const shouldSkipClickSfxAfterPointer = (lastPointerSfxAt, event) => {
+    if (!event) return false;
+    if (event.detail === 0) return false;
+    return Date.now() - lastPointerSfxAt < FLASHCARD_POINTER_SFX_GUARD_MS;
+  };
+
+  const handleFlip = (event) => {
     if (responseLockRef.current || isSubmittingResponse) return;
     if (hasActiveSelectionInsideCard()) return;
+    const shouldSkipFlipSfx = shouldSkipClickSfxAfterPointer(
+      lastFlipPointerSfxAtRef.current,
+      event
+    );
+    if (!shouldSkipFlipSfx) {
+      playSound(SFX_EVENTS.FLASHCARD_FLIP);
+    }
     setFlipped((value) => !value);
+  };
+
+  const handleFlipPointerDown = () => {
+    if (responseLockRef.current || isSubmittingResponse) return;
+    if (hasActiveSelectionInsideCard()) return;
+    lastFlipPointerSfxAtRef.current = Date.now();
     playSound(SFX_EVENTS.FLASHCARD_FLIP);
   };
 
-  const handleResponse = async (correct) => {
+  const handleResponse = async (correct, triggerEvent) => {
     if (!card || !user?.id || responseLockRef.current) return;
 
+    const shouldSkipDiscardSfx = shouldSkipClickSfxAfterPointer(
+      lastDiscardPointerSfxAtRef.current,
+      triggerEvent
+    );
+    if (!shouldSkipDiscardSfx) {
+      playSound(SFX_EVENTS.FLASHCARD_DISCARD);
+    }
     responseLockRef.current = true;
     setIsSubmittingResponse(true);
 
@@ -515,7 +544,6 @@ export default function Flashcards() {
     }
 
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
-    playSound(SFX_EVENTS.FLASHCARD_DISCARD);
 
     const stats = normalizeStats(card.stats);
 
@@ -600,6 +628,12 @@ export default function Flashcards() {
       responseLockRef.current = false;
       setIsSubmittingResponse(false);
     }
+  };
+
+  const handleResponsePointerDown = () => {
+    if (!card || !user?.id || responseLockRef.current || isSubmittingResponse) return;
+    lastDiscardPointerSfxAtRef.current = Date.now();
+    playSound(SFX_EVENTS.FLASHCARD_DISCARD);
   };
 
   useEffect(() => {
@@ -761,6 +795,7 @@ export default function Flashcards() {
             aspectRatio: `${FLASHCARD_CARD_WIDTH} / ${FLASHCARD_CARD_HEIGHT}`,
             touchAction: "pan-y",
           }}
+          onPointerDown={handleFlipPointerDown}
           onClick={handleFlip}
         >
           <div
@@ -824,7 +859,8 @@ export default function Flashcards() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4">
         <button
           type="button"
-          onClick={() => handleResponse(false)}
+          onPointerDown={handleResponsePointerDown}
+          onClick={(event) => handleResponse(false, event)}
           disabled={isSubmittingResponse}
           className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
@@ -833,7 +869,8 @@ export default function Flashcards() {
 
         <button
           type="button"
-          onClick={() => handleResponse(true)}
+          onPointerDown={handleResponsePointerDown}
+          onClick={(event) => handleResponse(true, event)}
           disabled={isSubmittingResponse}
           className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#25B15F] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >

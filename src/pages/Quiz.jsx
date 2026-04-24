@@ -26,6 +26,7 @@ const CORRECT_XP_DELTA = 1;
 const INCORRECT_XP_DELTA = -2;
 const CHECK_SYMBOL = "\u2713";
 const CROSS_SYMBOL = "\u2715";
+const QUIZ_POINTER_SFX_GUARD_MS = 700;
 const QUIZ_MOBILE_BREAKPOINT = 767;
 const QUIZ_TEXT_MIN_SIZE_MOBILE = 20;
 const QUIZ_TEXT_MAX_SIZE_MOBILE = 34;
@@ -220,6 +221,7 @@ export default function Quiz() {
   const [cardDir, setCardDir] = useState("en_pt");
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const startTime = useRef(Date.now());
+  const lastOptionPointerSfxAtRef = useRef(0);
   const prevModeRef = useRef(mode);
   const examplesPanelRef = useRef(null);
   const questionTextRef = useRef(null);
@@ -367,16 +369,29 @@ export default function Quiz() {
     setSoundEnabled(newEnabled);
   };
 
-  const handleSelect = async (idx) => {
+  const shouldSkipClickSfxAfterPointer = (event) => {
+    if (!event) return false;
+    if (event.detail === 0) return false;
+    return Date.now() - lastOptionPointerSfxAtRef.current < QUIZ_POINTER_SFX_GUARD_MS;
+  };
+
+  const playOptionSfx = (idx, triggerEvent) => {
     if (answered || !user?.id || !options[idx]) return;
+    if (shouldSkipClickSfxAfterPointer(triggerEvent)) return;
+    const correct = options[idx].correct;
+    playSound(correct ? SFX_EVENTS.QUIZ_SUCCESS : SFX_EVENTS.QUIZ_ERROR);
+  };
+
+  const handleSelect = async (idx, event) => {
+    if (answered || !user?.id || !options[idx]) return;
+
+    playOptionSfx(idx, event);
 
     setSelected(idx);
     setAnswered(true);
 
     const correct = options[idx].correct;
     const xpDelta = correct ? CORRECT_XP_DELTA : INCORRECT_XP_DELTA;
-
-    playSound(correct ? SFX_EVENTS.QUIZ_SUCCESS : SFX_EVENTS.QUIZ_ERROR);
 
     addXP(xpDelta);
     setXpFeedback(xpDelta > 0 ? `+${xpDelta} XP` : `${xpDelta} XP`);
@@ -461,6 +476,12 @@ export default function Quiz() {
       console.error("Erro ao atualizar stats do quiz no Supabase:", error);
       alert("Nao foi possivel salvar seu progresso nesta pergunta.");
     }
+  };
+
+  const handleOptionPointerDown = (idx) => {
+    if (answered || !user?.id || !options[idx]) return;
+    lastOptionPointerSfxAtRef.current = Date.now();
+    playOptionSfx(idx);
   };
 
   const handleNext = () => {
@@ -660,7 +681,8 @@ export default function Quiz() {
           return (
             <button
               key={idx}
-              onClick={() => handleSelect(idx)}
+              onPointerDown={() => handleOptionPointerDown(idx)}
+              onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
               className={`flex h-[74px] w-full items-center gap-3 rounded-2xl border bg-white p-4 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""

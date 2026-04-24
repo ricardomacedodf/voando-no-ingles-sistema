@@ -22,6 +22,8 @@ const CHECK_SYMBOL = "\u2713";
 const CROSS_SYMBOL = "\u2715";
 const CORRECT_XP_DELTA = 1;
 const INCORRECT_XP_DELTA = -2;
+const COMBINATIONS_POINTER_SFX_GUARD_MS = 700;
+const COMBINATIONS_MATCH_RESULT_GUARD_MS = 250;
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -177,6 +179,13 @@ export default function Combinations() {
   const [roundXpBalance, setRoundXpBalance] = useState(0);
 
   const difficultyMap = useRef({});
+  const lastSelectPointerSfxAtRef = useRef(0);
+  const lastMatchResultSfxRef = useRef({
+    outcome: "",
+    leftIdx: -1,
+    rightIdx: -1,
+    at: 0,
+  });
   const examplesPanelRef = useRef(null);
 
   const fetchVocabulary = async () => {
@@ -291,10 +300,37 @@ export default function Combinations() {
     return left && right && left.vocabId === right.vocabId && left.meaningIdx === right.meaningIdx;
   };
 
-  const handleLeftClick = (idx) => {
+  const shouldSkipClickSfxAfterPointer = (event) => {
+    if (!event) return false;
+    if (event.detail === 0) return false;
+    return (
+      Date.now() - lastSelectPointerSfxAtRef.current <
+      COMBINATIONS_POINTER_SFX_GUARD_MS
+    );
+  };
+
+  const shouldSkipRepeatedMatchResultSfx = (outcome, leftIdx, rightIdx) => {
+    const last = lastMatchResultSfxRef.current;
+    const now = Date.now();
+    const isDuplicate =
+      last.outcome === outcome &&
+      last.leftIdx === leftIdx &&
+      last.rightIdx === rightIdx &&
+      now - last.at < COMBINATIONS_MATCH_RESULT_GUARD_MS;
+
+    if (isDuplicate) return true;
+
+    lastMatchResultSfxRef.current = { outcome, leftIdx, rightIdx, at: now };
+    return false;
+  };
+
+  const handleLeftClick = (idx, event) => {
     if (matched.has(`l${idx}`) || roundComplete) return;
 
-    playSound(SFX_EVENTS.MATCH_SELECT);
+    const isFirstSelection = selectedRight === null;
+    if (isFirstSelection && !shouldSkipClickSfxAfterPointer(event)) {
+      playSound(SFX_EVENTS.MATCH_SELECT);
+    }
     const left = leftItems[idx];
     if (left) {
       setFocusedPair({
@@ -309,10 +345,21 @@ export default function Combinations() {
     }
   };
 
-  const handleRightClick = (idx) => {
+  const handleLeftPointerDown = (idx) => {
+    if (matched.has(`l${idx}`) || roundComplete) return;
+    const isFirstSelection = selectedRight === null;
+    if (!isFirstSelection) return;
+    lastSelectPointerSfxAtRef.current = Date.now();
+    playSound(SFX_EVENTS.MATCH_SELECT);
+  };
+
+  const handleRightClick = (idx, event) => {
     if (matched.has(`r${idx}`) || roundComplete) return;
 
-    playSound(SFX_EVENTS.MATCH_SELECT);
+    const isFirstSelection = selectedLeft === null;
+    if (isFirstSelection && !shouldSkipClickSfxAfterPointer(event)) {
+      playSound(SFX_EVENTS.MATCH_SELECT);
+    }
     const right = rightItems[idx];
     if (right) {
       setFocusedPair({
@@ -327,9 +374,19 @@ export default function Combinations() {
     }
   };
 
+  const handleRightPointerDown = (idx) => {
+    if (matched.has(`r${idx}`) || roundComplete) return;
+    const isFirstSelection = selectedLeft === null;
+    if (!isFirstSelection) return;
+    lastSelectPointerSfxAtRef.current = Date.now();
+    playSound(SFX_EVENTS.MATCH_SELECT);
+  };
+
   const tryMatch = (leftIdx, rightIdx) => {
     if (checkMatch(leftIdx, rightIdx)) {
-      playSound(SFX_EVENTS.MATCH_SUCCESS);
+      if (!shouldSkipRepeatedMatchResultSfx("success", leftIdx, rightIdx)) {
+        playSound(SFX_EVENTS.MATCH_SUCCESS);
+      }
       recordCorrect();
       addXP(CORRECT_XP_DELTA);
       setRoundXpBalance((prev) => prev + CORRECT_XP_DELTA);
@@ -347,7 +404,9 @@ export default function Combinations() {
         setRoundComplete(true);
       }
     } else {
-      playSound(SFX_EVENTS.MATCH_ERROR);
+      if (!shouldSkipRepeatedMatchResultSfx("error", leftIdx, rightIdx)) {
+        playSound(SFX_EVENTS.MATCH_ERROR);
+      }
       recordIncorrect();
       addXP(INCORRECT_XP_DELTA);
       setRoundXpBalance((prev) => prev + INCORRECT_XP_DELTA);
@@ -542,7 +601,8 @@ export default function Combinations() {
             return (
               <button
                 key={idx}
-                onClick={() => handleLeftClick(idx)}
+                onPointerDown={() => handleLeftPointerDown(idx)}
+                onClick={(event) => handleLeftClick(idx, event)}
                 disabled={isMatched}
                 className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] md:text-center ${cls}`}
               >
@@ -574,7 +634,8 @@ export default function Combinations() {
             return (
               <button
                 key={idx}
-                onClick={() => handleRightClick(idx)}
+                onPointerDown={() => handleRightPointerDown(idx)}
+                onClick={(event) => handleRightClick(idx, event)}
                 disabled={isMatched}
                 className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] md:text-center ${cls}`}
               >

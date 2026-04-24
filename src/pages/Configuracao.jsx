@@ -3,6 +3,7 @@ import { Play, Save, Settings, Upload } from "lucide-react";
 import {
   AUDIO_FILE_INPUT_ACCEPT,
   getSfxOverridesMeta,
+  playSfxPreviewFile,
   playSfxEvent,
   saveSfxImports,
   SFX_TEST_ITEMS,
@@ -23,26 +24,14 @@ export default function Configuracao() {
 
   const hasPendingChanges = Object.keys(draftFiles).length > 0;
 
-  const handlePlay = async (event) => {
+  const handlePlay = (event) => {
     const pendingFile = draftFiles[event];
     if (pendingFile) {
-      const previewUrl = URL.createObjectURL(pendingFile);
-      const audio = new Audio(previewUrl);
-      audio.preload = "auto";
-      audio.volume = 1;
-
-      const cleanup = () => URL.revokeObjectURL(previewUrl);
-      audio.addEventListener("ended", cleanup, { once: true });
-      audio.addEventListener("error", cleanup, { once: true });
-
-      const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => cleanup());
-      }
+      void playSfxPreviewFile(pendingFile, { volume: 1 });
       return;
     }
 
-    await playSfxEvent(event, { volume: 1 });
+    playSfxEvent(event, { volume: 1 });
   };
 
   const handleSelectFile = (event, nativeEvent) => {

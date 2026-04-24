@@ -1,6 +1,9 @@
+import { useRef } from "react";
 import { Lightbulb, X } from "lucide-react";
 import { playSound } from "../lib/gameState";
 import { SFX_EVENTS } from "../lib/sfx";
+
+const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
 
 export default function ExamplesPanel({
   allMeanings,
@@ -11,6 +14,7 @@ export default function ExamplesPanel({
   variant = "default",
   onClose,
 }) {
+  const lastClosePointerSfxAtRef = useRef(0);
   const meanings = allMeanings || (examples ? [{ meaning, examples }] : []);
   if (meanings.length === 0) return null;
 
@@ -30,9 +34,24 @@ export default function ExamplesPanel({
   const isFlashcard = variant === "flashcard";
   const title = titleTerm ? `Exemplos — ${titleTerm}` : "Exemplos";
 
-  const handleClose = () => {
-    playSound(SFX_EVENTS.EXAMPLES_CLOSE);
+  const shouldSkipClickSfxAfterPointer = (event) => {
+    if (!event) return false;
+    if (event.detail === 0) return false;
+    return (
+      Date.now() - lastClosePointerSfxAtRef.current < EXAMPLES_POINTER_SFX_GUARD_MS
+    );
+  };
+
+  const handleClose = (event) => {
+    if (!shouldSkipClickSfxAfterPointer(event)) {
+      playSound(SFX_EVENTS.EXAMPLES_CLOSE);
+    }
     onClose?.();
+  };
+
+  const handleClosePointerDown = () => {
+    lastClosePointerSfxAtRef.current = Date.now();
+    playSound(SFX_EVENTS.EXAMPLES_CLOSE);
   };
 
   return (
@@ -57,6 +76,7 @@ export default function ExamplesPanel({
 
         <button
           type="button"
+          onPointerDown={handleClosePointerDown}
           onClick={handleClose}
           className={
             isFlashcard
