@@ -3,26 +3,10 @@ import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
 
 const FALLBACK_MESSAGE = "Este vídeo não permite reprodução direta aqui.";
 
-function OpenVideoButton({ href }) {
-  if (!href) return null;
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-white/90"
-    >
-      Abrir vídeo
-    </a>
-  );
-}
-
-function VideoFallback({ openUrl }) {
+function VideoFallback() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-black p-4 text-center text-xs font-medium text-white">
       <p>{FALLBACK_MESSAGE}</p>
-      <OpenVideoButton href={openUrl} />
     </div>
   );
 }
@@ -83,7 +67,7 @@ export default function ExampleVideoPlayer({
   }
 
   if (failed || playback.type === "fallback") {
-    return <VideoFallback openUrl={playback.openUrl} />;
+    return <VideoFallback />;
   }
 
   if (playback.type === "iframe") {
@@ -99,10 +83,6 @@ export default function ExampleVideoPlayer({
           referrerPolicy="strict-origin-when-cross-origin"
           onError={() => setFailed(true)}
         />
-
-        <div className="absolute bottom-2 right-2 z-10">
-          <OpenVideoButton href={playback.openUrl} />
-        </div>
       </div>
     );
   }
@@ -114,13 +94,9 @@ export default function ExampleVideoPlayer({
         playsInline
         preload="metadata"
         src={playback.src}
-        className="h-full w-full bg-black object-contain"
+        className="h-full w-full bg-black object-cover"
         onError={() => setFailed(true)}
       />
-
-      <div className="absolute bottom-2 right-2 z-10">
-        <OpenVideoButton href={playback.openUrl} />
-      </div>
     </div>
   );
 }

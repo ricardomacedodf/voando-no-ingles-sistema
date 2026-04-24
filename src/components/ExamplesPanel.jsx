@@ -9,6 +9,9 @@ import { SFX_EVENTS } from "../lib/sfx";
 
 const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
 
+const VIDEO_FRAME_CLASS =
+  "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover";
+
 const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
 
@@ -289,20 +292,17 @@ export default function ExamplesPanel({
                           <button
                             type="button"
                             onClick={() => closeDesktopVideo(exampleVideoKey)}
-                            className="absolute right-3 top-3 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-white/90 text-muted-foreground transition-colors hover:text-foreground"
+                            className="absolute right-3 top-3 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-white/90 text-muted-foreground transition-colors hover:text-foreground"
                             aria-label="Fechar vídeo"
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>
 
-                          <AspectRatio
-                            ratio={1}
-                            className="overflow-hidden rounded-lg bg-black"
-                          >
+                          <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
                             <ExampleVideoPlayer
                               key={`${exampleVideoKey}-${example.video}`}
                               video={example.video}
-                              title={videoTitle}
+                              title=""
                             />
                           </AspectRatio>
                         </div>
@@ -336,7 +336,7 @@ export default function ExamplesPanel({
       >
         <SheetContent
           side="bottom"
-          className="rounded-t-2xl border-border bg-background px-0 pb-5 pt-0"
+          className="max-h-[90vh] overflow-y-auto rounded-t-2xl border-border bg-background px-0 pb-5 pt-0"
         >
           <SheetHeader className="border-b border-border px-4 py-3 text-left">
             <SheetTitle className="text-base font-semibold text-foreground">
@@ -345,11 +345,11 @@ export default function ExamplesPanel({
           </SheetHeader>
 
           <div className="px-4 pt-4">
-            <AspectRatio ratio={1} className="overflow-hidden rounded-xl bg-black">
+            <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
               <ExampleVideoPlayer
                 key={mobileVideo?.key || "mobile-video"}
                 video={mobileVideo?.video || ""}
-                title={mobileVideo?.title || "Vídeo do exemplo"}
+                title=""
               />
             </AspectRatio>
           </div>
