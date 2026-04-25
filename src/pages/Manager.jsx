@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Pencil, Trash2, FileJson, AlertTriangle } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Trash2,
+  FileJson,
+  AlertTriangle,
+  Menu,
+} from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ManagerForm from "../components/ManagerForm";
@@ -138,11 +145,20 @@ export default function Manager() {
 
   const filtered = vocab.filter((v) => {
     const q = search.toLowerCase();
+
     if (!q) return true;
     if (v.term?.toLowerCase().includes(q)) return true;
-    if (v.meanings?.some((m) => m.meaning?.toLowerCase().includes(q))) return true;
+    if (v.meanings?.some((m) => m.meaning?.toLowerCase().includes(q))) {
+      return true;
+    }
+
     return false;
   });
+
+  const actionButtonsClass =
+    vocab.length > 0
+      ? "grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap"
+      : "grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap";
 
   if (view === "form") {
     return (
@@ -169,59 +185,68 @@ export default function Manager() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Gerenciador</h1>
+          <h1 className="text-[25px] font-bold leading-[30px] text-foreground">
+            Gerenciador
+          </h1>
+
           <p className="text-sm text-muted-foreground">
             {vocab.length} palavras/frases cadastradas
           </p>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className={actionButtonsClass}>
           <button
             onClick={handleNew}
-            className="flex items-center gap-1.5 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
+            className="flex min-w-0 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-2 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:gap-1.5 sm:px-3 sm:text-xs"
           >
-            <Plus className="w-3.5 h-3.5" /> Nova Palavra
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Nova Palavra</span>
           </button>
 
           <button
             onClick={() => setView("import")}
-            className="flex items-center gap-1.5 px-3 py-2 bg-card text-foreground border border-border rounded-lg text-xs font-semibold hover:bg-muted transition-colors"
+            className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 py-2 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted sm:gap-1.5 sm:px-3 sm:text-xs"
           >
-            <FileJson className="w-3.5 h-3.5" /> Importar JSON
+            <FileJson className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Importar JSON</span>
           </button>
 
-          {vocab.length > 0 && (
+          {vocab.length > 0 ? (
             <button
               onClick={() => setShowDeleteAll(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-card text-destructive border border-destructive/30 rounded-lg text-xs font-semibold hover:bg-destructive hover:text-white transition-colors"
+              className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-destructive/30 bg-card px-2 py-2 text-[11px] font-semibold text-destructive transition-colors hover:bg-destructive hover:text-white sm:gap-1.5 sm:px-3 sm:text-xs"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Apagar tudo
+              <Trash2 className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Apagar tudo</span>
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
       <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar palavras ou frases..."
-          className="w-full pl-9 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
+          className="w-full rounded-xl border border-border bg-card py-2.5 pl-9 pr-4 text-sm transition-all placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-7 h-7 border-3 border-border border-t-primary rounded-full animate-spin" />
+          <div className="h-7 w-7 animate-spin rounded-full border-3 border-border border-t-primary" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-muted-foreground text-sm">
-            {search ? "Nenhum resultado encontrado." : "Nenhuma palavra cadastrada ainda."}
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">
+            {search
+              ? "Nenhum resultado encontrado."
+              : "Nenhuma palavra cadastrada ainda."}
           </p>
         </div>
       ) : (
@@ -229,30 +254,43 @@ export default function Manager() {
           {filtered.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-3 bg-card border border-border/60 rounded-xl px-4 py-3 group"
+              role="button"
+              tabIndex={0}
+              onClick={() => handleEdit(item)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleEdit(item);
+                }
+              }}
+              className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.06)] transition-all hover:border-primary hover:shadow-[0_8px_23px_rgba(15,23,42,0.09)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              aria-label={`Editar ${item.term}`}
             >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{item.term}</p>
-                <p className="text-xs text-muted-foreground truncate">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/50">
+                <Menu className="h-3.5 w-3.5" strokeWidth={1.4} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {item.term}
+                </p>
+
+                <p className="truncate text-xs text-muted-foreground">
                   {item.meanings?.slice(0, 3).map((m) => m.meaning).join(", ")}
                 </p>
               </div>
 
-              <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => handleEdit(item)}
-                  className="p-2 rounded-lg hover:bg-muted transition-colors"
-                >
-                  <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                </button>
-
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="p-2 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleDelete(item.id);
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-red-50"
+                aria-label={`Apagar ${item.term}`}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </button>
             </div>
           ))}
         </div>
@@ -262,8 +300,10 @@ export default function Manager() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" /> Apagar tudo
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Apagar tudo
             </AlertDialogTitle>
+
             <AlertDialogDescription>
               Tem certeza que deseja apagar todas as {vocab.length} palavras/frases?
               Esta ação não pode ser desfeita.
@@ -272,6 +312,7 @@ export default function Manager() {
 
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
+
             <AlertDialogAction
               onClick={handleDeleteAll}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

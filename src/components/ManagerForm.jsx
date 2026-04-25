@@ -42,6 +42,16 @@ const emptyMeaning = {
   examples: [{ ...emptyExample }],
 };
 
+
+const meaningAccentPalette = [
+  { bar: "#EF4444", soft: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.24)" },
+  { bar: "#14B8A6", soft: "rgba(20, 184, 166, 0.08)", border: "rgba(20, 184, 166, 0.24)" },
+  { bar: "#F59E0B", soft: "rgba(245, 158, 11, 0.09)", border: "rgba(245, 158, 11, 0.26)" },
+  { bar: "#3B82F6", soft: "rgba(59, 130, 246, 0.08)", border: "rgba(59, 130, 246, 0.24)" },
+  { bar: "#8B5CF6", soft: "rgba(139, 92, 246, 0.08)", border: "rgba(139, 92, 246, 0.24)" },
+  { bar: "#EC4899", soft: "rgba(236, 72, 153, 0.08)", border: "rgba(236, 72, 153, 0.24)" },
+];
+
 const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024;
 const VIDEO_MIME_PREFIX = "video/";
 
@@ -844,68 +854,70 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               const isExpanded = Boolean(expandedMeanings[mIdx]);
               const meaningTitle = m.meaning.trim();
               const isDeletingMeaning = deletingVideoKey === `meaning-${mIdx}`;
+              const meaningAccent =
+                meaningAccentPalette[mIdx % meaningAccentPalette.length];
 
               return (
                 <div
                   key={mIdx}
-                  className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+                  className="relative overflow-hidden rounded-2xl border bg-card shadow-sm"
+                  style={{ borderColor: meaningAccent.border }}
                 >
-                  <div className="flex items-center justify-between gap-4 border-b border-border/70 bg-primary/5 px-5 py-3">
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-y-0 left-0 w-2"
+                    style={{ backgroundColor: meaningAccent.bar }}
+                  />
+
+                  <div
+                    className="flex items-center justify-between gap-4 border-b border-border/70 bg-primary/5 py-3 pl-7 pr-5"
+                    style={{ borderColor: meaningAccent.border }}
+                  >
                     <button
                       type="button"
                       onClick={() => toggleMeaningExpanded(mIdx)}
-                      className="min-w-0 flex flex-1 items-center gap-2 text-left"
+                      className="min-w-0 flex flex-1 items-start gap-2 text-left"
                       aria-expanded={isExpanded}
                     >
-                      <span className="shrink-0 text-base font-bold text-foreground">
-                        Significado {mIdx + 1}
-                      </span>
-
-                      {meaningTitle ? (
-                        <span className="min-w-0 truncate text-base font-bold text-primary">
-                          — {meaningTitle}
-                        </span>
+                      {isExpanded ? (
+                        <ChevronUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                       ) : (
-                        <span className="min-w-0 truncate text-sm font-semibold text-muted-foreground">
-                          — ainda sem nome
-                        </span>
+                        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                       )}
+
+                      <span className="min-w-0 flex flex-wrap items-baseline gap-x-1 gap-y-0.5 leading-snug">
+                        <span className="shrink-0 text-sm font-normal text-muted-foreground">
+                          Sig.
+                        </span>
+
+                        <span className="shrink-0 text-sm font-normal text-muted-foreground">
+                          —
+                        </span>
+
+                        <span
+                          className="min-w-0 break-words text-base font-bold leading-snug text-foreground"
+                          style={{ overflowWrap: "anywhere" }}
+                        >
+                          {meaningTitle || "ainda sem nome"}
+                        </span>
+                      </span>
                     </button>
 
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {meanings.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => void removeMeaning(mIdx)}
-                          disabled={isDeletingMeaning}
-                          className="rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
-                          aria-label={`Remover significado ${mIdx + 1}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </button>
-                      ) : null}
-
+                    {meanings.length > 1 ? (
                       <button
                         type="button"
-                        onClick={() => toggleMeaningExpanded(mIdx)}
-                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                        aria-label={
-                          isExpanded
-                            ? `Recolher significado ${mIdx + 1}`
-                            : `Expandir significado ${mIdx + 1}`
-                        }
+                        onClick={() => void removeMeaning(mIdx)}
+                        disabled={isDeletingMeaning}
+                        className="rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
+                        aria-label={`Remover significado ${mIdx + 1}`}
                       >
-                        {isExpanded ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </button>
-                    </div>
+                    ) : null}
                   </div>
 
                   {isExpanded ? (
-                    <div className="space-y-4 p-5">
+                    <div className="space-y-4 py-5 pl-7 pr-5">
                       <div>
                         <FieldLabel
                           icon={<Languages className="h-4 w-4 text-primary" />}
@@ -966,9 +978,13 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             return (
                               <div
                                 key={exampleKey}
-                                className="overflow-hidden rounded-2xl border border-border/70 bg-background/70 shadow-sm"
+                                className="overflow-hidden rounded-2xl border bg-background/70 shadow-sm"
+                                style={{ borderColor: meaningAccent.border }}
                               >
-                                <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-card px-4 py-3">
+                                <div
+                                  className="flex items-center justify-between gap-3 border-b border-border/70 bg-card px-4 py-3"
+                                  style={{ borderColor: meaningAccent.border }}
+                                >
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -977,7 +993,16 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     className="min-w-0 flex flex-1 items-center gap-2 text-left"
                                     aria-expanded={isExampleExpanded}
                                   >
-                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+                                    {isExampleExpanded ? (
+                                      <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    )}
+
+                                    <div
+                                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm"
+                                      style={{ backgroundColor: meaningAccent.bar }}
+                                    >
                                       {eIdx + 1}
                                     </div>
 
@@ -986,38 +1011,17 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     </span>
                                   </button>
 
-                                  <div className="flex shrink-0 items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        void removeExample(mIdx, eIdx)
-                                      }
-                                      disabled={isDeletingVideo}
-                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
-                                      aria-label={`Remover exemplo ${eIdx + 1}`}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        toggleExampleExpanded(mIdx, eIdx)
-                                      }
-                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                                      aria-label={
-                                        isExampleExpanded
-                                          ? `Recolher exemplo ${eIdx + 1}`
-                                          : `Expandir exemplo ${eIdx + 1}`
-                                      }
-                                    >
-                                      {isExampleExpanded ? (
-                                        <ChevronUp className="h-4 w-4" />
-                                      ) : (
-                                        <ChevronDown className="h-4 w-4" />
-                                      )}
-                                    </button>
-                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void removeExample(mIdx, eIdx)
+                                    }
+                                    disabled={isDeletingVideo}
+                                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
+                                    aria-label={`Remover exemplo ${eIdx + 1}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
                                 </div>
 
                                 {isExampleExpanded ? (
