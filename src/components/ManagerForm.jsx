@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -9,6 +9,7 @@ import {
   Lightbulb,
   Plus,
   Trash2,
+  Upload,
   Volume2,
 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
@@ -33,6 +34,7 @@ const categories = [
 ];
 
 const emptyExample = { sentence: "", translation: "", video: "" };
+
 const emptyMeaning = {
   meaning: "",
   category: "vocabulário",
@@ -40,22 +42,93 @@ const emptyMeaning = {
   examples: [{ ...emptyExample }],
 };
 
+const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024;
+const VIDEO_MIME_PREFIX = "video/";
+
 const getExampleKey = (mIdx, eIdx) => `${mIdx}-${eIdx}`;
+
+const getR2UploadApiUrl = () => {
+  const customUrl = import.meta.env.VITE_R2_UPLOAD_API_URL;
+
+  if (customUrl) return customUrl;
+
+  const isLocalVite =
+    typeof window !== "undefined" &&
+    window.location.hostname === "localhost" &&
+    window.location.port === "5173";
+
+  if (isLocalVite) {
+    return "http://localhost:3000/api/upload";
+  }
+
+  return "/api/upload";
+};
 
 const normalizeExampleVideo = (example) => {
   const rawVideo =
     example?.video ?? example?.videoUrl ?? example?.video_url ?? "";
+
   return typeof rawVideo === "string" ? rawVideo.trim() : "";
 };
 
 const hasExampleContent = (example) => {
   const sentence =
     typeof example?.sentence === "string" ? example.sentence.trim() : "";
+
   const translation =
     typeof example?.translation === "string" ? example.translation.trim() : "";
+
   const video = normalizeExampleVideo(example);
 
   return Boolean(sentence || translation || video);
+};
+
+const uploadExampleVideoFile = async (file) => {
+  const contentType = file.type || "video/mp4";
+
+  const prepareResponse = await fetch(getR2UploadApiUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType,
+      size: file.size,
+    }),
+  });
+
+  let prepareData = null;
+
+  try {
+    prepareData = await prepareResponse.json();
+  } catch {
+    prepareData = null;
+  }
+
+  if (
+    !prepareResponse.ok ||
+    !prepareData?.uploadUrl ||
+    !prepareData?.publicUrl
+  ) {
+    throw new Error(
+      prepareData?.error || "Não foi possível preparar o upload para o R2."
+    );
+  }
+
+  const uploadResponse = await fetch(prepareData.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType,
+    },
+    body: file,
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error("Não foi possível enviar o vídeo para o Cloudflare R2.");
+  }
+
+  return prepareData.publicUrl;
 };
 
 function UsFlagIcon({ className = "h-4 w-4" }) {
@@ -128,8 +201,11 @@ function ExampleVideoPreview({ video }) {
 export default function ManagerForm({ item, onBack, onSaved }) {
   const { user } = useAuth();
 
+  const fileInputsRef = useRef({});
+
   const [term, setTerm] = useState(item?.term || "");
   const [pronunciation, setPronunciation] = useState(item?.pronunciation || "");
+
   const [meanings, setMeanings] = useState(
     item?.meanings?.length > 0
       ? item.meanings.map((m) => ({
@@ -148,10 +224,22 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       : [{ ...emptyMeaning }]
   );
 
-  const [expandedMeanings, setExpandedMeanings] = useState({});
-  const [expandedExamples, setExpandedExamples] = useState({});
+  const [expandedMeanings, setExpandedMeanings] = useState(() => {
+    if (item?.meanings?.length > 0) {
+      return Object.fromEntries(item.meanings.map((_, index) => [index, index === 0]));
+    }
+
+    return { 0: true };
+  });
+
+  const [expandedExamples, setExpandedExamples] = useState(() => ({
+    [getExampleKey(0, 0)]: true,
+  }));
+
   const [saving, setSaving] = useState(false);
   const [videoEditor, setVideoEditor] = useState({ key: null, value: "" });
+  const [uploadingVideoKey, setUploadingVideoKey] = useState(null);
+  const [videoUploadErrors, setVideoUploadErrors] = useState({});
 
   const toggleMeaningExpanded = (idx) => {
     setExpandedMeanings((current) => ({
@@ -171,7 +259,12 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const updateMeaning = (idx, field, value) => {
     const updated = [...meanings];
-    updated[idx] = { ...updated[idx], [field]: value };
+
+    updated[idx] = {
+      ...updated[idx],
+      [field]: value,
+    };
+
     setMeanings(updated);
   };
 
@@ -327,14 +420,16 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   };
 
   const openVideoEditor = (mIdx, eIdx, currentVideo) => {
+    const key = getExampleKey(mIdx, eIdx);
+
     setVideoEditor({
-      key: getExampleKey(mIdx, eIdx),
+      key,
       value: typeof currentVideo === "string" ? currentVideo : "",
     });
 
     setExpandedExamples((current) => ({
       ...current,
-      [getExampleKey(mIdx, eIdx)]: true,
+      [key]: true,
     }));
   };
 
@@ -357,6 +452,79 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     setVideoEditor((current) =>
       current.key === key ? { key: null, value: "" } : current
     );
+
+    setVideoUploadErrors((current) => ({
+      ...current,
+      [key]: "",
+    }));
+  };
+
+  const triggerVideoFilePicker = (exampleKey) => {
+    const input = fileInputsRef.current[exampleKey];
+
+    if (input) input.click();
+  };
+
+  const handleVideoFileSelected = async (mIdx, eIdx, event) => {
+    const inputElement = event?.target;
+    const file = inputElement?.files?.[0];
+
+    if (inputElement) {
+      inputElement.value = "";
+    }
+
+    if (!file) return;
+
+    const key = getExampleKey(mIdx, eIdx);
+
+    if (!user?.id) {
+      alert("Usuário não identificado.");
+      return;
+    }
+
+    const fileType = String(file.type || "").toLowerCase();
+    const hasVideoMime = fileType.startsWith(VIDEO_MIME_PREFIX);
+    const hasVideoExtension = /\.(mp4|webm|mov|m4v|ogg)$/i.test(file.name);
+
+    if (!hasVideoMime && !hasVideoExtension) {
+      setVideoUploadErrors((current) => ({
+        ...current,
+        [key]: "Arquivo inválido. Selecione um vídeo válido.",
+      }));
+      return;
+    }
+
+    if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
+      setVideoUploadErrors((current) => ({
+        ...current,
+        [key]: "Vídeo muito grande. Limite máximo: 200 MB.",
+      }));
+      return;
+    }
+
+    try {
+      setUploadingVideoKey(key);
+      setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
+
+      const uploadedVideoUrl = await uploadExampleVideoFile(file);
+
+      updateExample(mIdx, eIdx, "video", uploadedVideoUrl);
+
+      setVideoEditor((current) =>
+        current.key === key ? { ...current, value: uploadedVideoUrl } : current
+      );
+    } catch (error) {
+      console.error("Erro ao enviar vídeo do exemplo para o R2:", error);
+
+      setVideoUploadErrors((current) => ({
+        ...current,
+        [key]:
+          error?.message ||
+          "Não foi possível enviar o vídeo para o Cloudflare R2.",
+      }));
+    } finally {
+      setUploadingVideoKey((current) => (current === key ? null : current));
+    }
   };
 
   const handleSave = async () => {
@@ -425,6 +593,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         };
 
         const { error } = await supabase.from("vocabulary").insert([payload]);
+
         if (error) throw error;
       }
 
@@ -608,6 +777,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             const isExampleExpanded = Boolean(
                               expandedExamples[exampleKey]
                             );
+                            const isUploadingVideo =
+                              uploadingVideoKey === exampleKey;
+                            const videoUploadError =
+                              videoUploadErrors[exampleKey] || "";
 
                             return (
                               <div
@@ -738,6 +911,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                               videoValue
                                             )}
                                           </p>
+
                                           <ExampleVideoPreview
                                             video={videoValue}
                                           />
@@ -762,7 +936,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                                           <p className="text-[10px] leading-snug text-muted-foreground">
                                             Aceita URL simples, vídeo direto,
-                                            YouTube, Vimeo, Google Drive, Yarn,
+                                            Cloudflare R2, Supabase, YouTube,
+                                            Vimeo, Google Drive, Yarn,
                                             Clip.Cafe, iframe/embed e BBCode.
                                           </p>
 
@@ -809,6 +984,42 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                               : "Adicionar vídeo"}
                                           </button>
 
+                                          <input
+                                            type="file"
+                                            accept="video/*"
+                                            className="hidden"
+                                            ref={(element) => {
+                                              if (element) {
+                                                fileInputsRef.current[
+                                                  exampleKey
+                                                ] = element;
+                                              }
+                                            }}
+                                            onChange={(event) =>
+                                              void handleVideoFileSelected(
+                                                mIdx,
+                                                eIdx,
+                                                event
+                                              )
+                                            }
+                                          />
+
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              triggerVideoFilePicker(exampleKey)
+                                            }
+                                            disabled={isUploadingVideo}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                                          >
+                                            <Upload className="h-3 w-3" />
+                                            {isUploadingVideo
+                                              ? "Enviando para R2..."
+                                              : hasVideo
+                                              ? "Trocar por upload"
+                                              : "Enviar arquivo"}
+                                          </button>
+
                                           {hasVideo ? (
                                             <button
                                               type="button"
@@ -822,6 +1033,12 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                           ) : null}
                                         </div>
                                       )}
+
+                                      {videoUploadError ? (
+                                        <p className="mt-2 text-[11px] font-medium text-destructive">
+                                          {videoUploadError}
+                                        </p>
+                                      ) : null}
                                     </div>
                                   </div>
                                 ) : null}

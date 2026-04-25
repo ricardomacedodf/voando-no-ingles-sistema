@@ -1,3 +1,6 @@
 node_modules
 npm run dev
 .vercel
+
+.env
+.env.local
