@@ -9,10 +9,7 @@ import { SFX_EVENTS } from "../lib/sfx";
 const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
 
 const VIDEO_FRAME_CLASS =
-  "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover";
-
-const MOBILE_VIDEO_FRAME_CLASS =
-  "overflow-hidden rounded-xl bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover";
+  "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-contain";
 
 const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -97,7 +94,8 @@ export default function ExamplesPanel({
     if (event.detail === 0) return false;
 
     return (
-      Date.now() - lastClosePointerSfxAtRef.current < EXAMPLES_POINTER_SFX_GUARD_MS
+      Date.now() - lastClosePointerSfxAtRef.current <
+      EXAMPLES_POINTER_SFX_GUARD_MS
     );
   };
 
@@ -118,13 +116,6 @@ export default function ExamplesPanel({
     setOpenDesktopVideos((current) => ({
       ...current,
       [videoKey]: !current[videoKey],
-    }));
-  };
-
-  const closeDesktopVideo = (videoKey) => {
-    setOpenDesktopVideos((current) => ({
-      ...current,
-      [videoKey]: false,
     }));
   };
 
@@ -300,7 +291,11 @@ export default function ExamplesPanel({
                           <button
                             type="button"
                             onClick={() =>
-                              openVideo(example.video, exampleVideoKey, videoTitle)
+                              openVideo(
+                                example.video,
+                                exampleVideoKey,
+                                videoTitle
+                              )
                             }
                             className="inline-flex items-center rounded-md border border-border/80 bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
                           >
@@ -312,21 +307,16 @@ export default function ExamplesPanel({
                       ) : null}
 
                       {!isMobile && hasVideo && isDesktopVideoOpen ? (
-                        <div className="relative mt-2 rounded-xl border border-border/80 bg-background/70 p-2.5">
-                          <button
-                            type="button"
-                            onClick={() => closeDesktopVideo(exampleVideoKey)}
-                            className="absolute right-3 top-3 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/80 bg-white/90 text-muted-foreground transition-colors hover:text-foreground"
-                            aria-label="Fechar vídeo"
+                        <div className="relative mt-2 overflow-hidden rounded-xl bg-black">
+                          <AspectRatio
+                            ratio={16 / 9}
+                            className={VIDEO_FRAME_CLASS}
                           >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-
-                          <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
                             <ExampleVideoPlayer
                               key={`${exampleVideoKey}-${example.video}`}
                               video={example.video}
-                              title=""
+                              title={videoTitle}
+                              autoPlay
                             />
                           </AspectRatio>
                         </div>
@@ -354,33 +344,23 @@ export default function ExamplesPanel({
 
       {mobileVideo?.video ? (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/45 px-[5px] py-6 backdrop-blur-md"
+          className="fixed inset-0 z-[9999] bg-black/80"
           role="dialog"
           aria-modal="true"
           aria-label="Vídeo do exemplo"
           onClick={closeMobileVideo}
         >
-          <button
-            type="button"
-            onClick={closeMobileVideo}
-            className="absolute right-3 top-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-foreground shadow-lg"
-            aria-label="Fechar vídeo"
-          >
-            <X className="h-5 w-5" />
-          </button>
-
           <div
-            className="relative w-full max-w-none"
+            className="absolute left-0 right-0 top-[calc(env(safe-area-inset-top,0px)+7.55vh)] aspect-[5/4] w-screen max-w-none overflow-hidden bg-black"
             onClick={(event) => event.stopPropagation()}
           >
-            <AspectRatio ratio={8 / 9} className={MOBILE_VIDEO_FRAME_CLASS}>
-              <ExampleVideoPlayer
-                key={mobileVideo?.key || "mobile-video"}
-                video={mobileVideo?.video || ""}
-                title=""
-                autoPlay
-              />
-            </AspectRatio>
+            <ExampleVideoPlayer
+              key={mobileVideo?.key || "mobile-video"}
+              video={mobileVideo?.video || ""}
+              title={mobileVideo?.title || ""}
+              autoPlay
+              layout="mobileMockup"
+            />
           </div>
         </div>
       ) : null}
