@@ -281,16 +281,31 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const [expandedMeanings, setExpandedMeanings] = useState(() => {
     if (item?.meanings?.length > 0) {
       return Object.fromEntries(
-        item.meanings.map((_, index) => [index, index === 0])
+        item.meanings.map((_, index) => [index, false])
       );
     }
 
     return { 0: true };
   });
 
-  const [expandedExamples, setExpandedExamples] = useState(() => ({
-    [getExampleKey(0, 0)]: true,
-  }));
+  const [expandedExamples, setExpandedExamples] = useState(() => {
+    if (item?.meanings?.length > 0) {
+      return item.meanings.reduce((acc, meaning, meaningIndex) => {
+        const examples =
+          meaning?.examples?.length > 0 ? meaning.examples : [{ ...emptyExample }];
+
+        examples.forEach((_, exampleIndex) => {
+          acc[getExampleKey(meaningIndex, exampleIndex)] = false;
+        });
+
+        return acc;
+      }, {});
+    }
+
+    return {
+      [getExampleKey(0, 0)]: true,
+    };
+  });
 
   const [saving, setSaving] = useState(false);
   const [videoEditor, setVideoEditor] = useState({ key: null, value: "" });
