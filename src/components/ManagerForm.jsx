@@ -64,6 +64,23 @@ const getR2UploadApiUrl = () => {
   return "/api/upload";
 };
 
+const getR2DeleteApiUrl = () => {
+  const customUrl = import.meta.env.VITE_R2_DELETE_API_URL;
+
+  if (customUrl) return customUrl;
+
+  const isLocalVite =
+    typeof window !== "undefined" &&
+    window.location.hostname === "localhost" &&
+    window.location.port === "5173";
+
+  if (isLocalVite) {
+    return "http://localhost:3000/api/delete-video";
+  }
+
+  return "/api/delete-video";
+};
+
 const normalizeExampleVideo = (example) => {
   const rawVideo =
     example?.video ?? example?.videoUrl ?? example?.video_url ?? "";
@@ -129,6 +146,43 @@ const uploadExampleVideoFile = async (file) => {
   }
 
   return prepareData.publicUrl;
+};
+
+const deleteExampleVideoFromR2 = async (videoUrl) => {
+  const cleanVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
+
+  if (!cleanVideoUrl) {
+    return {
+      deleted: false,
+      skipped: true,
+    };
+  }
+
+  const deleteResponse = await fetch(getR2DeleteApiUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      videoUrl: cleanVideoUrl,
+    }),
+  });
+
+  let deleteData = null;
+
+  try {
+    deleteData = await deleteResponse.json();
+  } catch {
+    deleteData = null;
+  }
+
+  if (!deleteResponse.ok) {
+    throw new Error(
+      deleteData?.error || "Não foi possível apagar o vídeo do Cloudflare R2."
+    );
+  }
+
+  return deleteData;
 };
 
 function UsFlagIcon({ className = "h-4 w-4" }) {
@@ -226,7 +280,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const [expandedMeanings, setExpandedMeanings] = useState(() => {
     if (item?.meanings?.length > 0) {
-      return Object.fromEntries(item.meanings.map((_, index) => [index, index === 0]));
+      return Object.fromEntries(
+        item.meanings.map((_, index) => [index, index === 0])
+      );
     }
 
     return { 0: true };
@@ -239,6 +295,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [videoEditor, setVideoEditor] = useState({ key: null, value: "" });
   const [uploadingVideoKey, setUploadingVideoKey] = useState(null);
+  const [deletingVideoKey, setDeletingVideoKey] = useState(null);
   const [videoUploadErrors, setVideoUploadErrors] = useState({});
 
   const toggleMeaningExpanded = (idx) => {
@@ -309,52 +366,76 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     }));
   };
 
-  const removeMeaning = (idx) => {
+  const removeMeaning = async (idx) => {
     if (meanings.length <= 1) return;
 
-    setMeanings(meanings.filter((_, i) => i !== idx));
+    const videosToDelete = meanings[idx].examples
+      .map((example) => normalizeExampleVideo(example))
+      .filter(Boolean);
 
-    setExpandedMeanings((current) => {
-      const next = {};
+    const meaningDeleteKey = `meaning-${idx}`;
 
-      meanings.forEach((_, currentIndex) => {
-        if (currentIndex === idx) return;
+    try {
+      setDeletingVideoKey(meaningDeleteKey);
 
-        const newIndex = currentIndex > idx ? currentIndex - 1 : currentIndex;
-        next[newIndex] = Boolean(current[currentIndex]);
-      });
+      for (const videoUrl of videosToDelete) {
+        await deleteExampleVideoFromR2(videoUrl);
+      }
 
-      return next;
-    });
+      setMeanings(meanings.filter((_, i) => i !== idx));
 
-    setExpandedExamples((current) => {
-      const next = {};
+      setExpandedMeanings((current) => {
+        const next = {};
 
-      meanings.forEach((meaning, currentMeaningIndex) => {
-        if (currentMeaningIndex === idx) return;
+        meanings.forEach((_, currentIndex) => {
+          if (currentIndex === idx) return;
 
-        const newMeaningIndex =
-          currentMeaningIndex > idx
-            ? currentMeaningIndex - 1
-            : currentMeaningIndex;
-
-        meaning.examples.forEach((_, exampleIndex) => {
-          const oldKey = getExampleKey(currentMeaningIndex, exampleIndex);
-          const newKey = getExampleKey(newMeaningIndex, exampleIndex);
-
-          next[newKey] = Boolean(current[oldKey]);
+          const newIndex = currentIndex > idx ? currentIndex - 1 : currentIndex;
+          next[newIndex] = Boolean(current[currentIndex]);
         });
+
+        return next;
       });
 
-      return next;
-    });
+      setExpandedExamples((current) => {
+        const next = {};
 
-    setVideoEditor((current) => {
-      if (current.key === null) return current;
+        meanings.forEach((meaning, currentMeaningIndex) => {
+          if (currentMeaningIndex === idx) return;
 
-      const [meaningIdx] = current.key.split("-").map(Number);
-      return meaningIdx === idx ? { key: null, value: "" } : current;
-    });
+          const newMeaningIndex =
+            currentMeaningIndex > idx
+              ? currentMeaningIndex - 1
+              : currentMeaningIndex;
+
+          meaning.examples.forEach((_, exampleIndex) => {
+            const oldKey = getExampleKey(currentMeaningIndex, exampleIndex);
+            const newKey = getExampleKey(newMeaningIndex, exampleIndex);
+
+            next[newKey] = Boolean(current[oldKey]);
+          });
+        });
+
+        return next;
+      });
+
+      setVideoEditor((current) => {
+        if (current.key === null) return current;
+
+        const [meaningIdx] = current.key.split("-").map(Number);
+        return meaningIdx === idx ? { key: null, value: "" } : current;
+      });
+    } catch (error) {
+      console.error("Erro ao apagar vídeos do significado no R2:", error);
+      alert(
+        error?.message ||
+          "Não foi possível apagar os vídeos deste significado no Cloudflare R2."
+      );
+    } finally {
+      setDeletingVideoKey((current) =>
+        current === meaningDeleteKey ? null : current
+      );
+    }
   };
 
   const addExample = (mIdx) => {
@@ -374,49 +455,74 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     }));
   };
 
-  const removeExample = (mIdx, eIdx) => {
-    const updated = [...meanings];
+  const removeExample = async (mIdx, eIdx) => {
+    const key = getExampleKey(mIdx, eIdx);
+    const videoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
 
-    updated[mIdx] = {
-      ...updated[mIdx],
-      examples: updated[mIdx].examples.filter((_, index) => index !== eIdx),
-    };
+    try {
+      setDeletingVideoKey(key);
+      setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
 
-    setMeanings(updated);
-
-    setExpandedExamples((current) => {
-      const next = {};
-
-      Object.entries(current).forEach(([key, value]) => {
-        const [meaningIdx, exampleIdx] = key.split("-").map(Number);
-
-        if (Number.isNaN(meaningIdx) || Number.isNaN(exampleIdx)) return;
-
-        if (meaningIdx !== mIdx) {
-          next[key] = value;
-          return;
-        }
-
-        if (exampleIdx === eIdx) return;
-
-        const nextExampleIdx = exampleIdx > eIdx ? exampleIdx - 1 : exampleIdx;
-        next[getExampleKey(mIdx, nextExampleIdx)] = value;
-      });
-
-      return next;
-    });
-
-    setVideoEditor((current) => {
-      if (current.key === null) return current;
-
-      const [meaningIdx, exampleIdx] = current.key.split("-").map(Number);
-
-      if (meaningIdx === mIdx && exampleIdx >= eIdx) {
-        return { key: null, value: "" };
+      if (videoValue) {
+        await deleteExampleVideoFromR2(videoValue);
       }
 
-      return current;
-    });
+      const updated = [...meanings];
+
+      updated[mIdx] = {
+        ...updated[mIdx],
+        examples: updated[mIdx].examples.filter((_, index) => index !== eIdx),
+      };
+
+      setMeanings(updated);
+
+      setExpandedExamples((current) => {
+        const next = {};
+
+        Object.entries(current).forEach(([currentKey, value]) => {
+          const [meaningIdx, exampleIdx] = currentKey.split("-").map(Number);
+
+          if (Number.isNaN(meaningIdx) || Number.isNaN(exampleIdx)) return;
+
+          if (meaningIdx !== mIdx) {
+            next[currentKey] = value;
+            return;
+          }
+
+          if (exampleIdx === eIdx) return;
+
+          const nextExampleIdx =
+            exampleIdx > eIdx ? exampleIdx - 1 : exampleIdx;
+
+          next[getExampleKey(mIdx, nextExampleIdx)] = value;
+        });
+
+        return next;
+      });
+
+      setVideoEditor((current) => {
+        if (current.key === null) return current;
+
+        const [meaningIdx, exampleIdx] = current.key.split("-").map(Number);
+
+        if (meaningIdx === mIdx && exampleIdx >= eIdx) {
+          return { key: null, value: "" };
+        }
+
+        return current;
+      });
+    } catch (error) {
+      console.error("Erro ao apagar vídeo do exemplo no R2:", error);
+
+      setVideoUploadErrors((current) => ({
+        ...current,
+        [key]:
+          error?.message ||
+          "Não foi possível apagar o vídeo deste exemplo no Cloudflare R2.",
+      }));
+    } finally {
+      setDeletingVideoKey((current) => (current === key ? null : current));
+    }
   };
 
   const openVideoEditor = (mIdx, eIdx, currentVideo) => {
@@ -437,26 +543,64 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     setVideoEditor({ key: null, value: "" });
   };
 
-  const saveExampleVideo = (mIdx, eIdx) => {
+  const saveExampleVideo = async (mIdx, eIdx) => {
+    const key = getExampleKey(mIdx, eIdx);
+    const oldVideoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
     const trimmedVideo = videoEditor.value.trim();
 
-    updateExample(mIdx, eIdx, "video", trimmedVideo);
-    closeVideoEditor();
+    try {
+      setDeletingVideoKey(key);
+      setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
+
+      if (oldVideoValue && oldVideoValue !== trimmedVideo) {
+        await deleteExampleVideoFromR2(oldVideoValue);
+      }
+
+      updateExample(mIdx, eIdx, "video", trimmedVideo);
+      closeVideoEditor();
+    } catch (error) {
+      console.error("Erro ao trocar vídeo do exemplo:", error);
+
+      setVideoUploadErrors((current) => ({
+        ...current,
+        [key]:
+          error?.message ||
+          "Não foi possível trocar o vídeo anterior no Cloudflare R2.",
+      }));
+    } finally {
+      setDeletingVideoKey((current) => (current === key ? null : current));
+    }
   };
 
-  const removeExampleVideo = (mIdx, eIdx) => {
-    updateExample(mIdx, eIdx, "video", "");
-
+  const removeExampleVideo = async (mIdx, eIdx) => {
     const key = getExampleKey(mIdx, eIdx);
+    const videoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
 
-    setVideoEditor((current) =>
-      current.key === key ? { key: null, value: "" } : current
-    );
+    try {
+      setDeletingVideoKey(key);
+      setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
 
-    setVideoUploadErrors((current) => ({
-      ...current,
-      [key]: "",
-    }));
+      if (videoValue) {
+        await deleteExampleVideoFromR2(videoValue);
+      }
+
+      updateExample(mIdx, eIdx, "video", "");
+
+      setVideoEditor((current) =>
+        current.key === key ? { key: null, value: "" } : current
+      );
+    } catch (error) {
+      console.error("Erro ao remover vídeo do exemplo:", error);
+
+      setVideoUploadErrors((current) => ({
+        ...current,
+        [key]:
+          error?.message ||
+          "Não foi possível apagar este vídeo no Cloudflare R2.",
+      }));
+    } finally {
+      setDeletingVideoKey((current) => (current === key ? null : current));
+    }
   };
 
   const triggerVideoFilePicker = (exampleKey) => {
@@ -476,6 +620,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     if (!file) return;
 
     const key = getExampleKey(mIdx, eIdx);
+    const oldVideoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
 
     if (!user?.id) {
       alert("Usuário não identificado.");
@@ -513,6 +658,23 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       setVideoEditor((current) =>
         current.key === key ? { ...current, value: uploadedVideoUrl } : current
       );
+
+      if (oldVideoValue && oldVideoValue !== uploadedVideoUrl) {
+        try {
+          await deleteExampleVideoFromR2(oldVideoValue);
+        } catch (deleteError) {
+          console.warn(
+            "Novo vídeo enviado, mas o vídeo anterior não foi apagado:",
+            deleteError
+          );
+
+          setVideoUploadErrors((current) => ({
+            ...current,
+            [key]:
+              "Novo vídeo enviado, mas não foi possível apagar o vídeo anterior do R2.",
+          }));
+        }
+      }
     } catch (error) {
       console.error("Erro ao enviar vídeo do exemplo para o R2:", error);
 
@@ -666,6 +828,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
             {meanings.map((m, mIdx) => {
               const isExpanded = Boolean(expandedMeanings[mIdx]);
               const meaningTitle = m.meaning.trim();
+              const isDeletingMeaning = deletingVideoKey === `meaning-${mIdx}`;
 
               return (
                 <div
@@ -698,8 +861,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                       {meanings.length > 1 ? (
                         <button
                           type="button"
-                          onClick={() => removeMeaning(mIdx)}
-                          className="rounded-lg p-1.5 transition-colors hover:bg-red-50"
+                          onClick={() => void removeMeaning(mIdx)}
+                          disabled={isDeletingMeaning}
+                          className="rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
                           aria-label={`Remover significado ${mIdx + 1}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -779,6 +943,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             );
                             const isUploadingVideo =
                               uploadingVideoKey === exampleKey;
+                            const isDeletingVideo =
+                              deletingVideoKey === exampleKey;
                             const videoUploadError =
                               videoUploadErrors[exampleKey] || "";
 
@@ -809,9 +975,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        removeExample(mIdx, eIdx)
+                                        void removeExample(mIdx, eIdx)
                                       }
-                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive"
+                                      disabled={isDeletingVideo}
+                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
                                       aria-label={`Remover exemplo ${eIdx + 1}`}
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -945,14 +1112,17 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                             <button
                                               type="button"
                                               onClick={() =>
-                                                saveExampleVideo(mIdx, eIdx)
+                                                void saveExampleVideo(mIdx, eIdx)
                                               }
                                               disabled={
-                                                !videoEditor.value.trim()
+                                                !videoEditor.value.trim() ||
+                                                isDeletingVideo
                                               }
                                               className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                                             >
-                                              {hasVideo
+                                              {isDeletingVideo
+                                                ? "Salvando..."
+                                                : hasVideo
                                                 ? "Salvar vídeo"
                                                 : "Anexar vídeo"}
                                             </button>
@@ -960,7 +1130,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                             <button
                                               type="button"
                                               onClick={closeVideoEditor}
-                                              className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted"
+                                              disabled={isDeletingVideo}
+                                              className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
                                             >
                                               Cancelar
                                             </button>
@@ -977,7 +1148,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                                 videoValue
                                               )
                                             }
-                                            className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted"
+                                            disabled={isDeletingVideo}
+                                            className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
                                           >
                                             {hasVideo
                                               ? "Trocar vídeo"
@@ -1009,7 +1181,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                             onClick={() =>
                                               triggerVideoFilePicker(exampleKey)
                                             }
-                                            disabled={isUploadingVideo}
+                                            disabled={
+                                              isUploadingVideo || isDeletingVideo
+                                            }
                                             className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
                                           >
                                             <Upload className="h-3 w-3" />
@@ -1024,11 +1198,17 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                             <button
                                               type="button"
                                               onClick={() =>
-                                                removeExampleVideo(mIdx, eIdx)
+                                                void removeExampleVideo(
+                                                  mIdx,
+                                                  eIdx
+                                                )
                                               }
-                                              className="rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50"
+                                              disabled={isDeletingVideo}
+                                              className="rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
                                             >
-                                              Remover vídeo
+                                              {isDeletingVideo
+                                                ? "Removendo..."
+                                                : "Remover vídeo"}
                                             </button>
                                           ) : null}
                                         </div>
