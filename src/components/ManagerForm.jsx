@@ -33,7 +33,7 @@ const categories = [
   "collocation",
 ];
 
-const emptyExample = { sentence: "", translation: "", video: "" };
+const emptyExample = { sentence: "", translation: "", video: "", thumbnail: "" };
 
 const emptyMeaning = {
   meaning: "",
@@ -41,7 +41,6 @@ const emptyMeaning = {
   tip: "",
   examples: [{ ...emptyExample }],
 };
-
 
 const meaningAccentPalette = [
   { bar: "#EF4444", soft: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.24)" },
@@ -98,6 +97,16 @@ const normalizeExampleVideo = (example) => {
   return typeof rawVideo === "string" ? rawVideo.trim() : "";
 };
 
+const normalizeExampleThumbnail = (example) => {
+  const rawThumbnail =
+    example?.thumbnail ??
+    example?.thumbnailUrl ??
+    example?.thumbnail_url ??
+    "";
+
+  return typeof rawThumbnail === "string" ? rawThumbnail.trim() : "";
+};
+
 const hasExampleContent = (example) => {
   const sentence =
     typeof example?.sentence === "string" ? example.sentence.trim() : "";
@@ -109,6 +118,174 @@ const hasExampleContent = (example) => {
 
   return Boolean(sentence || translation || video);
 };
+
+const createVideoThumbnailFromFile = async (file) =>
+  new Promise((resolve) => {
+    if (!file || typeof window === "undefined") {
+      resolve("");
+      return;
+    }
+
+    let settled = false;
+    let objectUrl = "";
+    let timer = null;
+
+    const video = document.createElement("video");
+
+    const finish = (value = "") => {
+      if (settled) return;
+
+      settled = true;
+
+      if (timer) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load?.();
+
+        if (video.parentNode) {
+          video.parentNode.removeChild(video);
+        }
+
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+      } catch {
+        // noop
+      }
+
+      resolve(value);
+    };
+
+    const drawFrame = () => {
+      if (settled) return;
+
+      try {
+        const sourceWidth = video.videoWidth || 640;
+        const sourceHeight = video.videoHeight || 360;
+
+        if (!sourceWidth || !sourceHeight) {
+          finish("");
+          return;
+        }
+
+        const maxWidth = 560;
+        const ratio = sourceHeight / sourceWidth;
+        const canvasWidth = Math.min(maxWidth, sourceWidth);
+        const canvasHeight = Math.max(1, Math.round(canvasWidth * ratio));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        const context = canvas.getContext("2d");
+
+        if (!context) {
+          finish("");
+          return;
+        }
+
+        context.drawImage(video, 0, 0, canvasWidth, canvasHeight);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        finish(dataUrl);
+      } catch {
+        finish("");
+      }
+    };
+
+    const seekToMiddleFrame = () => {
+      if (settled) return;
+
+      const duration =
+        Number.isFinite(video.duration) && video.duration > 0
+          ? video.duration
+          : 0;
+
+      if (!duration) {
+        window.requestAnimationFrame(drawFrame);
+        return;
+      }
+
+      const targetTime =
+        duration > 1
+          ? Math.min(Math.max(0.15, duration * 0.5), duration - 0.1)
+          : 0.15;
+
+      try {
+        video.currentTime = targetTime;
+      } catch {
+        window.requestAnimationFrame(drawFrame);
+      }
+    };
+
+    try {
+      objectUrl = URL.createObjectURL(file);
+
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.src = objectUrl;
+
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+
+      video.style.position = "fixed";
+      video.style.left = "-9999px";
+      video.style.top = "-9999px";
+      video.style.width = "1px";
+      video.style.height = "1px";
+      video.style.opacity = "0";
+      video.style.pointerEvents = "none";
+
+      document.body.appendChild(video);
+
+      timer = window.setTimeout(() => {
+        finish("");
+      }, 9000);
+
+      video.addEventListener("loadedmetadata", seekToMiddleFrame, {
+        once: true,
+      });
+
+      video.addEventListener(
+        "seeked",
+        () => {
+          window.requestAnimationFrame(drawFrame);
+        },
+        { once: true }
+      );
+
+      video.addEventListener(
+        "loadeddata",
+        () => {
+          if (
+            !settled &&
+            (!Number.isFinite(video.duration) || video.duration <= 0)
+          ) {
+            window.requestAnimationFrame(drawFrame);
+          }
+        },
+        { once: true }
+      );
+
+      video.addEventListener(
+        "error",
+        () => {
+          finish("");
+        },
+        { once: true }
+      );
+
+      video.load();
+    } catch {
+      finish("");
+    }
+  });
 
 const uploadExampleVideoFile = async (file) => {
   const contentType = file.type || "video/mp4";
@@ -282,6 +459,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                   sentence: e?.sentence || "",
                   translation: e?.translation || "",
                   video: normalizeExampleVideo(e),
+                  thumbnail: normalizeExampleThumbnail(e),
                 }))
               : [{ ...emptyExample }],
         }))
@@ -357,6 +535,23 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     examples[eIdx] = {
       ...examples[eIdx],
       [field]: value,
+    };
+
+    updated[mIdx] = {
+      ...updated[mIdx],
+      examples,
+    };
+
+    setMeanings(updated);
+  };
+
+  const updateExampleFields = (mIdx, eIdx, fields) => {
+    const updated = [...meanings];
+    const examples = [...updated[mIdx].examples];
+
+    examples[eIdx] = {
+      ...examples[eIdx],
+      ...fields,
     };
 
     updated[mIdx] = {
@@ -581,7 +776,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         await deleteExampleVideoFromR2(oldVideoValue);
       }
 
-      updateExample(mIdx, eIdx, "video", trimmedVideo);
+      updateExampleFields(mIdx, eIdx, {
+        video: trimmedVideo,
+        thumbnail: "",
+      });
+
       closeVideoEditor();
     } catch (error) {
       console.error("Erro ao trocar vídeo do exemplo:", error);
@@ -609,7 +808,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         await deleteExampleVideoFromR2(videoValue);
       }
 
-      updateExample(mIdx, eIdx, "video", "");
+      updateExampleFields(mIdx, eIdx, {
+        video: "",
+        thumbnail: "",
+      });
 
       setVideoEditor((current) =>
         current.key === key ? { key: null, value: "" } : current
@@ -676,9 +878,15 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       setUploadingVideoKey(key);
       setVideoUploadErrors((current) => ({ ...current, [key]: "" }));
 
-      const uploadedVideoUrl = await uploadExampleVideoFile(file);
+      const [uploadedVideoUrl, generatedThumbnail] = await Promise.all([
+        uploadExampleVideoFile(file),
+        createVideoThumbnailFromFile(file),
+      ]);
 
-      updateExample(mIdx, eIdx, "video", uploadedVideoUrl);
+      updateExampleFields(mIdx, eIdx, {
+        video: uploadedVideoUrl,
+        thumbnail: generatedThumbnail || "",
+      });
 
       setVideoEditor((current) =>
         current.key === key ? { ...current, value: uploadedVideoUrl } : current
@@ -733,13 +941,20 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           category: m.category,
           tip: m.tip.trim(),
           examples: m.examples
-            .map((e) => ({
-              sentence:
-                typeof e?.sentence === "string" ? e.sentence.trim() : "",
-              translation:
-                typeof e?.translation === "string" ? e.translation.trim() : "",
-              video: normalizeExampleVideo(e),
-            }))
+            .map((e) => {
+              const video = normalizeExampleVideo(e);
+
+              return {
+                sentence:
+                  typeof e?.sentence === "string" ? e.sentence.trim() : "",
+                translation:
+                  typeof e?.translation === "string"
+                    ? e.translation.trim()
+                    : "",
+                video,
+                thumbnail: video ? normalizeExampleThumbnail(e) : "",
+              };
+            })
             .filter(hasExampleContent),
         }))
         .filter((m) => m.meaning);

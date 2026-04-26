@@ -181,6 +181,44 @@ const isSupabaseStorageUrl = (url) =>
       url?.pathname?.includes("/storage/v1/object/")
   );
 
+const isCloudflareR2Url = (url) => {
+  const hostname = String(url?.hostname || "")
+    .replace(/^www\./, "")
+    .toLowerCase();
+
+  return (
+    hostname.endsWith(".r2.dev") ||
+    hostname.endsWith(".r2.cloudflarestorage.com") ||
+    hostname.includes(".r2.cloudflarestorage.com")
+  );
+};
+
+const isLikelyVideoByContentType = async (value) => {
+  const safeUrl = getSafeHttpUrl(value);
+  if (!safeUrl || typeof fetch !== "function") return false;
+
+  try {
+    const response = await fetch(safeUrl, {
+      method: "HEAD",
+      mode: "cors",
+      cache: "no-store",
+    });
+
+    const contentType = String(response.headers.get("content-type") || "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
+
+    return (
+      contentType.startsWith("video/") ||
+      contentType === "application/vnd.apple.mpegurl" ||
+      contentType === "application/x-mpegurl"
+    );
+  } catch {
+    return false;
+  }
+};
+
 const extractIframeSrc = (value) => {
   const rawValue = decodeHtmlEntities(value).trim();
   if (!rawValue) return "";
@@ -389,7 +427,7 @@ const getKnownEmbedUrl = (url) =>
   getClipCafeEmbedUrl(url) ||
   getPlayPhraseEmbedUrl(url);
 
-const buildPlaybackConfig = (originalValue, resolvedValue) => {
+const buildPlaybackConfig = async (originalValue, resolvedValue) => {
   const rawOriginal = typeof originalValue === "string" ? originalValue.trim() : "";
   const normalizedOriginal = normalizeExampleVideoInput(rawOriginal);
   const normalizedResolved = normalizeExampleVideoInput(resolvedValue);
@@ -426,7 +464,11 @@ const buildPlaybackConfig = (originalValue, resolvedValue) => {
     };
   }
 
-  if (isDirectVideoSource(playableValue) || isSupabaseStorageUrl(parsedUrl)) {
+  if (
+    isDirectVideoSource(playableValue) ||
+    isSupabaseStorageUrl(parsedUrl) ||
+    isCloudflareR2Url(parsedUrl)
+  ) {
     return {
       type: "video",
       src: playableValue,
@@ -437,7 +479,38 @@ const buildPlaybackConfig = (originalValue, resolvedValue) => {
 
   if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
     const knownEmbedUrl = getKnownEmbedUrl(parsedUrl);
-    const iframeSrc = getSafeHttpUrl(knownEmbedUrl || playableValue);
+
+    if (knownEmbedUrl) {
+      const iframeSrc = getSafeHttpUrl(knownEmbedUrl);
+
+      if (!iframeSrc) {
+        return {
+          type: "fallback",
+          originalUrl: rawOriginal,
+          openUrl: fallbackOpenUrl,
+        };
+      }
+
+      return {
+        type: "iframe",
+        src: iframeSrc,
+        originalUrl: rawOriginal,
+        openUrl: getSafeHttpUrl(playableValue) || fallbackOpenUrl,
+      };
+    }
+
+    const isVideoByContentType = await isLikelyVideoByContentType(playableValue);
+
+    if (isVideoByContentType) {
+      return {
+        type: "video",
+        src: playableValue,
+        originalUrl: rawOriginal,
+        openUrl: playableValue,
+      };
+    }
+
+    const iframeSrc = getSafeHttpUrl(playableValue);
 
     if (!iframeSrc) {
       return {
@@ -477,7 +550,7 @@ export const resolveExampleVideoPlayback = async (value) => {
 
   try {
     const resolvedSource = await resolveExampleVideoSource(normalizedValue);
-    return buildPlaybackConfig(rawValue, resolvedSource);
+    return await buildPlaybackConfig(rawValue, resolvedSource);
   } catch (error) {
     console.error("Nao foi possivel resolver o video do exemplo:", error);
 
