@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Lightbulb, Play, X } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
@@ -13,6 +13,8 @@ const VIDEO_FRAME_CLASS =
   "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-contain";
 
 const videoThumbnailCache = new Map();
+
+const DESCENDER_CHAR_REGEX = /[gjpqy]/;
 
 const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -39,6 +41,59 @@ const hasExampleContent = (example) => {
   const video = normalizeExampleVideo(example);
 
   return Boolean(sentence || translation || video);
+};
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const renderUnderlineSequence = (value, keyPrefix) =>
+  Array.from(value).map((char, index) => {
+    const isDescender = DESCENDER_CHAR_REGEX.test(char);
+    const isSpace = char === " ";
+
+    return (
+      <span
+        key={`${keyPrefix}-${index}`}
+        style={{
+          display: "inline-block",
+          paddingBottom: "0.1em",
+          boxShadow: isDescender ? "none" : "inset 0 -1px 0 #ED9A0A",
+          lineHeight: "inherit",
+          verticalAlign: "baseline",
+        }}
+      >
+        {isSpace ? "\u00A0" : char}
+      </span>
+    );
+  });
+
+const renderHighlightedTerm = (text, term) => {
+  const safeText = typeof text === "string" ? text : "";
+  const safeTerm = typeof term === "string" ? term.trim() : "";
+
+  if (!safeText || !safeTerm) {
+    return safeText;
+  }
+
+  const pattern = new RegExp(`(${escapeRegExp(safeTerm)})`, "gi");
+  const parts = safeText.split(pattern);
+
+  if (parts.length <= 1) {
+    return safeText;
+  }
+
+  return parts.map((part, index) => {
+    const isMatch = part.toLowerCase() === safeTerm.toLowerCase();
+
+    if (!isMatch) {
+      return <Fragment key={`${part}-${index}`}>{part}</Fragment>;
+    }
+
+    return (
+      <Fragment key={`${part}-${index}`}>
+        {renderUnderlineSequence(part, `${part}-${index}`)}
+      </Fragment>
+    );
+  });
 };
 
 function ExampleVideoThumbnail({
@@ -380,6 +435,7 @@ export default function ExamplesPanel({
 
   const isFlashcard = variant === "flashcard";
   const titleValue = titleTerm ? titleTerm.trim() : "Exemplos";
+  const highlightTerm = titleTerm ? titleTerm.trim() : "";
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -530,7 +586,7 @@ export default function ExamplesPanel({
                   <div className="min-w-0">
                     <div
                       className={[
-                        "flex flex-wrap items-center gap-2",
+                        "mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b border-[#E6EDF5] pb-1.5",
                         isFirstVideoOpen ? "mb-1.5" : "mb-2",
                       ].join(" ")}
                     >
@@ -580,15 +636,18 @@ export default function ExamplesPanel({
                                 ].join(" ")}
                               >
                                 <div className="min-w-0">
-                                  {hasSentence ? (
-                                    <p className="text-sm font-semibold leading-snug text-[#0b0e14]">
-                                      {example.sentence}
-                                    </p>
-                                  ) : null}
-
                                   {hasTranslation ? (
                                     <p className="text-xs font-medium leading-snug text-[#758195]">
                                       {example.translation}
+                                    </p>
+                                  ) : null}
+
+                                  {hasSentence ? (
+                                    <p className="text-sm font-semibold leading-snug text-[#0b0e14]">
+                                      {renderHighlightedTerm(
+                                        example.sentence,
+                                        highlightTerm
+                                      )}
                                     </p>
                                   ) : null}
                                 </div>
@@ -640,10 +699,14 @@ export default function ExamplesPanel({
                 </div>
 
                 {entry.tip && !isFirstVideoOpen ? (
-                  <p className="mt-3 flex items-start gap-1.5 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-1.5 text-xs italic text-muted-foreground">
-                    <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ED9A0A]" />
-                    <span>{entry.tip}</span>
-                  </p>
+                  <div className="mt-3">
+                    <div className="inline-flex max-w-full items-start gap-1.5 border-b border-[#E6EDF5] pb-1">
+                      <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ED9A0A]" />
+                      <span className="min-w-0 text-xs italic leading-relaxed text-muted-foreground">
+                        {entry.tip}
+                      </span>
+                    </div>
+                  </div>
                 ) : null}
 
                 {!isMobile && firstVideoExample && isFirstVideoOpen ? (
