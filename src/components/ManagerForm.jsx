@@ -7,6 +7,7 @@ import {
   Hash,
   Languages,
   Lightbulb,
+  Play,
   Plus,
   Trash2,
   Upload,
@@ -43,13 +44,42 @@ const emptyMeaning = {
 };
 
 const meaningAccentPalette = [
-  { bar: "#EF4444", soft: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.24)" },
-  { bar: "#14B8A6", soft: "rgba(20, 184, 166, 0.08)", border: "rgba(20, 184, 166, 0.24)" },
-  { bar: "#F59E0B", soft: "rgba(245, 158, 11, 0.09)", border: "rgba(245, 158, 11, 0.26)" },
-  { bar: "#3B82F6", soft: "rgba(59, 130, 246, 0.08)", border: "rgba(59, 130, 246, 0.24)" },
-  { bar: "#8B5CF6", soft: "rgba(139, 92, 246, 0.08)", border: "rgba(139, 92, 246, 0.24)" },
-  { bar: "#EC4899", soft: "rgba(236, 72, 153, 0.08)", border: "rgba(236, 72, 153, 0.24)" },
+  {
+    bar: "#EF4444",
+    soft: "rgba(239, 68, 68, 0.08)",
+    border: "rgba(239, 68, 68, 0.24)",
+  },
+  {
+    bar: "#14B8A6",
+    soft: "rgba(20, 184, 166, 0.08)",
+    border: "rgba(20, 184, 166, 0.24)",
+  },
+  {
+    bar: "#F59E0B",
+    soft: "rgba(245, 158, 11, 0.09)",
+    border: "rgba(245, 158, 11, 0.26)",
+  },
+  {
+    bar: "#3B82F6",
+    soft: "rgba(59, 130, 246, 0.08)",
+    border: "rgba(59, 130, 246, 0.24)",
+  },
+  {
+    bar: "#8B5CF6",
+    soft: "rgba(139, 92, 246, 0.08)",
+    border: "rgba(139, 92, 246, 0.24)",
+  },
+  {
+    bar: "#EC4899",
+    soft: "rgba(236, 72, 153, 0.08)",
+    border: "rgba(236, 72, 153, 0.24)",
+  },
 ];
+
+const emptyMeaningAccent = {
+  bar: "#B91C1C",
+  border: "rgba(239, 68, 68, 0.55)",
+};
 
 const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024;
 const VIDEO_MIME_PREFIX = "video/";
@@ -90,6 +120,9 @@ const getR2DeleteApiUrl = () => {
   return "/api/delete-video";
 };
 
+const normalizeExampleText = (value) =>
+  typeof value === "string" ? value.trim() : "";
+
 const normalizeExampleVideo = (example) => {
   const rawVideo =
     example?.video ?? example?.videoUrl ?? example?.video_url ?? "";
@@ -108,12 +141,8 @@ const normalizeExampleThumbnail = (example) => {
 };
 
 const hasExampleContent = (example) => {
-  const sentence =
-    typeof example?.sentence === "string" ? example.sentence.trim() : "";
-
-  const translation =
-    typeof example?.translation === "string" ? example.translation.trim() : "";
-
+  const sentence = normalizeExampleText(example?.sentence);
+  const translation = normalizeExampleText(example?.translation);
   const video = normalizeExampleVideo(example);
 
   return Boolean(sentence || translation || video);
@@ -429,13 +458,89 @@ function FieldLabel({ children, icon }) {
   );
 }
 
-function ExampleVideoPreview({ video }) {
+function MeaningLanguageLabel() {
+  return (
+    <label
+      className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground"
+      aria-label="Significado em português"
+    >
+      <Languages className="h-4 w-4 text-primary" />
+      <BrFlagIcon />
+      <span className="sr-only">Significado em português</span>
+    </label>
+  );
+}
+
+function ExampleLanguageLabel({ flag, code }) {
+  return (
+    <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+      {flag}
+      <span className="font-bold text-[#14181F]">Sig.</span>
+      <span className="font-normal text-[#6A7181]">—</span>
+      <span className="font-bold text-[#14181F]">{code}</span>
+    </label>
+  );
+}
+
+function ExampleVideoPreview({ video, thumbnail, isActive, onPlay }) {
   if (!video) return null;
 
+  const thumbnailSrc = typeof thumbnail === "string" ? thumbnail.trim() : "";
+
+  if (isActive) {
+    return (
+      <div className="aspect-video overflow-hidden rounded-xl bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)]">
+        <ExampleVideoPlayer
+          video={video}
+          autoPlay
+          layout="compact"
+          controlsMode="compact"
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-2 aspect-video overflow-hidden rounded-xl bg-black">
-      <ExampleVideoPlayer video={video} />
-    </div>
+    <button
+      type="button"
+      onClick={onPlay}
+      className={[
+        "group relative aspect-video w-full overflow-hidden rounded-xl border border-[#D9E2EC]",
+        "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)]",
+        "transition-all duration-200 hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
+      ].join(" ")}
+      aria-label="Reproduzir vídeo do exemplo"
+      title="Reproduzir vídeo do exemplo"
+    >
+      {thumbnailSrc ? (
+        <img
+          src={thumbnailSrc}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(237,154,10,0.18),transparent_32%),linear-gradient(135deg,#F8FAFC_0%,#EFF4F8_55%,#E6EDF5_100%)]" />
+      )}
+
+      <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
+      <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
+
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className={[
+            "flex h-11 w-11 items-center justify-center rounded-full",
+            "border border-white/70 bg-white/55",
+            "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
+            "backdrop-blur-md transition-all duration-200",
+            "group-hover:scale-105 group-hover:bg-white/72",
+          ].join(" ")}
+        >
+          <Play className="ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -480,7 +585,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     if (item?.meanings?.length > 0) {
       return item.meanings.reduce((acc, meaning, meaningIndex) => {
         const examples =
-          meaning?.examples?.length > 0 ? meaning.examples : [{ ...emptyExample }];
+          meaning?.examples?.length > 0
+            ? meaning.examples
+            : [{ ...emptyExample }];
 
         examples.forEach((_, exampleIndex) => {
           acc[getExampleKey(meaningIndex, exampleIndex)] = false;
@@ -500,8 +607,15 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const [uploadingVideoKey, setUploadingVideoKey] = useState(null);
   const [deletingVideoKey, setDeletingVideoKey] = useState(null);
   const [videoUploadErrors, setVideoUploadErrors] = useState({});
+  const [activeVideoPreviewKey, setActiveVideoPreviewKey] = useState(null);
+
+  const resetActiveVideoPreview = () => {
+    setActiveVideoPreviewKey(null);
+  };
 
   const toggleMeaningExpanded = (idx) => {
+    resetActiveVideoPreview();
+
     setExpandedMeanings((current) => ({
       ...current,
       [idx]: !current[idx],
@@ -510,6 +624,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const toggleExampleExpanded = (mIdx, eIdx) => {
     const key = getExampleKey(mIdx, eIdx);
+
+    resetActiveVideoPreview();
 
     setExpandedExamples((current) => ({
       ...current,
@@ -565,6 +681,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const addMeaning = () => {
     const nextIndex = meanings.length;
 
+    resetActiveVideoPreview();
+
     setMeanings([
       ...meanings,
       {
@@ -577,17 +695,19 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
     setExpandedMeanings((current) => ({
       ...current,
-      [nextIndex]: true,
+      [nextIndex]: false,
     }));
 
     setExpandedExamples((current) => ({
       ...current,
-      [getExampleKey(nextIndex, 0)]: true,
+      [getExampleKey(nextIndex, 0)]: false,
     }));
   };
 
   const removeMeaning = async (idx) => {
     if (meanings.length <= 1) return;
+
+    resetActiveVideoPreview();
 
     const videosToDelete = meanings[idx].examples
       .map((example) => normalizeExampleVideo(example))
@@ -662,6 +782,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     const updated = [...meanings];
     const nextExampleIndex = updated[mIdx].examples.length;
 
+    resetActiveVideoPreview();
+
     updated[mIdx] = {
       ...updated[mIdx],
       examples: [...updated[mIdx].examples, { ...emptyExample }],
@@ -678,6 +800,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const removeExample = async (mIdx, eIdx) => {
     const key = getExampleKey(mIdx, eIdx);
     const videoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
+
+    resetActiveVideoPreview();
 
     try {
       setDeletingVideoKey(key);
@@ -748,6 +872,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const openVideoEditor = (mIdx, eIdx, currentVideo) => {
     const key = getExampleKey(mIdx, eIdx);
 
+    resetActiveVideoPreview();
+
     setVideoEditor({
       key,
       value: typeof currentVideo === "string" ? currentVideo : "",
@@ -767,6 +893,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     const key = getExampleKey(mIdx, eIdx);
     const oldVideoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
     const trimmedVideo = videoEditor.value.trim();
+
+    resetActiveVideoPreview();
 
     try {
       setDeletingVideoKey(key);
@@ -799,6 +927,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const removeExampleVideo = async (mIdx, eIdx) => {
     const key = getExampleKey(mIdx, eIdx);
     const videoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
+
+    resetActiveVideoPreview();
 
     try {
       setDeletingVideoKey(key);
@@ -848,6 +978,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
     const key = getExampleKey(mIdx, eIdx);
     const oldVideoValue = normalizeExampleVideo(meanings[mIdx]?.examples?.[eIdx]);
+
+    resetActiveVideoPreview();
 
     if (!user?.id) {
       alert("Usuário não identificado.");
@@ -945,12 +1077,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               const video = normalizeExampleVideo(e);
 
               return {
-                sentence:
-                  typeof e?.sentence === "string" ? e.sentence.trim() : "",
-                translation:
-                  typeof e?.translation === "string"
-                    ? e.translation.trim()
-                    : "",
+                sentence: normalizeExampleText(e?.sentence),
+                translation: normalizeExampleText(e?.translation),
                 video,
                 thumbnail: video ? normalizeExampleThumbnail(e) : "",
               };
@@ -1011,6 +1139,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   return (
     <div className="mx-auto max-w-5xl">
       <button
+        type="button"
         onClick={onBack}
         className="mb-4 flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
       >
@@ -1037,6 +1166,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
           <div className="mt-2 flex items-center gap-1.5 pl-0 text-sm italic text-[#6A7181]">
             <Volume2 className="h-3.5 w-3.5 shrink-0" />
+
             <span className="font-medium">Pronúncia:</span>
 
             <input
@@ -1068,62 +1198,77 @@ export default function ManagerForm({ item, onBack, onSaved }) {
             {meanings.map((m, mIdx) => {
               const isExpanded = Boolean(expandedMeanings[mIdx]);
               const meaningTitle = m.meaning.trim();
+              const isMeaningEmpty = !meaningTitle;
+              const meaningDisplayTitle = meaningTitle || "Significado vazio";
               const isDeletingMeaning = deletingVideoKey === `meaning-${mIdx}`;
               const meaningAccent =
                 meaningAccentPalette[mIdx % meaningAccentPalette.length];
+              const meaningBorderColor = isMeaningEmpty
+                ? emptyMeaningAccent.border
+                : meaningAccent.border;
 
               return (
                 <div
                   key={mIdx}
-                  className="relative overflow-hidden rounded-2xl border bg-card shadow-sm"
-                  style={{ borderColor: meaningAccent.border }}
+                  className="overflow-hidden rounded-2xl border bg-white shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
+                  style={{ borderColor: meaningBorderColor }}
                 >
                   <div
-                    aria-hidden="true"
-                    className="absolute inset-y-0 left-0 w-2"
-                    style={{ backgroundColor: meaningAccent.bar }}
-                  />
-
-                  <div
-                    className="flex items-center justify-between gap-4 border-b border-border/70 bg-primary/5 py-3 pl-7 pr-5"
-                    style={{ borderColor: meaningAccent.border }}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleMeaningExpanded(mIdx)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        toggleMeaningExpanded(mIdx);
+                      }
+                    }}
+                    className="flex cursor-pointer items-stretch justify-between gap-4 border-b border-border/70 bg-white px-5 py-4 transition-colors hover:bg-[#F8FAFC]"
+                    style={{ borderColor: meaningBorderColor }}
+                    aria-expanded={isExpanded}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggleMeaningExpanded(mIdx)}
-                      className="min-w-0 flex flex-1 items-start gap-2 text-left"
-                      aria-expanded={isExpanded}
-                    >
+                    <div className="min-w-0 flex flex-1 items-center gap-2 text-left">
                       {isExpanded ? (
-                        <ChevronUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
                       ) : (
-                        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                       )}
 
-                      <span className="min-w-0 flex flex-wrap items-baseline gap-x-1 gap-y-0.5 leading-snug">
-                        <span className="shrink-0 text-sm font-normal text-muted-foreground">
+                      <span className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 leading-snug">
+                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
                           Sig.
                         </span>
 
-                        <span className="shrink-0 text-sm font-normal text-muted-foreground">
+                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
                           —
                         </span>
 
                         <span
-                          className="min-w-0 break-words text-base font-bold leading-snug text-foreground"
-                          style={{ overflowWrap: "anywhere" }}
+                          className="min-w-0 break-words text-base font-bold leading-snug"
+                          style={{
+                            color: isMeaningEmpty
+                              ? emptyMeaningAccent.bar
+                              : "#14181F",
+                            overflowWrap: "anywhere",
+                          }}
                         >
-                          {meaningTitle || "ainda sem nome"}
+                          {meaningDisplayTitle}
                         </span>
                       </span>
-                    </button>
+                    </div>
 
                     {meanings.length > 1 ? (
                       <button
                         type="button"
-                        onClick={() => void removeMeaning(mIdx)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void removeMeaning(mIdx);
+                        }}
+                        onKeyDown={(event) => {
+                          event.stopPropagation();
+                        }}
                         disabled={isDeletingMeaning}
-                        className="rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
+                        className="self-center rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
                         aria-label={`Remover significado ${mIdx + 1}`}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -1132,26 +1277,87 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                   </div>
 
                   {isExpanded ? (
-                    <div className="space-y-4 py-5 pl-7 pr-5">
-                      <div>
-                        <FieldLabel
-                          icon={<Languages className="h-4 w-4 text-primary" />}
-                        >
-                          Significado em português
-                        </FieldLabel>
+                    <div className="space-y-4 p-4">
+                      <div className="rounded-xl border border-[#DCE4EE] bg-white p-4">
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <span
+                            className="font-bold"
+                            style={{
+                              color: isMeaningEmpty
+                                ? emptyMeaningAccent.bar
+                                : meaningAccent.bar,
+                            }}
+                          >
+                            {mIdx + 1}.
+                          </span>
 
-                        <input
-                          type="text"
-                          value={m.meaning}
-                          onChange={(e) =>
-                            updateMeaning(mIdx, "meaning", e.target.value)
-                          }
-                          placeholder="Significado em português"
-                          className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        />
+                          <span
+                            className="text-base font-bold"
+                            style={{
+                              color: isMeaningEmpty
+                                ? emptyMeaningAccent.bar
+                                : "#181818",
+                            }}
+                          >
+                            {meaningDisplayTitle}
+                          </span>
+
+                          <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                            {m.category}
+                          </span>
+                        </div>
+
+                        <div className="border-l-2 border-[#CBD5E1] pl-4">
+                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                            <div>
+                              <MeaningLanguageLabel />
+
+                              <input
+                                type="text"
+                                value={m.meaning}
+                                onChange={(e) =>
+                                  updateMeaning(mIdx, "meaning", e.target.value)
+                                }
+                                placeholder="Significado em português"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="none"
+                                spellCheck={false}
+                                name={`meaning-field-${mIdx}`}
+                                inputMode="text"
+                                className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-[#181818] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+                                <Hash className="h-3.5 w-3.5 text-primary" />
+                                <span>Tag</span>
+                              </label>
+
+                              <select
+                                value={m.category}
+                                onChange={(e) =>
+                                  updateMeaning(
+                                    mIdx,
+                                    "category",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm font-semibold transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              >
+                                {categories.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="pt-1">
+                      <div className="rounded-xl border border-[#DCE4EE] bg-white p-4">
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <span className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">
                             Exemplos
@@ -1179,6 +1385,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             const isEditingVideo =
                               videoEditor.key === exampleKey;
                             const videoValue = normalizeExampleVideo(ex);
+                            const thumbnailValue =
+                              normalizeExampleThumbnail(ex);
                             const hasVideo = Boolean(videoValue);
                             const isExampleExpanded = Boolean(
                               expandedExamples[exampleKey]
@@ -1189,50 +1397,72 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               deletingVideoKey === exampleKey;
                             const videoUploadError =
                               videoUploadErrors[exampleKey] || "";
+                            const isPreviewActive =
+                              activeVideoPreviewKey === exampleKey;
+                            const exampleTitle =
+                              normalizeExampleText(ex?.sentence) ||
+                              "ainda sem frase";
 
                             return (
                               <div
                                 key={exampleKey}
-                                className="overflow-hidden rounded-2xl border bg-background/70 shadow-sm"
-                                style={{ borderColor: meaningAccent.border }}
+                                className="overflow-hidden rounded-xl border border-[#DCE4EE] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.04)]"
                               >
                                 <div
-                                  className="flex items-center justify-between gap-3 border-b border-border/70 bg-card px-4 py-3"
-                                  style={{ borderColor: meaningAccent.border }}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      toggleExampleExpanded(mIdx, eIdx)
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() =>
+                                    toggleExampleExpanded(mIdx, eIdx)
+                                  }
+                                  onKeyDown={(event) => {
+                                    if (
+                                      event.key === "Enter" ||
+                                      event.key === " "
+                                    ) {
+                                      event.preventDefault();
+                                      toggleExampleExpanded(mIdx, eIdx);
                                     }
-                                    className="min-w-0 flex flex-1 items-center gap-2 text-left"
-                                    aria-expanded={isExampleExpanded}
-                                  >
-                                    {isExampleExpanded ? (
-                                      <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                    ) : (
-                                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                    )}
+                                  }}
+                                  className="flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#E2E8F0] bg-white px-4 py-3"
+                                  aria-expanded={isExampleExpanded}
+                                >
+                                  <div className="min-w-0 flex flex-1 items-center gap-2 text-left">
+                                    <Lightbulb className="h-4 w-4 shrink-0 text-[#ED9A0A]" />
 
-                                    <div
-                                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm"
-                                      style={{ backgroundColor: meaningAccent.bar }}
+                                    <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                                      Exemplo:
+                                    </span>
+
+                                    <span
+                                      className="shrink-0 text-sm font-bold"
+                                      style={{ color: meaningAccent.bar }}
                                     >
                                       {eIdx + 1}
-                                    </div>
-
-                                    <span className="truncate text-sm font-bold text-foreground">
-                                      Exemplo {eIdx + 1}
                                     </span>
-                                  </button>
+
+                                    <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                                      —
+                                    </span>
+
+                                    <span
+                                      className="min-w-0 truncate text-sm font-bold text-[#14181F]"
+                                      title={exampleTitle}
+                                    >
+                                      {exampleTitle}
+                                    </span>
+                                  </div>
 
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      void removeExample(mIdx, eIdx)
-                                    }
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void removeExample(mIdx, eIdx);
+                                    }}
+                                    onKeyDown={(event) => {
+                                      event.stopPropagation();
+                                    }}
                                     disabled={isDeletingVideo}
-                                    className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
+                                    className="self-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
                                     aria-label={`Remover exemplo ${eIdx + 1}`}
                                   >
                                     <Trash2 className="h-4 w-4" />
@@ -1241,50 +1471,77 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                                 {isExampleExpanded ? (
                                   <div className="p-4">
-                                    <div className="grid gap-3 md:grid-cols-2">
-                                      <div>
-                                        <FieldLabel icon={<UsFlagIcon />}>
-                                          Exemplo em inglês
-                                        </FieldLabel>
+                                    <div
+                                      className={
+                                        hasVideo && !isEditingVideo
+                                          ? "grid gap-4 md:grid-cols-[minmax(0,1fr)_190px]"
+                                          : "grid gap-4"
+                                      }
+                                    >
+                                      <div className="border-l-2 border-[#CBD5E1] pl-4">
+                                        <div className="grid gap-3">
+                                          <div>
+                                            <ExampleLanguageLabel
+                                              flag={<UsFlagIcon />}
+                                              code="EN-US"
+                                            />
 
-                                        <input
-                                          type="text"
-                                          value={ex.sentence}
-                                          onChange={(e) =>
-                                            updateExample(
-                                              mIdx,
-                                              eIdx,
-                                              "sentence",
-                                              e.target.value
-                                            )
-                                          }
-                                          placeholder={`Exemplo ${
-                                            eIdx + 1
-                                          } em inglês`}
-                                          className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-xs transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                        />
+                                            <input
+                                              type="text"
+                                              value={ex.sentence}
+                                              onChange={(e) =>
+                                                updateExample(
+                                                  mIdx,
+                                                  eIdx,
+                                                  "sentence",
+                                                  e.target.value
+                                                )
+                                              }
+                                              placeholder={`Exemplo ${
+                                                eIdx + 1
+                                              } em inglês`}
+                                              className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                            />
+                                          </div>
+
+                                          <div>
+                                            <ExampleLanguageLabel
+                                              flag={<BrFlagIcon />}
+                                              code="PT-BR"
+                                            />
+
+                                            <input
+                                              type="text"
+                                              value={ex.translation}
+                                              onChange={(e) =>
+                                                updateExample(
+                                                  mIdx,
+                                                  eIdx,
+                                                  "translation",
+                                                  e.target.value
+                                                )
+                                              }
+                                              placeholder="Tradução em português"
+                                              className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                            />
+                                          </div>
+                                        </div>
                                       </div>
 
-                                      <div>
-                                        <FieldLabel icon={<BrFlagIcon />}>
-                                          Tradução em português
-                                        </FieldLabel>
-
-                                        <input
-                                          type="text"
-                                          value={ex.translation}
-                                          onChange={(e) =>
-                                            updateExample(
-                                              mIdx,
-                                              eIdx,
-                                              "translation",
-                                              e.target.value
-                                            )
-                                          }
-                                          placeholder="Tradução em português"
-                                          className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-xs transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                        />
-                                      </div>
+                                      {hasVideo && !isEditingVideo ? (
+                                        <div className="self-start pt-[28px]">
+                                          <ExampleVideoPreview
+                                            video={videoValue}
+                                            thumbnail={thumbnailValue}
+                                            isActive={isPreviewActive}
+                                            onPlay={() =>
+                                              setActiveVideoPreviewKey(
+                                                exampleKey
+                                              )
+                                            }
+                                          />
+                                        </div>
+                                      ) : null}
                                     </div>
 
                                     <div className="mt-3 rounded-xl border border-border bg-card px-3.5 py-3">
@@ -1306,17 +1563,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                       </div>
 
                                       {hasVideo && !isEditingVideo ? (
-                                        <>
-                                          <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
-                                            {getExampleVideoDisplayLabel(
-                                              videoValue
-                                            )}
-                                          </p>
-
-                                          <ExampleVideoPreview
-                                            video={videoValue}
-                                          />
-                                        </>
+                                        <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
+                                          {getExampleVideoDisplayLabel(
+                                            videoValue
+                                          )}
+                                        </p>
                                       ) : null}
 
                                       {isEditingVideo ? (
@@ -1461,44 +1712,21 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                           })}
                         </div>
 
-                        <div className="mt-3 grid gap-3 rounded-2xl border border-border/70 bg-background/80 p-3.5 md:grid-cols-[220px_1fr] md:items-start">
-                          <div>
-                            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
-                              <Hash className="h-3.5 w-3.5 text-primary" />
-                              Tag
-                            </label>
-
-                            <select
-                              value={m.category}
-                              onChange={(e) =>
-                                updateMeaning(mIdx, "category", e.target.value)
-                              }
-                              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                              {categories.map((c) => (
-                                <option key={c} value={c}>
-                                  {c}
-                                </option>
-                              ))}
-                            </select>
+                        <div className="mt-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
+                          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                            <Lightbulb className="h-3.5 w-3.5 text-[#ED9A0A]" />
+                            Modo de uso
                           </div>
 
-                          <div className="min-w-0 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
-                            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
-                              <Lightbulb className="h-3.5 w-3.5 text-primary" />
-                              Modo de uso
-                            </div>
-
-                            <input
-                              type="text"
-                              value={m.tip}
-                              onChange={(e) =>
-                                updateMeaning(mIdx, "tip", e.target.value)
-                              }
-                              placeholder="Explique como esse significado é usado no contexto"
-                              className="w-full border-0 bg-transparent p-0 text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0"
-                            />
-                          </div>
+                          <input
+                            type="text"
+                            value={m.tip}
+                            onChange={(e) =>
+                              updateMeaning(mIdx, "tip", e.target.value)
+                            }
+                            placeholder="Explique como esse significado é usado no contexto"
+                            className="w-full border-0 bg-transparent p-0 text-xs italic text-[#6A7181] placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1510,6 +1738,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         </div>
 
         <button
+          type="button"
           onClick={handleSave}
           disabled={saving || !term.trim()}
           className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 disabled:opacity-50"

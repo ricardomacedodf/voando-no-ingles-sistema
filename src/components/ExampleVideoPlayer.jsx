@@ -97,8 +97,11 @@ export default function ExampleVideoPlayer({
   title = "Vídeo do exemplo",
   autoPlay = false,
   layout = "fill",
+  controlsMode = "full",
 }) {
   const isMobileMockupLayout = layout === "mobileMockup";
+  const isCompactControlsMode = controlsMode === "compact";
+  const isCompactLayout = layout === "compact";
 
   const videoRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -466,6 +469,11 @@ export default function ExampleVideoPlayer({
     if (isFullscreenMode()) return;
     if (isTouchLike || isMobileMockupLayout) return;
 
+    if (isCompactControlsMode && !isPlaying) {
+      setControlsVisible(true);
+      return;
+    }
+
     hideControls();
   }
 
@@ -501,6 +509,8 @@ export default function ExampleVideoPlayer({
 
     if (isFullscreenMode()) {
       clearFullscreenControlsTimer();
+      setControlsVisible(true);
+    } else if (isCompactControlsMode) {
       setControlsVisible(true);
     } else {
       setControlsVisible(false);
@@ -646,6 +656,8 @@ export default function ExampleVideoPlayer({
           ? "relative h-full w-full overflow-hidden bg-black"
           : layout === "natural"
           ? "relative overflow-hidden rounded-xl bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none"
+          : isCompactLayout
+          ? "group relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none"
           : "group relative flex h-full w-full items-center justify-center overflow-hidden bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen"
       }
       onMouseEnter={handleMouseEnter}
@@ -666,7 +678,7 @@ export default function ExampleVideoPlayer({
         preload="metadata"
         src={playback.src}
         className={
-          isMobileMockupLayout
+          isMobileMockupLayout || isCompactLayout
             ? "absolute inset-0 h-full w-full bg-black object-cover object-center"
             : "absolute inset-0 h-full w-full bg-black object-contain"
         }
@@ -709,6 +721,8 @@ export default function ExampleVideoPlayer({
 
           if (isFullscreenMode()) {
             setControlsVisible(true);
+          } else if (isCompactControlsMode) {
+            setControlsVisible(true);
           } else {
             setControlsVisible(false);
           }
@@ -737,9 +751,58 @@ export default function ExampleVideoPlayer({
         }}
       />
 
+      {isCompactControlsMode && !isFullscreenMode() ? (
+        <div
+          className={
+            controlsVisible || !isPlaying
+              ? "absolute inset-0 z-30 text-white opacity-100 transition-opacity duration-150"
+              : "pointer-events-none absolute inset-0 z-30 text-white opacity-0 transition-opacity duration-150"
+          }
+        >
+          <div className="absolute inset-0 bg-black/0" />
+
+          <div className="absolute inset-0 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={togglePlay}
+              className={[
+                "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full",
+                "border border-white/70 bg-white/55 text-[#ED9A0A]",
+                "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
+                "backdrop-blur-md transition-all duration-200 hover:scale-105 hover:bg-white/72",
+              ].join(" ")}
+              aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
+              title={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
+            >
+              {isPlaying ? (
+                <Pause className="h-[17px] w-[17px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+              ) : (
+                <Play className="ml-[2px] h-[17px] w-[17px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+              )}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className={[
+              "pointer-events-auto absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full",
+              "border border-white/55 bg-black/35 text-white shadow-sm backdrop-blur-md",
+              "transition-all duration-200 hover:bg-black/55",
+            ].join(" ")}
+            aria-label="Expandir vídeo"
+            title="Expandir vídeo"
+          >
+            <Maximize className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
+
       <div
         className={
-          controlsVisible
+          isCompactControlsMode && !isFullscreenMode()
+            ? "hidden"
+            : controlsVisible
             ? "absolute bottom-0 left-0 right-0 z-30 translate-y-0 px-3 pb-5 pt-16 text-white opacity-100 transition-all duration-200 md:px-3 md:pb-3 md:pt-12"
             : "pointer-events-none absolute bottom-0 left-0 right-0 z-30 translate-y-5 px-3 pb-5 pt-16 text-white opacity-0 transition-all duration-200 md:px-3 md:pb-3 md:pt-12"
         }
