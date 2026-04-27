@@ -8,6 +8,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:3001",
 ]);
 
+const ALLOWED_R2_PREFIXES = ["words/", "meanings/", "examples/"];
+
 function loadLocalEnvFile(fileName) {
   try {
     const filePath = path.join(process.cwd(), fileName);
@@ -105,8 +107,9 @@ function getR2ObjectKeyFromPublicUrl(videoUrl) {
 
   const key = decodeURIComponent(rawKey);
 
-  // Segurança: só apaga vídeos que o próprio sistema enviou para a pasta examples/
-  if (!key.startsWith("examples/")) return null;
+  if (!ALLOWED_R2_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+    return null;
+  }
 
   return key;
 }

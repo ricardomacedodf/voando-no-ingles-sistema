@@ -16,13 +16,111 @@ const videoThumbnailCache = new Map();
 
 const DESCENDER_CHAR_REGEX = /[gjpqy]/;
 
+const normalizeText = (value) =>
+  typeof value === "string" ? value.trim() : "";
+
 const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
+
+const getWordVideoFromMeanings = (meanings) => {
+  if (!Array.isArray(meanings)) return "";
+
+  const meaningWithVideo = meanings.find((meaning) =>
+    normalizeText(meaning?._wordVideo || meaning?._globalVideo)
+  );
+
+  return normalizeText(
+    meaningWithVideo?._wordVideo || meaningWithVideo?._globalVideo || ""
+  );
+};
+
+const getWordThumbnailFromMeanings = (meanings) => {
+  if (!Array.isArray(meanings)) return "";
+
+  const meaningWithThumbnail = meanings.find((meaning) =>
+    normalizeText(meaning?._wordThumbnail || meaning?._globalThumbnail)
+  );
+
+  return normalizeText(
+    meaningWithThumbnail?._wordThumbnail ||
+      meaningWithThumbnail?._globalThumbnail ||
+      ""
+  );
+};
+
+const normalizeWordVideo = (item) => {
+  const rawVideo =
+    item?.video ??
+    item?.videoUrl ??
+    item?.video_url ??
+    item?.wordVideo ??
+    item?.word_video ??
+    item?.globalVideo ??
+    item?.global_video ??
+    item?.stats?.video ??
+    item?.stats?.videoUrl ??
+    item?.stats?.video_url ??
+    item?.stats?.wordVideo ??
+    item?.stats?.word_video ??
+    item?.stats?.globalVideo ??
+    item?.stats?.global_video ??
+    getWordVideoFromMeanings(item?.meanings) ??
+    "";
+
+  return normalizeText(rawVideo);
+};
+
+const normalizeWordThumbnail = (item) => {
+  const rawThumbnail =
+    item?.thumbnail ??
+    item?.thumbnailUrl ??
+    item?.thumbnail_url ??
+    item?.wordThumbnail ??
+    item?.word_thumbnail ??
+    item?.globalThumbnail ??
+    item?.global_thumbnail ??
+    item?.stats?.thumbnail ??
+    item?.stats?.thumbnailUrl ??
+    item?.stats?.thumbnail_url ??
+    item?.stats?.wordThumbnail ??
+    item?.stats?.word_thumbnail ??
+    item?.stats?.globalThumbnail ??
+    item?.stats?.global_thumbnail ??
+    getWordThumbnailFromMeanings(item?.meanings) ??
+    "";
+
+  return normalizeText(rawThumbnail);
+};
+
+const normalizeMeaningVideo = (meaning) => {
+  const rawVideo =
+    meaning?.video ??
+    meaning?.videoUrl ??
+    meaning?.video_url ??
+    meaning?.meaningVideo ??
+    meaning?.meaning_video ??
+    "";
+
+  return normalizeText(rawVideo);
+};
+
+const normalizeMeaningThumbnail = (meaning) => {
+  const rawThumbnail =
+    meaning?.thumbnail ??
+    meaning?.thumbnailUrl ??
+    meaning?.thumbnail_url ??
+    meaning?.meaningThumbnail ??
+    meaning?.meaning_thumbnail ??
+    "";
+
+  return normalizeText(rawThumbnail);
+};
 
 const normalizeExampleVideo = (example) => {
   const rawVideo =
     example?.video ?? example?.videoUrl ?? example?.video_url ?? "";
-  return typeof rawVideo === "string" ? rawVideo.trim() : "";
+
+  return normalizeText(rawVideo);
 };
 
 const normalizeExampleThumbnail = (example) => {
@@ -32,7 +130,7 @@ const normalizeExampleThumbnail = (example) => {
     example?.thumbnail_url ??
     "";
 
-  return typeof rawThumbnail === "string" ? rawThumbnail.trim() : "";
+  return normalizeText(rawThumbnail);
 };
 
 const hasExampleContent = (example) => {
@@ -41,6 +139,20 @@ const hasExampleContent = (example) => {
   const video = normalizeExampleVideo(example);
 
   return Boolean(sentence || translation || video);
+};
+
+const hasMeaningOrExampleVideo = (meanings) => {
+  if (!Array.isArray(meanings)) return false;
+
+  return meanings.some((meaning) => {
+    const meaningVideo = normalizeMeaningVideo(meaning);
+
+    if (meaningVideo) return true;
+
+    if (!Array.isArray(meaning?.examples)) return false;
+
+    return meaning.examples.some((example) => normalizeExampleVideo(example));
+  });
 };
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -102,6 +214,7 @@ function ExampleVideoThumbnail({
   onClick,
   title = "Vídeo do exemplo",
   isOpen = false,
+  className = "h-[84px]",
 }) {
   const [thumbnailSrc, setThumbnailSrc] = useState("");
 
@@ -175,6 +288,7 @@ function ExampleVideoThumbnail({
         canvas.height = height;
 
         const context = canvas.getContext("2d");
+
         if (!context) {
           applyFallback();
           return;
@@ -335,7 +449,8 @@ function ExampleVideoThumbnail({
       aria-label={title}
       title={title}
       className={[
-        "group relative h-[84px] w-full overflow-hidden rounded-lg border",
+        "group relative w-full overflow-hidden rounded-lg border",
+        className,
         isOpen ? "border-[#ED9A0A]/80" : "border-[#D9E2EC]",
         "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)]",
         "transition-all duration-200",
@@ -382,27 +497,73 @@ export default function ExamplesPanel({
   titleTerm,
   variant = "default",
   onClose,
+  wordVideo = "",
+  wordThumbnail = "",
+  item,
+  vocabularyItem,
 }) {
   const lastClosePointerSfxAtRef = useRef(0);
   const isMobile = useIsMobile();
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
 
-  const meanings = allMeanings || (examples ? [{ meaning, examples }] : []);
+  const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
 
-  const normalized = meanings.map((item, index) => ({
-    meaning: item?.meaning || `Significado ${index + 1}`,
-    category: item?.category || "vocabulário",
-    tip: item?.tip || "",
-    examples: (Array.isArray(item?.examples) ? item.examples : [])
-      .map((example) => ({
-        sentence: normalizeExampleText(example?.sentence),
-        translation: normalizeExampleText(example?.translation),
-        video: normalizeExampleVideo(example),
-        thumbnail: normalizeExampleThumbnail(example),
-      }))
-      .filter(hasExampleContent),
-  }));
+  const wordVideoSource =
+    normalizeText(wordVideo) ||
+    normalizeWordVideo(item) ||
+    normalizeWordVideo(vocabularyItem) ||
+    getWordVideoFromMeanings(rawMeanings);
+
+  const wordThumbnailSource =
+    normalizeText(wordThumbnail) ||
+    normalizeWordThumbnail(item) ||
+    normalizeWordThumbnail(vocabularyItem) ||
+    getWordThumbnailFromMeanings(rawMeanings);
+
+  const hasSpecificVideo = hasMeaningOrExampleVideo(rawMeanings);
+
+  const shouldShowGlobalWordVideoOnTop = Boolean(
+    wordVideoSource && !hasSpecificVideo
+  );
+
+  const normalized = rawMeanings.map((entry, index) => {
+    const meaningVideo = normalizeMeaningVideo(entry);
+    const meaningThumbnail = normalizeMeaningThumbnail(entry);
+
+    return {
+      meaning: entry?.meaning || `Significado ${index + 1}`,
+      category: entry?.category || "vocabulário",
+      tip: entry?.tip || "",
+      video: meaningVideo,
+      thumbnail: meaningThumbnail,
+      examples: (Array.isArray(entry?.examples) ? entry.examples : [])
+        .map((example) => {
+          const exampleVideo = normalizeExampleVideo(example);
+          const exampleThumbnail = normalizeExampleThumbnail(example);
+
+          const effectiveVideo = shouldShowGlobalWordVideoOnTop
+            ? exampleVideo || meaningVideo
+            : exampleVideo || meaningVideo || wordVideoSource;
+
+          const effectiveThumbnail = exampleVideo
+            ? exampleThumbnail
+            : meaningVideo
+            ? meaningThumbnail
+            : shouldShowGlobalWordVideoOnTop
+            ? ""
+            : wordThumbnailSource;
+
+          return {
+            sentence: normalizeExampleText(example?.sentence),
+            translation: normalizeExampleText(example?.translation),
+            video: effectiveVideo,
+            thumbnail: effectiveVideo ? effectiveThumbnail : "",
+          };
+        })
+        .filter(hasExampleContent),
+    };
+  });
 
   const sorted = activeMeaning
     ? [...normalized].sort((a, b) =>
@@ -413,7 +574,12 @@ export default function ExamplesPanel({
   useEffect(() => {
     setOpenDesktopVideos({});
     setMobileVideo(null);
-  }, [allMeanings, activeMeaning]);
+  }, [
+    allMeanings,
+    activeMeaning,
+    wordVideoSource,
+    shouldShowGlobalWordVideoOnTop,
+  ]);
 
   useEffect(() => {
     if (!mobileVideo?.video) return;
@@ -436,6 +602,8 @@ export default function ExamplesPanel({
   const isFlashcard = variant === "flashcard";
   const titleValue = titleTerm ? titleTerm.trim() : "Exemplos";
   const highlightTerm = titleTerm ? titleTerm.trim() : "";
+  const globalWordVideoKey = "global-word-video";
+  const isGlobalWordVideoOpen = Boolean(openDesktopVideos[globalWordVideoKey]);
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -492,7 +660,7 @@ export default function ExamplesPanel({
     });
   };
 
-  if (meanings.length === 0) return null;
+  if (rawMeanings.length === 0) return null;
 
   return (
     <>
@@ -548,6 +716,47 @@ export default function ExamplesPanel({
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {shouldShowGlobalWordVideoOnTop ? (
+          <div className="mb-4">
+            {isGlobalWordVideoOpen && !isMobile ? (
+              <div>
+                <div className="mb-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => closeDesktopVideo(globalWordVideoKey)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Ocultar vídeo
+                  </button>
+                </div>
+
+                <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
+                  <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
+                    <ExampleVideoPlayer
+                      key={`${globalWordVideoKey}-${wordVideoSource}`}
+                      video={wordVideoSource}
+                      title={titleValue}
+                      autoPlay
+                    />
+                  </AspectRatio>
+                </div>
+              </div>
+            ) : (
+              <ExampleVideoThumbnail
+                video={wordVideoSource}
+                thumbnail={wordThumbnailSource}
+                title={titleValue}
+                isOpen={isGlobalWordVideoOpen}
+                className="aspect-video h-auto"
+                onClick={() =>
+                  openVideo(wordVideoSource, globalWordVideoKey, titleValue)
+                }
+              />
+            )}
+          </div>
+        ) : null}
 
         <div className="space-y-4">
           {sorted.map((entry, index) => {

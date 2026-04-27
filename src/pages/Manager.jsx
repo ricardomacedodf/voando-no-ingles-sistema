@@ -22,12 +22,280 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+const categoryTagStyles = {
+  vocabulário: {
+    backgroundColor: "rgba(59, 130, 246, 0.10)",
+    borderColor: "rgba(59, 130, 246, 0.28)",
+    color: "#1D4ED8",
+  },
+  expressão: {
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderColor: "rgba(245, 158, 11, 0.32)",
+    color: "#B45309",
+  },
+  adjetivo: {
+    backgroundColor: "rgba(139, 92, 246, 0.11)",
+    borderColor: "rgba(139, 92, 246, 0.30)",
+    color: "#6D28D9",
+  },
+  verbo: {
+    backgroundColor: "rgba(34, 197, 94, 0.11)",
+    borderColor: "rgba(34, 197, 94, 0.30)",
+    color: "#15803D",
+  },
+  substantivo: {
+    backgroundColor: "rgba(20, 184, 166, 0.11)",
+    borderColor: "rgba(20, 184, 166, 0.30)",
+    color: "#0F766E",
+  },
+  "phrasal verb": {
+    backgroundColor: "rgba(244, 63, 94, 0.10)",
+    borderColor: "rgba(244, 63, 94, 0.28)",
+    color: "#BE123C",
+  },
+  advérbio: {
+    backgroundColor: "rgba(99, 102, 241, 0.11)",
+    borderColor: "rgba(99, 102, 241, 0.30)",
+    color: "#4F46E5",
+  },
+  preposição: {
+    backgroundColor: "rgba(100, 116, 139, 0.11)",
+    borderColor: "rgba(100, 116, 139, 0.28)",
+    color: "#475569",
+  },
+  interjeição: {
+    backgroundColor: "rgba(236, 72, 153, 0.10)",
+    borderColor: "rgba(236, 72, 153, 0.28)",
+    color: "#BE185D",
+  },
+  pronome: {
+    backgroundColor: "rgba(45, 212, 191, 0.13)",
+    borderColor: "rgba(45, 212, 191, 0.34)",
+    color: "#0F766E",
+  },
+  conjunção: {
+    backgroundColor: "rgba(249, 115, 22, 0.11)",
+    borderColor: "rgba(249, 115, 22, 0.30)",
+    color: "#C2410C",
+  },
+  idiom: {
+    backgroundColor: "rgba(168, 85, 247, 0.11)",
+    borderColor: "rgba(168, 85, 247, 0.30)",
+    color: "#7E22CE",
+  },
+  collocation: {
+    backgroundColor: "rgba(14, 165, 233, 0.11)",
+    borderColor: "rgba(14, 165, 233, 0.30)",
+    color: "#0369A1",
+  },
+};
+
+const fallbackCategoryTagStyle = {
+  backgroundColor: "rgba(100, 116, 139, 0.10)",
+  borderColor: "rgba(100, 116, 139, 0.26)",
+  color: "#475569",
+};
+
+const getR2DeleteApiUrl = () => {
+  const customUrl = import.meta.env.VITE_R2_DELETE_API_URL;
+
+  if (customUrl) return customUrl;
+
+  const isLocalVite =
+    typeof window !== "undefined" &&
+    window.location.hostname === "localhost" &&
+    window.location.port === "5173";
+
+  if (isLocalVite) {
+    return "http://localhost:3000/api/delete-video";
+  }
+
+  return "/api/delete-video";
+};
+
+function normalizeText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeCategory(category) {
+  return typeof category === "string" ? category.trim() : "";
+}
+
+function getWordVideoFromMeanings(item) {
+  if (!Array.isArray(item?.meanings)) return "";
+
+  const meaningWithVideo = item.meanings.find((meaning) =>
+    normalizeText(meaning?._wordVideo || meaning?._globalVideo)
+  );
+
+  return normalizeText(
+    meaningWithVideo?._wordVideo || meaningWithVideo?._globalVideo || ""
+  );
+}
+
+function getWordThumbnailFromMeanings(item) {
+  if (!Array.isArray(item?.meanings)) return "";
+
+  const meaningWithThumbnail = item.meanings.find((meaning) =>
+    normalizeText(meaning?._wordThumbnail || meaning?._globalThumbnail)
+  );
+
+  return normalizeText(
+    meaningWithThumbnail?._wordThumbnail ||
+      meaningWithThumbnail?._globalThumbnail ||
+      ""
+  );
+}
+
+function normalizeWordVideo(item) {
+  const rawVideo =
+    item?.video ??
+    item?.videoUrl ??
+    item?.video_url ??
+    item?.wordVideo ??
+    item?.word_video ??
+    item?.globalVideo ??
+    item?.global_video ??
+    item?.stats?.video ??
+    item?.stats?.videoUrl ??
+    item?.stats?.video_url ??
+    item?.stats?.wordVideo ??
+    item?.stats?.word_video ??
+    item?.stats?.globalVideo ??
+    item?.stats?.global_video ??
+    getWordVideoFromMeanings(item) ??
+    "";
+
+  return normalizeText(rawVideo);
+}
+
+function normalizeWordThumbnail(item) {
+  const rawThumbnail =
+    item?.thumbnail ??
+    item?.thumbnailUrl ??
+    item?.thumbnail_url ??
+    item?.wordThumbnail ??
+    item?.word_thumbnail ??
+    item?.globalThumbnail ??
+    item?.global_thumbnail ??
+    item?.stats?.thumbnail ??
+    item?.stats?.thumbnailUrl ??
+    item?.stats?.thumbnail_url ??
+    item?.stats?.wordThumbnail ??
+    item?.stats?.word_thumbnail ??
+    item?.stats?.globalThumbnail ??
+    item?.stats?.global_thumbnail ??
+    getWordThumbnailFromMeanings(item) ??
+    "";
+
+  return normalizeText(rawThumbnail);
+}
+
+function normalizeMeaningVideo(meaning) {
+  const rawVideo =
+    meaning?.video ??
+    meaning?.videoUrl ??
+    meaning?.video_url ??
+    meaning?.meaningVideo ??
+    meaning?.meaning_video ??
+    "";
+
+  return normalizeText(rawVideo);
+}
+
+function normalizeExampleVideo(example) {
+  const rawVideo =
+    example?.video ?? example?.videoUrl ?? example?.video_url ?? "";
+
+  return normalizeText(rawVideo);
+}
+
+function getVocabularyCategories(item) {
+  if (!Array.isArray(item?.meanings)) return [];
+
+  const categories = item.meanings
+    .map((meaning) => normalizeCategory(meaning?.category))
+    .filter(Boolean);
+
+  return Array.from(new Set(categories));
+}
+
+function getCategoryTagStyle(category) {
+  const normalizedCategory = normalizeCategory(category).toLowerCase();
+
+  return categoryTagStyles[normalizedCategory] || fallbackCategoryTagStyle;
+}
+
+function collectVocabularyVideoUrls(item) {
+  if (!item) return [];
+
+  const wordVideo = normalizeWordVideo(item);
+
+  const meaningAndExampleVideos = Array.isArray(item?.meanings)
+    ? item.meanings.flatMap((meaning) => {
+        const meaningVideo = normalizeMeaningVideo(meaning);
+
+        const exampleVideos = Array.isArray(meaning?.examples)
+          ? meaning.examples.map((example) => normalizeExampleVideo(example))
+          : [];
+
+        return [meaningVideo, ...exampleVideos];
+      })
+    : [];
+
+  return Array.from(
+    new Set([wordVideo, ...meaningAndExampleVideos].filter(Boolean))
+  );
+}
+
+async function deleteVideoFromR2(videoUrl) {
+  const cleanVideoUrl = normalizeText(videoUrl);
+
+  if (!cleanVideoUrl) return;
+
+  const response = await fetch(getR2DeleteApiUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      videoUrl: cleanVideoUrl,
+    }),
+  });
+
+  let data = null;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error || "Não foi possível apagar o vídeo do Cloudflare R2."
+    );
+  }
+}
+
+async function deleteVideosFromR2(videoUrls) {
+  const uniqueVideoUrls = Array.from(
+    new Set((Array.isArray(videoUrls) ? videoUrls : []).map(normalizeText))
+  ).filter(Boolean);
+
+  for (const videoUrl of uniqueVideoUrls) {
+    await deleteVideoFromR2(videoUrl);
+  }
+}
+
 function mapVocabularyRow(row) {
   return {
     id: row.id,
     user_id: row.user_id,
     term: row.term || "",
     pronunciation: row.pronunciation || "",
+    video: normalizeWordVideo(row),
+    thumbnail: normalizeWordThumbnail(row),
     meanings: Array.isArray(row.meanings) ? row.meanings : [],
     stats: row.stats || {
       correct: 0,
@@ -50,6 +318,8 @@ export default function Manager() {
   const [editItem, setEditItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState(null);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const loadVocab = async () => {
     if (!user?.id) {
@@ -85,7 +355,16 @@ export default function Manager() {
   }, [user?.id]);
 
   const handleDelete = async (id) => {
+    if (!user?.id || deletingItemId || deletingAll) return;
+
+    const itemToDelete = vocab.find((item) => item.id === id);
+    const videoUrlsToDelete = collectVocabularyVideoUrls(itemToDelete);
+
     try {
+      setDeletingItemId(id);
+
+      await deleteVideosFromR2(videoUrlsToDelete);
+
       const { error } = await supabase
         .from("vocabulary")
         .delete()
@@ -99,12 +378,27 @@ export default function Manager() {
       loadVocab();
     } catch (error) {
       console.error("Erro ao apagar item:", error);
-      alert("Não foi possível apagar este item.");
+      alert(
+        error?.message ||
+          "Não foi possível apagar este item e seus vídeos vinculados."
+      );
+    } finally {
+      setDeletingItemId(null);
     }
   };
 
   const handleDeleteAll = async () => {
+    if (!user?.id || deletingAll) return;
+
+    const videoUrlsToDelete = vocab.flatMap((item) =>
+      collectVocabularyVideoUrls(item)
+    );
+
     try {
+      setDeletingAll(true);
+
+      await deleteVideosFromR2(videoUrlsToDelete);
+
       const { error } = await supabase
         .from("vocabulary")
         .delete()
@@ -118,7 +412,12 @@ export default function Manager() {
       loadVocab();
     } catch (error) {
       console.error("Erro ao apagar todos os itens:", error);
-      alert("Não foi possível apagar todos os itens.");
+      alert(
+        error?.message ||
+          "Não foi possível apagar todos os itens e seus vídeos vinculados."
+      );
+    } finally {
+      setDeletingAll(false);
     }
   };
 
@@ -216,10 +515,14 @@ export default function Manager() {
           {vocab.length > 0 ? (
             <button
               onClick={() => setShowDeleteAll(true)}
-              className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-destructive/30 bg-card px-2 py-2 text-[11px] font-semibold text-destructive transition-colors hover:bg-destructive hover:text-white sm:gap-1.5 sm:px-3 sm:text-xs"
+              disabled={deletingAll}
+              className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-destructive/30 bg-card px-2 py-2 text-[11px] font-semibold text-destructive transition-colors hover:bg-destructive hover:text-white disabled:opacity-50 sm:gap-1.5 sm:px-3 sm:text-xs"
             >
               <Trash2 className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Apagar tudo</span>
+
+              <span className="truncate">
+                {deletingAll ? "Apagando..." : "Apagar tudo"}
+              </span>
             </button>
           ) : null}
         </div>
@@ -251,48 +554,84 @@ export default function Manager() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((item) => (
-            <div
-              key={item.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleEdit(item)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  handleEdit(item);
-                }
-              }}
-              className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.06)] transition-all hover:border-primary hover:shadow-[0_8px_23px_rgba(15,23,42,0.09)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              aria-label={`Editar ${item.term}`}
-            >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/50">
-                <Menu className="h-3.5 w-3.5" strokeWidth={1.4} />
-              </div>
+          {filtered.map((item) => {
+            const itemCategories = getVocabularyCategories(item);
+            const hasWordVideo = Boolean(normalizeWordVideo(item));
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {item.term}
-                </p>
-
-                <p className="truncate text-xs text-muted-foreground">
-                  {item.meanings?.slice(0, 3).map((m) => m.meaning).join(", ")}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleDelete(item.id);
+            return (
+              <div
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleEdit(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleEdit(item);
+                  }
                 }}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-red-50"
-                aria-label={`Apagar ${item.term}`}
+                className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.06)] transition-all hover:border-primary hover:shadow-[0_8px_23px_rgba(15,23,42,0.09)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                aria-label={`Editar ${item.term}`}
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </button>
-            </div>
-          ))}
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/50">
+                  <Menu className="h-3.5 w-3.5" strokeWidth={1.4} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {item.term}
+                    </p>
+
+                    {hasWordVideo ? (
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-primary">
+                        vídeo
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="truncate text-xs text-muted-foreground">
+                    {item.meanings?.slice(0, 3).map((m) => m.meaning).join(", ")}
+                  </p>
+                </div>
+
+                {itemCategories.length > 0 ? (
+                  <div
+                    className="flex max-w-[48%] shrink-0 flex-wrap justify-end gap-1.5"
+                    aria-label={`Tags de ${item.term}`}
+                  >
+                    {itemCategories.map((category) => {
+                      const tagStyle = getCategoryTagStyle(category);
+
+                      return (
+                        <span
+                          key={category}
+                          className="inline-flex max-w-[110px] items-center rounded-full border px-2 py-0.5 text-[10px] font-bold leading-4"
+                          style={tagStyle}
+                          title={category}
+                        >
+                          <span className="truncate">{category}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleDelete(item.id);
+                  }}
+                  disabled={deletingItemId === item.id || deletingAll}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-red-50 disabled:opacity-50"
+                  aria-label={`Apagar ${item.term}`}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -311,13 +650,16 @@ export default function Manager() {
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingAll}>
+              Cancelar
+            </AlertDialogCancel>
 
             <AlertDialogAction
               onClick={handleDeleteAll}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingAll}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
             >
-              Apagar tudo
+              {deletingAll ? "Apagando..." : "Apagar tudo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

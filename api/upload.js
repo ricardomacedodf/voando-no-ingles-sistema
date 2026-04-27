@@ -104,6 +104,31 @@ function getFileExtension(fileName, contentType) {
   return "mp4";
 }
 
+function getUploadFolder(scope) {
+  const cleanScope = String(scope || "example").trim().toLowerCase();
+
+  if (
+    cleanScope === "word" ||
+    cleanScope === "word-video" ||
+    cleanScope === "global" ||
+    cleanScope === "global-video" ||
+    cleanScope === "palavra" ||
+    cleanScope === "termo"
+  ) {
+    return "words";
+  }
+
+  if (
+    cleanScope === "meaning" ||
+    cleanScope === "meaning-video" ||
+    cleanScope === "significado"
+  ) {
+    return "meanings";
+  }
+
+  return "examples";
+}
+
 function createR2Client() {
   return new S3Client({
     region: "auto",
@@ -112,10 +137,6 @@ function createR2Client() {
       accessKeyId: getEnvValue("R2_ACCESS_KEY_ID"),
       secretAccessKey: getEnvValue("R2_SECRET_ACCESS_KEY"),
     },
-
-    // Importante:
-    // Evita que o SDK adicione checksum automático na URL assinada.
-    // Isso impede o erro 401 Unauthorized no PUT direto pelo navegador.
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
   });
@@ -140,6 +161,7 @@ export default async function handler(req, res) {
     const fileName = String(body?.fileName || "");
     const contentType = String(body?.contentType || "");
     const size = Number(body?.size || 0);
+    const uploadFolder = getUploadFolder(body?.scope ?? body?.folder);
 
     if (!fileName) {
       return res.status(400).json({
@@ -165,7 +187,7 @@ export default async function handler(req, res) {
     const cleanName = sanitizeFileName(fileName);
     const extension = getFileExtension(fileName, contentType);
 
-    const key = `examples/${new Date()
+    const key = `${uploadFolder}/${new Date()
       .toISOString()
       .slice(0, 10)}/${randomUUID()}-${cleanName}.${extension}`;
 
@@ -184,6 +206,7 @@ export default async function handler(req, res) {
       uploadUrl,
       publicUrl: `${publicUrl}/${key}`,
       key,
+      folder: uploadFolder,
     });
   } catch (error) {
     console.error("Erro ao criar URL de upload R2:", error);
