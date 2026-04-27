@@ -38,6 +38,9 @@ const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024;
 const VIDEO_MIME_PREFIX = "video/";
 const WORD_VIDEO_KEY = "word-video";
 
+const EMBED_IFRAME_RENDER_SCALE = 1.45;
+const EMBED_IFRAME_VISUAL_SCALE = 1 / EMBED_IFRAME_RENDER_SCALE;
+
 const emptyExample = {
   sentence: "",
   translation: "",
@@ -222,12 +225,151 @@ const normalizeExampleVideo = (example) => {
 
 const normalizeExampleThumbnail = (example) => {
   const rawThumbnail =
-    example?.thumbnail ??
-    example?.thumbnailUrl ??
-    example?.thumbnail_url ??
-    "";
+    example?.thumbnail ?? example?.thumbnailUrl ?? example?.thumbnail_url ?? "";
 
   return normalizeText(rawThumbnail);
+};
+
+const extractIframeSrc = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const match = cleanValue.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+
+  return normalizeText(match?.[1] || "");
+};
+
+const getYouTubeVideoId = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /youtu\.be\/([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/watch\?[^"'\s>]*v=([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const getVimeoVideoId = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /player\.vimeo\.com\/video\/(\d+)/i,
+    /vimeo\.com\/video\/(\d+)/i,
+    /vimeo\.com\/(\d+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const getDailymotionVideoId = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /dailymotion\.com\/video\/([a-zA-Z0-9]+)/i,
+    /dailymotion\.com\/embed\/video\/([a-zA-Z0-9]+)/i,
+    /dai\.ly\/([a-zA-Z0-9]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const isThirdPartyEmbeddedVideo = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return false;
+
+  return (
+    /<iframe/i.test(cleanValue) ||
+    /\[iframe/i.test(cleanValue) ||
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv/i.test(
+      cleanValue
+    )
+  );
+};
+
+const getThirdPartyEmbedSrc = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const iframeSrc = extractIframeSrc(cleanValue);
+
+  if (iframeSrc) return iframeSrc;
+
+  const youtubeId = getYouTubeVideoId(cleanValue);
+
+  if (youtubeId) {
+    return `https://www.youtube.com/embed/${youtubeId}`;
+  }
+
+  const vimeoId = getVimeoVideoId(cleanValue);
+
+  if (vimeoId) {
+    return `https://player.vimeo.com/video/${vimeoId}`;
+  }
+
+  const dailymotionId = getDailymotionVideoId(cleanValue);
+
+  if (dailymotionId) {
+    return `https://www.dailymotion.com/embed/video/${dailymotionId}`;
+  }
+
+  return "";
+};
+
+const getCompactThirdPartyEmbedSrc = (value) => {
+  const embedSrc = getThirdPartyEmbedSrc(value);
+
+  if (!embedSrc) return "";
+
+  try {
+    const base =
+      typeof window !== "undefined" ? window.location.origin : "https://local";
+
+    const url = new URL(embedSrc, base);
+
+    url.searchParams.set("playsinline", "1");
+
+    if (/youtube\.com|youtu\.be/i.test(url.hostname)) {
+      url.searchParams.set("rel", "0");
+    }
+
+    return url.toString();
+  } catch {
+    if (embedSrc.includes("?")) {
+      return `${embedSrc}&playsinline=1`;
+    }
+
+    return `${embedSrc}?playsinline=1`;
+  }
 };
 
 const hasExampleContent = (example) => {
@@ -571,16 +713,57 @@ function ExampleLanguageLabel({ flag, code }) {
   );
 }
 
-function ExampleVideoPreview({ video, thumbnail, isActive, onPlay }) {
+function ExampleVideoPreview({
+  video,
+  thumbnail,
+  isActive,
+  onPlay,
+  className = "",
+  useProviderEmbedForThirdParty = false,
+}) {
   if (!video) return null;
 
+  const cleanVideo = normalizeText(video);
   const thumbnailSrc = normalizeText(thumbnail);
+  const isThirdPartyVideo = isThirdPartyEmbeddedVideo(cleanVideo);
+  const thirdPartyEmbedSrc = getCompactThirdPartyEmbedSrc(cleanVideo);
+
+  if (useProviderEmbedForThirdParty && isThirdPartyVideo && thirdPartyEmbedSrc) {
+    return (
+      <div
+        className={[
+          "relative aspect-video overflow-hidden rounded-xl border border-[#D9E2EC] bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)]",
+          className,
+        ].join(" ")}
+      >
+        <iframe
+          src={thirdPartyEmbedSrc}
+          title="Vídeo do exemplo"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowFullScreen
+          className="absolute left-0 top-0 border-0"
+          style={{
+            width: `${EMBED_IFRAME_RENDER_SCALE * 100}%`,
+            height: `${EMBED_IFRAME_RENDER_SCALE * 100}%`,
+            transform: `scale(${EMBED_IFRAME_VISUAL_SCALE})`,
+            transformOrigin: "top left",
+          }}
+        />
+      </div>
+    );
+  }
 
   if (isActive) {
     return (
-      <div className="aspect-video overflow-hidden rounded-xl bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)]">
+      <div
+        className={[
+          "aspect-video overflow-hidden rounded-xl bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)]",
+          className,
+        ].join(" ")}
+      >
         <ExampleVideoPlayer
-          video={video}
+          video={cleanVideo}
           autoPlay
           layout="compact"
           controlsMode="compact"
@@ -593,7 +776,13 @@ function ExampleVideoPreview({ video, thumbnail, isActive, onPlay }) {
     <button
       type="button"
       onClick={onPlay}
-      className="group relative aspect-video w-full overflow-hidden rounded-xl border border-[#D9E2EC] bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)] transition-all duration-200 hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2"
+      className={[
+        "group relative aspect-video w-full overflow-hidden rounded-xl border border-[#D9E2EC]",
+        "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)]",
+        "transition-all duration-200 hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
+        className,
+      ].join(" ")}
       aria-label="Reproduzir vídeo"
       title="Reproduzir vídeo"
     >
@@ -612,15 +801,13 @@ function ExampleVideoPreview({ video, thumbnail, isActive, onPlay }) {
       <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
 
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-white/55 shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)] backdrop-blur-md transition-all duration-200 group-hover:scale-105 group-hover:bg-white/72">
-          <Play className="ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/55 shadow-[0_10px_20px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)] backdrop-blur-md transition-all duration-200 group-hover:scale-105 group-hover:bg-white/72">
+          <Play className="ml-[2px] h-4 w-4 fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
         </div>
       </div>
     </button>
   );
-}
-
-function VideoControlCard({
+}function VideoControlCard({
   title,
   description,
   emptyLabel,
@@ -642,8 +829,174 @@ function VideoControlCard({
   fileInputRef,
   onFileChange,
   uploadButtonText,
+  previewVariant = "default",
+  inlineSize = "normal",
+  showPreview = true,
 }) {
   const hasVideo = Boolean(video);
+  const isInlinePreview = previewVariant === "inline-right";
+  const isWideInline = inlineSize === "wide";
+
+  if (isInlinePreview) {
+    return (
+      <div
+        className={[
+          isWideInline
+            ? "min-h-[146px] rounded-2xl"
+            : "min-h-[132px] rounded-xl",
+          "border border-[#DCE4EE] bg-white px-3.5 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]",
+        ].join(" ")}
+      >
+        <div
+          className={
+            hasVideo && !isEditing
+              ? isWideInline
+                ? "grid min-h-[122px] gap-3 md:grid-cols-[minmax(0,1fr)_252px] md:items-center"
+                : "grid min-h-[108px] gap-3 md:grid-cols-[minmax(0,1fr)_192px] md:items-center"
+              : isWideInline
+              ? "min-h-[122px]"
+              : "min-h-[108px]"
+          }
+        >
+          <div
+            className={
+              isWideInline
+                ? "flex min-h-[122px] flex-col justify-between"
+                : "flex min-h-[108px] flex-col justify-between"
+            }
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                  {title}
+                </span>
+
+                {description ? (
+                  <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                    {description}
+                  </p>
+                ) : null}
+              </div>
+
+              {hasVideo ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Vídeo anexado
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {emptyLabel}
+                </span>
+              )}
+            </div>
+
+            {hasVideo && !isEditing ? (
+              <p className="mt-2 truncate text-[11px] text-muted-foreground">
+                {getExampleVideoDisplayLabel(video)}
+              </p>
+            ) : null}
+
+            {isEditing ? (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={editorValue}
+                  onChange={(e) => onEditorChange(e.target.value)}
+                  placeholder="Cole o link do vídeo, iframe/embed completo ou BBCode"
+                  rows={4}
+                  spellCheck={false}
+                  className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-xs transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={onSave}
+                    disabled={!editorValue.trim() || isDeleting}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {isDeleting
+                      ? "Salvando..."
+                      : hasVideo
+                      ? "Salvar vídeo"
+                      : "Anexar vídeo"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={isDeleting}
+                    className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onOpenEditor}
+                  disabled={isDeleting}
+                  className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  {hasVideo ? "Trocar vídeo" : "Adicionar vídeo"}
+                </button>
+
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={onFileChange}
+                />
+
+                <button
+                  type="button"
+                  onClick={onTriggerUpload}
+                  disabled={isUploading || isDeleting}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  <Upload className="h-3 w-3" />
+                  {isUploading ? "Enviando para R2..." : uploadButtonText}
+                </button>
+
+                {hasVideo ? (
+                  <button
+                    type="button"
+                    onClick={onRemove}
+                    disabled={isDeleting}
+                    className="rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {isDeleting ? "Removendo..." : "Remover vídeo"}
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            {uploadError ? (
+              <p className="mt-2 text-[11px] font-medium text-destructive">
+                {uploadError}
+              </p>
+            ) : null}
+          </div>
+
+          {hasVideo && !isEditing ? (
+            <div className="flex w-full justify-end md:pl-1">
+              <ExampleVideoPreview
+                video={video}
+                thumbnail={thumbnail}
+                isActive={isPreviewActive}
+                onPlay={onPlay}
+                className={
+                  isWideInline ? "w-full md:w-[252px]" : "w-full md:w-[192px]"
+                }
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-border bg-card px-3.5 py-3">
@@ -672,7 +1025,7 @@ function VideoControlCard({
         )}
       </div>
 
-      {hasVideo && !isEditing ? (
+      {hasVideo && !isEditing && showPreview ? (
         <div className="mt-3 space-y-2">
           <p className="truncate text-[11px] text-muted-foreground">
             {getExampleVideoDisplayLabel(video)}
@@ -685,6 +1038,12 @@ function VideoControlCard({
             onPlay={onPlay}
           />
         </div>
+      ) : null}
+
+      {hasVideo && !isEditing && !showPreview ? (
+        <p className="mt-3 truncate text-[11px] text-muted-foreground">
+          {getExampleVideoDisplayLabel(video)}
+        </p>
       ) : null}
 
       {isEditing ? (
@@ -908,6 +1267,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     const exampleVideos = meanings[idx].examples
       .map((example) => normalizeExampleVideo(example))
       .filter(Boolean);
+
     const videosToDelete = Array.from(
       new Set([meaningVideo, ...exampleVideos].filter(Boolean))
     );
@@ -920,6 +1280,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       }
 
       setMeanings((current) => current.filter((_, index) => index !== idx));
+
       setExpandedMeanings((current) => {
         const next = {};
 
@@ -932,6 +1293,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
         return next;
       });
+
       setExpandedExamples({});
       setVideoEditor({ key: null, value: "" });
     } catch (error) {
@@ -957,6 +1319,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     };
 
     setMeanings(updated);
+
     setExpandedExamples((current) => ({
       ...current,
       [getExampleKey(mIdx, nextExampleIndex)]: true,
@@ -976,16 +1339,20 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       }
 
       const updated = [...meanings];
+
       updated[mIdx] = {
         ...updated[mIdx],
         examples: updated[mIdx].examples.filter((_, index) => index !== eIdx),
       };
+
       setMeanings(updated);
+
       setVideoEditor((current) =>
         current.key === key ? { key: null, value: "" } : current
       );
     } catch (error) {
       console.error("Erro ao apagar vídeo do exemplo no R2:", error);
+
       setVideoError(
         key,
         error?.message ||
@@ -998,6 +1365,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const openVideoEditor = (key, currentVideo = "") => {
     resetActiveVideoPreview();
+
     setVideoEditor({
       key,
       value: typeof currentVideo === "string" ? currentVideo : "",
@@ -1042,6 +1410,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       }
 
       onSuccess();
+
       setVideoEditor((current) =>
         current.key === key ? { key: null, value: "" } : current
       );
@@ -1130,6 +1499,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       }
     } catch (error) {
       console.error("Erro ao enviar vídeo para o R2:", error);
+
       setVideoError(
         key,
         error?.message || "Não foi possível enviar o vídeo para o Cloudflare R2."
@@ -1272,7 +1642,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
       <div className="space-y-5">
         <div>
-          <FieldLabel icon={<UsFlagIcon />}>Palavra ou frase em inglês</FieldLabel>
+          <FieldLabel icon={<UsFlagIcon />}>
+            Palavra ou frase em inglês
+          </FieldLabel>
 
           <input
             type="text"
@@ -1317,19 +1689,27 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               const meaningTitle = normalizeText(meaningItem.meaning);
               const isMeaningEmpty = !meaningTitle;
               const meaningDisplayTitle = meaningTitle || "Significado vazio";
-              const accent = meaningAccentPalette[mIdx % meaningAccentPalette.length];
+              const accent =
+                meaningAccentPalette[mIdx % meaningAccentPalette.length];
               const borderColor = isMeaningEmpty
                 ? emptyMeaningAccent.border
                 : accent.border;
+
               const meaningVideoKey = getMeaningVideoKey(mIdx);
               const meaningVideoValue = normalizeMeaningVideo(meaningItem);
-              const meaningThumbnailValue = normalizeMeaningThumbnail(meaningItem);
+              const meaningThumbnailValue =
+                normalizeMeaningThumbnail(meaningItem);
               const hasMeaningVideo = Boolean(meaningVideoValue);
-              const isEditingMeaningVideo = videoEditor.key === meaningVideoKey;
-              const isUploadingMeaningVideo = uploadingVideoKey === meaningVideoKey;
-              const isDeletingMeaningVideo = deletingVideoKey === meaningVideoKey;
-              const meaningVideoUploadError = videoUploadErrors[meaningVideoKey] || "";
-              const isMeaningPreviewActive = activeVideoPreviewKey === meaningVideoKey;
+              const isEditingMeaningVideo =
+                videoEditor.key === meaningVideoKey;
+              const isUploadingMeaningVideo =
+                uploadingVideoKey === meaningVideoKey;
+              const isDeletingMeaningVideo =
+                deletingVideoKey === meaningVideoKey;
+              const meaningVideoUploadError =
+                videoUploadErrors[meaningVideoKey] || "";
+              const isMeaningPreviewActive =
+                activeVideoPreviewKey === meaningVideoKey;
 
               return (
                 <div
@@ -1368,7 +1748,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         <span
                           className="min-w-0 break-words text-base font-bold leading-snug"
                           style={{
-                            color: isMeaningEmpty ? emptyMeaningAccent.bar : "#14181F",
+                            color: isMeaningEmpty
+                              ? emptyMeaningAccent.bar
+                              : "#14181F",
                             overflowWrap: "anywhere",
                           }}
                         >
@@ -1397,7 +1779,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                     <div className="space-y-4 p-4">
                       <div className="border-b border-[#D8E1EC] pb-4">
                         <div className="mb-3 flex flex-wrap items-center gap-2">
-                          <span className="font-bold" style={{ color: accent.bar }}>
+                          <span
+                            className="font-bold"
+                            style={{ color: accent.bar }}
+                          >
                             {mIdx + 1}.
                           </span>
                           <span className="text-base font-bold text-[#181818]">
@@ -1467,49 +1852,78 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             isUploading={isUploadingMeaningVideo}
                             isDeleting={isDeletingMeaningVideo}
                             isPreviewActive={isMeaningPreviewActive}
-                            onPlay={() => setActiveVideoPreviewKey(meaningVideoKey)}
+                            previewVariant="inline-right"
+                            onPlay={() =>
+                              setActiveVideoPreviewKey(meaningVideoKey)
+                            }
                             onOpenEditor={() =>
-                              openVideoEditor(meaningVideoKey, meaningVideoValue)
+                              openVideoEditor(
+                                meaningVideoKey,
+                                meaningVideoValue
+                              )
                             }
                             onEditorChange={(value) =>
-                              setVideoEditor((current) => ({ ...current, value }))
+                              setVideoEditor((current) => ({
+                                ...current,
+                                value,
+                              }))
                             }
                             onSave={() =>
                               void saveVideoFromEditor({
                                 key: meaningVideoKey,
                                 oldVideo: meaningVideoValue,
                                 onSuccess: ({ video, thumbnail }) =>
-                                  updateMeaningFields(mIdx, { video, thumbnail }),
+                                  updateMeaningFields(mIdx, {
+                                    video,
+                                    thumbnail,
+                                  }),
                               })
                             }
                             onCancel={closeVideoEditor}
-                            onTriggerUpload={() => triggerVideoFilePicker(meaningVideoKey)}
+                            onTriggerUpload={() =>
+                              triggerVideoFilePicker(meaningVideoKey)
+                            }
                             onRemove={() =>
                               void removeVideo({
                                 key: meaningVideoKey,
                                 oldVideo: meaningVideoValue,
                                 onSuccess: () =>
-                                  updateMeaningFields(mIdx, { video: "", thumbnail: "" }),
+                                  updateMeaningFields(mIdx, {
+                                    video: "",
+                                    thumbnail: "",
+                                  }),
                               })
                             }
                             fileInputRef={(element) => {
-                              if (element) fileInputsRef.current[meaningVideoKey] = element;
+                              if (element) {
+                                fileInputsRef.current[meaningVideoKey] =
+                                  element;
+                              }
                             }}
                             onFileChange={(event) => {
                               const inputElement = event?.target;
                               const file = inputElement?.files?.[0];
-                              if (inputElement) inputElement.value = "";
+
+                              if (inputElement) {
+                                inputElement.value = "";
+                              }
+
                               void handleVideoFileSelected({
                                 key: meaningVideoKey,
                                 file,
                                 scope: "meaning",
                                 oldVideo: meaningVideoValue,
                                 onSuccess: ({ video, thumbnail }) =>
-                                  updateMeaningFields(mIdx, { video, thumbnail }),
+                                  updateMeaningFields(mIdx, {
+                                    video,
+                                    thumbnail,
+                                  }),
                               });
                             }}
                             uploadButtonText={
-                              hasMeaningVideo ? "Trocar por upload" : "Enviar arquivo"
+                              hasMeaningVideo
+                                ? "Trocar por upload"
+                                : "Enviar arquivo"
                             }
                           />
                         </div>
@@ -1534,20 +1948,26 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         <div className="space-y-3">
                           {meaningItem.examples.map((example, eIdx) => {
                             const exampleKey = getExampleKey(mIdx, eIdx);
-                            const isEditingVideo = videoEditor.key === exampleKey;
+                            const isEditingVideo =
+                              videoEditor.key === exampleKey;
                             const videoValue = normalizeExampleVideo(example);
-                            const thumbnailValue = normalizeExampleThumbnail(example);
+                            const thumbnailValue =
+                              normalizeExampleThumbnail(example);
                             const hasVideo = Boolean(videoValue);
                             const isExampleExpanded = Boolean(
                               expandedExamples[exampleKey]
                             );
-                            const isUploadingVideo = uploadingVideoKey === exampleKey;
-                            const isDeletingVideo = deletingVideoKey === exampleKey;
-                            const videoUploadError = videoUploadErrors[exampleKey] || "";
+                            const isUploadingVideo =
+                              uploadingVideoKey === exampleKey;
+                            const isDeletingVideo =
+                              deletingVideoKey === exampleKey;
+                            const videoUploadError =
+                              videoUploadErrors[exampleKey] || "";
                             const isPreviewActive =
                               activeVideoPreviewKey === exampleKey;
                             const exampleTitle =
-                              normalizeExampleText(example?.sentence) || "ainda sem frase";
+                              normalizeExampleText(example?.sentence) ||
+                              "ainda sem frase";
 
                             return (
                               <div
@@ -1557,9 +1977,14 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                 <div
                                   role="button"
                                   tabIndex={0}
-                                  onClick={() => toggleExampleExpanded(mIdx, eIdx)}
+                                  onClick={() =>
+                                    toggleExampleExpanded(mIdx, eIdx)
+                                  }
                                   onKeyDown={(event) => {
-                                    if (event.key === "Enter" || event.key === " ") {
+                                    if (
+                                      event.key === "Enter" ||
+                                      event.key === " "
+                                    ) {
                                       event.preventDefault();
                                       toggleExampleExpanded(mIdx, eIdx);
                                     }
@@ -1572,13 +1997,19 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     <span className="shrink-0 text-sm font-normal text-[#6A7181]">
                                       Exemplo:
                                     </span>
-                                    <span className="shrink-0 text-sm font-bold" style={{ color: accent.bar }}>
+                                    <span
+                                      className="shrink-0 text-sm font-bold"
+                                      style={{ color: accent.bar }}
+                                    >
                                       {eIdx + 1}
                                     </span>
                                     <span className="shrink-0 text-sm font-normal text-[#6A7181]">
                                       —
                                     </span>
-                                    <span className="min-w-0 truncate text-sm font-bold text-[#14181F]" title={exampleTitle}>
+                                    <span
+                                      className="min-w-0 truncate text-sm font-bold text-[#14181F]"
+                                      title={exampleTitle}
+                                    >
                                       {exampleTitle}
                                     </span>
                                   </div>
@@ -1599,29 +2030,53 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                                 {isExampleExpanded ? (
                                   <div className="p-4">
-                                    <div className={hasVideo && !isEditingVideo ? "grid gap-4 md:grid-cols-[minmax(0,1fr)_190px]" : "grid gap-4"}>
+                                    <div
+                                      className={
+                                        hasVideo && !isEditingVideo
+                                          ? "grid items-stretch gap-4 md:grid-cols-[minmax(0,1fr)_264px]"
+                                          : "grid gap-4"
+                                      }
+                                    >
                                       <div className="border-l-2 border-[#CBD5E1] pl-4">
                                         <div className="grid gap-3">
                                           <div>
-                                            <ExampleLanguageLabel flag={<UsFlagIcon />} code="EN-US" />
+                                            <ExampleLanguageLabel
+                                              flag={<UsFlagIcon />}
+                                              code="EN-US"
+                                            />
                                             <input
                                               type="text"
                                               value={example.sentence}
                                               onChange={(e) =>
-                                                updateExample(mIdx, eIdx, "sentence", e.target.value)
+                                                updateExample(
+                                                  mIdx,
+                                                  eIdx,
+                                                  "sentence",
+                                                  e.target.value
+                                                )
                                               }
-                                              placeholder={`Exemplo ${eIdx + 1} em inglês`}
+                                              placeholder={`Exemplo ${
+                                                eIdx + 1
+                                              } em inglês`}
                                               className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                                             />
                                           </div>
 
                                           <div>
-                                            <ExampleLanguageLabel flag={<BrFlagIcon />} code="PT-BR" />
+                                            <ExampleLanguageLabel
+                                              flag={<BrFlagIcon />}
+                                              code="PT-BR"
+                                            />
                                             <input
                                               type="text"
                                               value={example.translation}
                                               onChange={(e) =>
-                                                updateExample(mIdx, eIdx, "translation", e.target.value)
+                                                updateExample(
+                                                  mIdx,
+                                                  eIdx,
+                                                  "translation",
+                                                  e.target.value
+                                                )
                                               }
                                               placeholder="Tradução em português"
                                               className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -1631,12 +2086,18 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                       </div>
 
                                       {hasVideo && !isEditingVideo ? (
-                                        <div className="self-start pt-[28px]">
+                                        <div className="flex h-full self-stretch md:items-start">
                                           <ExampleVideoPreview
                                             video={videoValue}
                                             thumbnail={thumbnailValue}
                                             isActive={isPreviewActive}
-                                            onPlay={() => setActiveVideoPreviewKey(exampleKey)}
+                                            onPlay={() =>
+                                              setActiveVideoPreviewKey(
+                                                exampleKey
+                                              )
+                                            }
+                                            className="w-full md:w-[264px]"
+                                            useProviderEmbedForThirdParty
                                           />
                                         </div>
                                       ) : null}
@@ -1667,21 +2128,44 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                         isUploading={isUploadingVideo}
                                         isDeleting={isDeletingVideo}
                                         isPreviewActive={isPreviewActive}
-                                        onPlay={() => setActiveVideoPreviewKey(exampleKey)}
-                                        onOpenEditor={() => openVideoEditor(exampleKey, videoValue)}
+                                        showPreview={false}
+                                        onPlay={() =>
+                                          setActiveVideoPreviewKey(exampleKey)
+                                        }
+                                        onOpenEditor={() =>
+                                          openVideoEditor(
+                                            exampleKey,
+                                            videoValue
+                                          )
+                                        }
                                         onEditorChange={(value) =>
-                                          setVideoEditor((current) => ({ ...current, value }))
+                                          setVideoEditor((current) => ({
+                                            ...current,
+                                            value,
+                                          }))
                                         }
                                         onSave={() =>
                                           void saveVideoFromEditor({
                                             key: exampleKey,
                                             oldVideo: videoValue,
-                                            onSuccess: ({ video, thumbnail }) =>
-                                              updateExampleFields(mIdx, eIdx, { video, thumbnail }),
+                                            onSuccess: ({
+                                              video,
+                                              thumbnail,
+                                            }) =>
+                                              updateExampleFields(
+                                                mIdx,
+                                                eIdx,
+                                                {
+                                                  video,
+                                                  thumbnail,
+                                                }
+                                              ),
                                           })
                                         }
                                         onCancel={closeVideoEditor}
-                                        onTriggerUpload={() => triggerVideoFilePicker(exampleKey)}
+                                        onTriggerUpload={() =>
+                                          triggerVideoFilePicker(exampleKey)
+                                        }
                                         onRemove={() =>
                                           void removeVideo({
                                             key: exampleKey,
@@ -1694,22 +2178,44 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                           })
                                         }
                                         fileInputRef={(element) => {
-                                          if (element) fileInputsRef.current[exampleKey] = element;
+                                          if (element) {
+                                            fileInputsRef.current[exampleKey] =
+                                              element;
+                                          }
                                         }}
                                         onFileChange={(event) => {
                                           const inputElement = event?.target;
-                                          const file = inputElement?.files?.[0];
-                                          if (inputElement) inputElement.value = "";
+                                          const file =
+                                            inputElement?.files?.[0];
+
+                                          if (inputElement) {
+                                            inputElement.value = "";
+                                          }
+
                                           void handleVideoFileSelected({
                                             key: exampleKey,
                                             file,
                                             scope: "example",
                                             oldVideo: videoValue,
-                                            onSuccess: ({ video, thumbnail }) =>
-                                              updateExampleFields(mIdx, eIdx, { video, thumbnail }),
+                                            onSuccess: ({
+                                              video,
+                                              thumbnail,
+                                            }) =>
+                                              updateExampleFields(
+                                                mIdx,
+                                                eIdx,
+                                                {
+                                                  video,
+                                                  thumbnail,
+                                                }
+                                              ),
                                           });
                                         }}
-                                        uploadButtonText={hasVideo ? "Trocar por upload" : "Enviar arquivo"}
+                                        uploadButtonText={
+                                          hasVideo
+                                            ? "Trocar por upload"
+                                            : "Enviar arquivo"
+                                        }
                                       />
                                     </div>
                                   </div>
@@ -1729,7 +2235,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         <input
                           type="text"
                           value={meaningItem.tip}
-                          onChange={(e) => updateMeaning(mIdx, "tip", e.target.value)}
+                          onChange={(e) =>
+                            updateMeaning(mIdx, "tip", e.target.value)
+                          }
                           placeholder="Explique como esse significado é usado no contexto"
                           className="w-full border-0 border-b border-[#D8E1EC] bg-transparent px-0 pb-1 text-xs italic text-[#6A7181] placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-0"
                         />
@@ -1742,67 +2250,73 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-[#DCE4EE] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.05)]">
-          <VideoControlCard
-            title="Vídeo geral da palavra/frase"
-            description="Esse vídeo será usado como padrão quando o exemplo e o significado não tiverem vídeo próprio."
-            emptyLabel="Sem vídeo geral da palavra"
-            video={wordVideo}
-            thumbnail={wordThumbnail}
-            isEditing={isEditingWordVideo}
-            editorValue={videoEditor.value}
-            uploadError={wordVideoUploadError}
-            isUploading={isUploadingWordVideo}
-            isDeleting={isDeletingWordVideo}
-            isPreviewActive={isWordPreviewActive}
-            onPlay={() => setActiveVideoPreviewKey(WORD_VIDEO_KEY)}
-            onOpenEditor={() => openVideoEditor(WORD_VIDEO_KEY, wordVideo)}
-            onEditorChange={(value) =>
-              setVideoEditor((current) => ({ ...current, value }))
+        <VideoControlCard
+          title="Vídeo geral da palavra/frase"
+          description="Esse vídeo será usado como padrão quando o exemplo e o significado não tiverem vídeo próprio."
+          emptyLabel="Sem vídeo geral da palavra"
+          video={wordVideo}
+          thumbnail={wordThumbnail}
+          isEditing={isEditingWordVideo}
+          editorValue={videoEditor.value}
+          uploadError={wordVideoUploadError}
+          isUploading={isUploadingWordVideo}
+          isDeleting={isDeletingWordVideo}
+          isPreviewActive={isWordPreviewActive}
+          previewVariant="inline-right"
+          inlineSize="wide"
+          onPlay={() => setActiveVideoPreviewKey(WORD_VIDEO_KEY)}
+          onOpenEditor={() => openVideoEditor(WORD_VIDEO_KEY, wordVideo)}
+          onEditorChange={(value) =>
+            setVideoEditor((current) => ({ ...current, value }))
+          }
+          onSave={() =>
+            void saveVideoFromEditor({
+              key: WORD_VIDEO_KEY,
+              oldVideo: wordVideo,
+              onSuccess: ({ video, thumbnail }) => {
+                setWordVideo(video);
+                setWordThumbnail(thumbnail);
+              },
+            })
+          }
+          onCancel={closeVideoEditor}
+          onTriggerUpload={() => triggerVideoFilePicker(WORD_VIDEO_KEY)}
+          onRemove={() =>
+            void removeVideo({
+              key: WORD_VIDEO_KEY,
+              oldVideo: wordVideo,
+              onSuccess: () => {
+                setWordVideo("");
+                setWordThumbnail("");
+              },
+            })
+          }
+          fileInputRef={(element) => {
+            if (element) {
+              fileInputsRef.current[WORD_VIDEO_KEY] = element;
             }
-            onSave={() =>
-              void saveVideoFromEditor({
-                key: WORD_VIDEO_KEY,
-                oldVideo: wordVideo,
-                onSuccess: ({ video, thumbnail }) => {
-                  setWordVideo(video);
-                  setWordThumbnail(thumbnail);
-                },
-              })
+          }}
+          onFileChange={(event) => {
+            const inputElement = event?.target;
+            const file = inputElement?.files?.[0];
+
+            if (inputElement) {
+              inputElement.value = "";
             }
-            onCancel={closeVideoEditor}
-            onTriggerUpload={() => triggerVideoFilePicker(WORD_VIDEO_KEY)}
-            onRemove={() =>
-              void removeVideo({
-                key: WORD_VIDEO_KEY,
-                oldVideo: wordVideo,
-                onSuccess: () => {
-                  setWordVideo("");
-                  setWordThumbnail("");
-                },
-              })
-            }
-            fileInputRef={(element) => {
-              if (element) fileInputsRef.current[WORD_VIDEO_KEY] = element;
-            }}
-            onFileChange={(event) => {
-              const inputElement = event?.target;
-              const file = inputElement?.files?.[0];
-              if (inputElement) inputElement.value = "";
-              void handleVideoFileSelected({
-                key: WORD_VIDEO_KEY,
-                file,
-                scope: "word",
-                oldVideo: wordVideo,
-                onSuccess: ({ video, thumbnail }) => {
-                  setWordVideo(video);
-                  setWordThumbnail(thumbnail);
-                },
-              });
-            }}
-            uploadButtonText={wordVideo ? "Trocar por upload" : "Enviar arquivo"}
-          />
-        </div>
+
+            void handleVideoFileSelected({
+              key: WORD_VIDEO_KEY,
+              file,
+              scope: "word",
+              oldVideo: wordVideo,
+              onSuccess: ({ video, thumbnail }) => {
+                setWordVideo(video);
+                setWordThumbnail(thumbnail);
+              },
+            });
+          }}
+          uploadButtonText={wordVideo ? "Trocar por upload" : "Enviar arquivo"}
+        />
 
         <button
           type="button"
