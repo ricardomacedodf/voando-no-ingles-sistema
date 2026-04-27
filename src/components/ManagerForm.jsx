@@ -1278,7 +1278,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                   {isExpanded ? (
                     <div className="space-y-4 p-4">
-                      <div className="rounded-xl border border-[#DCE4EE] bg-white p-4">
+                      <div className="border-b border-[#D8E1EC] pb-4">
                         <div className="mb-3 flex flex-wrap items-center gap-2">
                           <span
                             className="font-bold"
@@ -1307,57 +1307,55 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                           </span>
                         </div>
 
-                        <div className="border-l-2 border-[#CBD5E1] pl-4">
-                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-                            <div>
-                              <MeaningLanguageLabel />
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                          <div>
+                            <MeaningLanguageLabel />
 
-                              <input
-                                type="text"
-                                value={m.meaning}
-                                onChange={(e) =>
-                                  updateMeaning(mIdx, "meaning", e.target.value)
-                                }
-                                placeholder="Significado em português"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                spellCheck={false}
-                                name={`meaning-field-${mIdx}`}
-                                inputMode="text"
-                                className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-[#181818] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                              />
-                            </div>
+                            <input
+                              type="text"
+                              value={m.meaning}
+                              onChange={(e) =>
+                                updateMeaning(mIdx, "meaning", e.target.value)
+                              }
+                              placeholder="Significado em português"
+                              autoComplete="off"
+                              autoCorrect="off"
+                              autoCapitalize="none"
+                              spellCheck={false}
+                              name={`meaning-field-${mIdx}`}
+                              inputMode="text"
+                              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-[#181818] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </div>
 
-                            <div>
-                              <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
-                                <Hash className="h-3.5 w-3.5 text-primary" />
-                                <span>Tag</span>
-                              </label>
+                          <div>
+                            <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+                              <Hash className="h-3.5 w-3.5 text-primary" />
+                              <span>Tag</span>
+                            </label>
 
-                              <select
-                                value={m.category}
-                                onChange={(e) =>
-                                  updateMeaning(
-                                    mIdx,
-                                    "category",
-                                    e.target.value
-                                  )
-                                }
-                                className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm font-semibold transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                              >
-                                {categories.map((c) => (
-                                  <option key={c} value={c}>
-                                    {c}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                            <select
+                              value={m.category}
+                              onChange={(e) =>
+                                updateMeaning(
+                                  mIdx,
+                                  "category",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm font-semibold transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            >
+                              {categories.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-[#DCE4EE] bg-white p-4">
+                      <div>
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <span className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">
                             Exemplos
@@ -1711,23 +1709,23 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             );
                           })}
                         </div>
+                      </div>
 
-                        <div className="mt-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2">
-                          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
-                            <Lightbulb className="h-3.5 w-3.5 text-[#ED9A0A]" />
-                            Modo de uso
-                          </div>
+                      <div className="border-t border-[#E2E8F0] pt-4">
+                        <label className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                          <Lightbulb className="h-3.5 w-3.5 text-[#ED9A0A]" />
+                          Modo de uso
+                        </label>
 
-                          <input
-                            type="text"
-                            value={m.tip}
-                            onChange={(e) =>
-                              updateMeaning(mIdx, "tip", e.target.value)
-                            }
-                            placeholder="Explique como esse significado é usado no contexto"
-                            className="w-full border-0 bg-transparent p-0 text-xs italic text-[#6A7181] placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0"
-                          />
-                        </div>
+                        <input
+                          type="text"
+                          value={m.tip}
+                          onChange={(e) =>
+                            updateMeaning(mIdx, "tip", e.target.value)
+                          }
+                          placeholder="Explique como esse significado é usado no contexto"
+                          className="w-full border-0 border-b border-[#D8E1EC] bg-transparent px-0 pb-1 text-xs italic text-[#6A7181] placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-0"
+                        />
                       </div>
                     </div>
                   ) : null}
