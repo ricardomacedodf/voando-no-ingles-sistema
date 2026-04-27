@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Lightbulb, Play, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lightbulb, Play, X } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
@@ -208,6 +208,168 @@ const renderHighlightedTerm = (text, term) => {
   });
 };
 
+const extractIframeSrc = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const match = cleanValue.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+
+  return normalizeText(match?.[1] || "");
+};
+
+const getYouTubeVideoId = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /youtu\.be\/([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/watch\?[^"'\s>]*v=([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const getDailymotionVideoId = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /dailymotion\.com\/video\/([a-zA-Z0-9]+)/i,
+    /dai\.ly\/([a-zA-Z0-9]+)/i,
+    /dailymotion\.com\/embed\/video\/([a-zA-Z0-9]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const getVimeoVideoId = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /vimeo\.com\/video\/(\d+)/i,
+    /player\.vimeo\.com\/video\/(\d+)/i,
+    /vimeo\.com\/(\d+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const isThirdPartyEmbeddedVideo = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return false;
+
+  return (
+    /<iframe/i.test(cleanValue) ||
+    /\[iframe/i.test(cleanValue) ||
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv/i.test(
+      cleanValue
+    )
+  );
+};
+
+const getPlatformThumbnailUrl = (value) => {
+  const youtubeId = getYouTubeVideoId(value);
+
+  if (youtubeId) {
+    return `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`;
+  }
+
+  const dailymotionId = getDailymotionVideoId(value);
+
+  if (dailymotionId) {
+    return `https://www.dailymotion.com/thumbnail/video/${dailymotionId}`;
+  }
+
+  return "";
+};
+
+const cleanEmbedPreviewSrc = (src) => {
+  const cleanSrc = normalizeText(src);
+
+  if (!cleanSrc) return "";
+
+  try {
+    const url = new URL(cleanSrc, window.location.origin);
+
+    url.searchParams.delete("autoplay");
+    url.searchParams.delete("autoPlay");
+    url.searchParams.delete("mute");
+    url.searchParams.delete("muted");
+
+    return url.toString();
+  } catch {
+    return cleanSrc;
+  }
+};
+
+const getEmbedPreviewSrc = (value, playback) => {
+  const cleanValue = normalizeText(value);
+
+  const playbackSrc =
+    playback?.embedUrl ||
+    playback?.embed_url ||
+    playback?.src ||
+    playback?.url ||
+    "";
+
+  const iframeSrc =
+    extractIframeSrc(cleanValue) ||
+    extractIframeSrc(playback?.html || "") ||
+    extractIframeSrc(playback?.embed || "");
+
+  if (iframeSrc) return cleanEmbedPreviewSrc(iframeSrc);
+
+  if (playbackSrc && playback?.type !== "video") {
+    return cleanEmbedPreviewSrc(playbackSrc);
+  }
+
+  const youtubeId = getYouTubeVideoId(cleanValue);
+
+  if (youtubeId) {
+    return `https://www.youtube.com/embed/${youtubeId}`;
+  }
+
+  const vimeoId = getVimeoVideoId(cleanValue);
+
+  if (vimeoId) {
+    return `https://player.vimeo.com/video/${vimeoId}`;
+  }
+
+  const dailymotionId = getDailymotionVideoId(cleanValue);
+
+  if (dailymotionId) {
+    return `https://www.dailymotion.com/embed/video/${dailymotionId}`;
+  }
+
+  return "";
+};
+
 function ExampleVideoThumbnail({
   video,
   thumbnail,
@@ -217,6 +379,10 @@ function ExampleVideoThumbnail({
   className = "h-[84px]",
 }) {
   const [thumbnailSrc, setThumbnailSrc] = useState("");
+  const [embedPreviewSrc, setEmbedPreviewSrc] = useState("");
+
+  const isThirdPartyVideo = isThirdPartyEmbeddedVideo(video);
+  const shouldUseDirectEmbed = isThirdPartyVideo && Boolean(embedPreviewSrc);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,6 +403,7 @@ function ExampleVideoThumbnail({
     const applyFallback = () => {
       if (cancelled || captured) return;
       setThumbnailSrc("");
+      setEmbedPreviewSrc("");
     };
 
     const cleanupVideo = () => {
@@ -265,6 +432,7 @@ function ExampleVideoThumbnail({
       captured = true;
       clearFallbackTimer();
       setThumbnailSrc(dataUrl);
+      setEmbedPreviewSrc("");
 
       if (rawVideo) {
         videoThumbnailCache.set(rawVideo, dataUrl);
@@ -330,13 +498,50 @@ function ExampleVideoThumbnail({
 
     const generateThumbnail = async () => {
       setThumbnailSrc("");
+      setEmbedPreviewSrc("");
 
-      if (rawThumbnail) {
-        setThumbnailSrc(rawThumbnail);
+      if (!rawVideo || typeof window === "undefined") {
         return;
       }
 
-      if (!rawVideo || typeof window === "undefined") {
+      if (isThirdPartyEmbeddedVideo(rawVideo)) {
+        try {
+          const playback = await resolveExampleVideoPlayback(rawVideo);
+
+          if (cancelled) return;
+
+          const embedSrc = getEmbedPreviewSrc(rawVideo, playback);
+
+          if (embedSrc) {
+            setEmbedPreviewSrc(embedSrc);
+            setThumbnailSrc("");
+            return;
+          }
+        } catch {
+          const embedSrc = getEmbedPreviewSrc(rawVideo, null);
+
+          if (embedSrc) {
+            setEmbedPreviewSrc(embedSrc);
+            setThumbnailSrc("");
+            return;
+          }
+        }
+
+        const platformThumbnail = getPlatformThumbnailUrl(rawVideo);
+
+        if (platformThumbnail) {
+          setThumbnailSrc(platformThumbnail);
+          setEmbedPreviewSrc("");
+          return;
+        }
+
+        applyFallback();
+        return;
+      }
+
+      if (rawThumbnail) {
+        setThumbnailSrc(rawThumbnail);
+        setEmbedPreviewSrc("");
         return;
       }
 
@@ -344,6 +549,7 @@ function ExampleVideoThumbnail({
 
       if (cachedThumbnail) {
         setThumbnailSrc(cachedThumbnail);
+        setEmbedPreviewSrc("");
         return;
       }
 
@@ -353,6 +559,14 @@ function ExampleVideoThumbnail({
         if (cancelled) return;
 
         if (!playback || playback.type !== "video" || !playback.src) {
+          const embedSrc = getEmbedPreviewSrc(rawVideo, playback);
+
+          if (embedSrc) {
+            setEmbedPreviewSrc(embedSrc);
+            setThumbnailSrc("");
+            return;
+          }
+
           applyFallback();
           return;
         }
@@ -443,22 +657,46 @@ function ExampleVideoThumbnail({
   }, [video, thumbnail]);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
+      role={shouldUseDirectEmbed ? undefined : "button"}
+      tabIndex={shouldUseDirectEmbed ? undefined : 0}
+      onClick={(event) => {
+        if (shouldUseDirectEmbed) return;
+        onClick?.(event);
+      }}
+      onKeyDown={(event) => {
+        if (shouldUseDirectEmbed) return;
+
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick?.(event);
+        }
+      }}
       aria-label={title}
       title={title}
       className={[
         "group relative w-full overflow-hidden rounded-lg border",
+        shouldUseDirectEmbed ? "" : "cursor-pointer",
         className,
         isOpen ? "border-[#ED9A0A]/80" : "border-[#D9E2EC]",
         "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)]",
         "transition-all duration-200",
-        "hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)]",
+        shouldUseDirectEmbed
+          ? ""
+          : "hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
       ].join(" ")}
     >
-      {thumbnailSrc ? (
+      {embedPreviewSrc ? (
+        <iframe
+          src={embedPreviewSrc}
+          title={title}
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowFullScreen
+          className="absolute inset-0 h-full w-full border-0"
+        />
+      ) : thumbnailSrc ? (
         <img
           src={thumbnailSrc}
           alt=""
@@ -469,23 +707,29 @@ function ExampleVideoThumbnail({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(237,154,10,0.18),transparent_32%),linear-gradient(135deg,#F8FAFC_0%,#EFF4F8_55%,#E6EDF5_100%)]" />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
-      <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
+      {!shouldUseDirectEmbed ? (
+        <>
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
+          <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
 
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div
-          className={[
-            "flex h-11 w-11 items-center justify-center rounded-full",
-            "border border-white/70 bg-white/55",
-            "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
-            "backdrop-blur-md transition-all duration-200",
-            "group-hover:scale-105 group-hover:bg-white/72",
-          ].join(" ")}
-        >
-          <Play className="ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
-        </div>
-      </div>
-    </button>
+          {!isThirdPartyVideo ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className={[
+                  "flex h-11 w-11 items-center justify-center rounded-full",
+                  "border border-white/70 bg-white/55",
+                  "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
+                  "backdrop-blur-md transition-all duration-200",
+                  "group-hover:scale-105 group-hover:bg-white/72",
+                ].join(" ")}
+              >
+                <Play className="ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -506,6 +750,7 @@ export default function ExamplesPanel({
   const isMobile = useIsMobile();
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
+  const [videoIndexes, setVideoIndexes] = useState({});
 
   const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
 
@@ -531,36 +776,52 @@ export default function ExamplesPanel({
     const meaningVideo = normalizeMeaningVideo(entry);
     const meaningThumbnail = normalizeMeaningThumbnail(entry);
 
+    const rawExamples = Array.isArray(entry?.examples) ? entry.examples : [];
+
+    const topVideos = [
+      meaningVideo
+        ? {
+            video: meaningVideo,
+            thumbnail: meaningThumbnail,
+            key: `${entry?.meaning || "meaning"}-${index}-meaning-video`,
+            title: entry?.meaning || `Significado ${index + 1}`,
+          }
+        : null,
+      ...rawExamples
+        .map((example, exampleIndex) => {
+          const exampleVideo = normalizeExampleVideo(example);
+
+          if (!exampleVideo) return null;
+
+          return {
+            video: exampleVideo,
+            thumbnail: normalizeExampleThumbnail(example),
+            key: `${
+              entry?.meaning || "meaning"
+            }-${index}-example-${exampleIndex}`,
+            title:
+              normalizeExampleText(example?.sentence) ||
+              entry?.meaning ||
+              "Vídeo do exemplo",
+          };
+        })
+        .filter(Boolean),
+    ].filter(Boolean);
+
     return {
       meaning: entry?.meaning || `Significado ${index + 1}`,
       category: entry?.category || "vocabulário",
       tip: entry?.tip || "",
       video: meaningVideo,
       thumbnail: meaningThumbnail,
-      examples: (Array.isArray(entry?.examples) ? entry.examples : [])
-        .map((example) => {
-          const exampleVideo = normalizeExampleVideo(example);
-          const exampleThumbnail = normalizeExampleThumbnail(example);
-
-          const effectiveVideo = shouldShowGlobalWordVideoOnTop
-            ? exampleVideo || meaningVideo
-            : exampleVideo || meaningVideo || wordVideoSource;
-
-          const effectiveThumbnail = exampleVideo
-            ? exampleThumbnail
-            : meaningVideo
-            ? meaningThumbnail
-            : shouldShowGlobalWordVideoOnTop
-            ? ""
-            : wordThumbnailSource;
-
-          return {
-            sentence: normalizeExampleText(example?.sentence),
-            translation: normalizeExampleText(example?.translation),
-            video: effectiveVideo,
-            thumbnail: effectiveVideo ? effectiveThumbnail : "",
-          };
-        })
+      topVideos,
+      examples: rawExamples
+        .map((example) => ({
+          sentence: normalizeExampleText(example?.sentence),
+          translation: normalizeExampleText(example?.translation),
+          video: normalizeExampleVideo(example),
+          thumbnail: normalizeExampleThumbnail(example),
+        }))
         .filter(hasExampleContent),
     };
   });
@@ -574,6 +835,7 @@ export default function ExamplesPanel({
   useEffect(() => {
     setOpenDesktopVideos({});
     setMobileVideo(null);
+    setVideoIndexes({});
   }, [
     allMeanings,
     activeMeaning,
@@ -602,8 +864,6 @@ export default function ExamplesPanel({
   const isFlashcard = variant === "flashcard";
   const titleValue = titleTerm ? titleTerm.trim() : "Exemplos";
   const highlightTerm = titleTerm ? titleTerm.trim() : "";
-  const globalWordVideoKey = "global-word-video";
-  const isGlobalWordVideoOpen = Boolean(openDesktopVideos[globalWordVideoKey]);
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -628,35 +888,206 @@ export default function ExamplesPanel({
     playSound(SFX_EVENTS.EXAMPLES_CLOSE);
   };
 
-  const closeDesktopVideo = (videoKey) => {
-    setOpenDesktopVideos((current) => ({
-      ...current,
-      [videoKey]: false,
-    }));
-  };
-
   const closeMobileVideo = () => {
     setMobileVideo(null);
   };
 
-  const openVideo = (video, videoKey, videoTitle) => {
+  const openVideo = ({
+    video,
+    videoKey,
+    videoTitle,
+    groupKey,
+    videos,
+    index,
+  }) => {
     if (!video) return;
 
     if (isMobile) {
-      setMobileVideo({ video, key: videoKey, title: videoTitle });
+      setMobileVideo({
+        video,
+        key: videoKey,
+        title: videoTitle,
+        groupKey,
+        videos,
+        index,
+      });
       return;
     }
 
-    setOpenDesktopVideos((current) => {
-      const isAlreadyOpen = Boolean(current[videoKey]);
+    setOpenDesktopVideos({
+      [groupKey]: true,
+    });
+  };
 
-      if (isAlreadyOpen) {
-        return {};
-      }
+  const goToVideoIndex = ({ groupKey, videos, nextIndex }) => {
+    if (!Array.isArray(videos) || videos.length === 0) return;
 
-      return {
-        [videoKey]: true,
-      };
+    const safeIndex =
+      nextIndex < 0
+        ? videos.length - 1
+        : nextIndex >= videos.length
+        ? 0
+        : nextIndex;
+
+    const nextVideo = videos[safeIndex];
+
+    setVideoIndexes((current) => ({
+      ...current,
+      [groupKey]: safeIndex,
+    }));
+
+    if (isMobile) {
+      setMobileVideo({
+        video: nextVideo.video,
+        key: nextVideo.key,
+        title: nextVideo.title,
+        groupKey,
+        videos,
+        index: safeIndex,
+      });
+      return;
+    }
+
+    setOpenDesktopVideos({
+      [groupKey]: true,
+    });
+  };
+
+  const renderVideoControls = ({ groupKey, videos, currentIndex }) => {
+    if (!Array.isArray(videos) || videos.length <= 1) return null;
+
+    return (
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            goToVideoIndex({
+              groupKey,
+              videos,
+              nextIndex: currentIndex - 1,
+            })
+          }
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Voltar
+        </button>
+
+        <span className="text-[11px] font-semibold text-[#64748B]">
+          {currentIndex + 1}/{videos.length}
+        </span>
+
+        <button
+          type="button"
+          onClick={() =>
+            goToVideoIndex({
+              groupKey,
+              videos,
+              nextIndex: currentIndex + 1,
+            })
+          }
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
+        >
+          Próximo
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  };
+
+  const renderTopVideoCarousel = ({ videos, groupKey }) => {
+    const safeVideos = Array.isArray(videos) ? videos.filter(Boolean) : [];
+
+    if (safeVideos.length === 0) return null;
+
+    const currentIndex = Math.min(
+      videoIndexes[groupKey] || 0,
+      safeVideos.length - 1
+    );
+
+    const currentVideo = safeVideos[currentIndex];
+
+    if (!currentVideo?.video) return null;
+
+    const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
+
+    return (
+      <div className="mb-4">
+        {isVideoOpen && !isMobile ? (
+          <div>
+            <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
+              <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
+                <ExampleVideoPlayer
+                  key={`${currentVideo.key}-${currentVideo.video}`}
+                  video={currentVideo.video}
+                  title={currentVideo.title}
+                  autoPlay
+                />
+              </AspectRatio>
+            </div>
+
+            {renderVideoControls({
+              groupKey,
+              videos: safeVideos,
+              currentIndex,
+            })}
+          </div>
+        ) : (
+          <div>
+            <ExampleVideoThumbnail
+              video={currentVideo.video}
+              thumbnail={currentVideo.thumbnail}
+              title={currentVideo.title}
+              isOpen={isVideoOpen}
+              className="aspect-video h-auto"
+              onClick={() =>
+                openVideo({
+                  video: currentVideo.video,
+                  videoKey: currentVideo.key,
+                  videoTitle: currentVideo.title,
+                  groupKey,
+                  videos: safeVideos,
+                  index: currentIndex,
+                })
+              }
+            />
+
+            {renderVideoControls({
+              groupKey,
+              videos: safeVideos,
+              currentIndex,
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const goMobileVideoToIndex = (nextIndex) => {
+    if (!mobileVideo?.videos?.length) return;
+
+    const videos = mobileVideo.videos;
+    const safeIndex =
+      nextIndex < 0
+        ? videos.length - 1
+        : nextIndex >= videos.length
+        ? 0
+        : nextIndex;
+
+    const nextVideo = videos[safeIndex];
+
+    setVideoIndexes((current) => ({
+      ...current,
+      [mobileVideo.groupKey]: safeIndex,
+    }));
+
+    setMobileVideo({
+      video: nextVideo.video,
+      key: nextVideo.key,
+      title: nextVideo.title,
+      groupKey: mobileVideo.groupKey,
+      videos,
+      index: safeIndex,
     });
   };
 
@@ -717,218 +1148,105 @@ export default function ExamplesPanel({
           </button>
         </div>
 
-        {shouldShowGlobalWordVideoOnTop ? (
-          <div className="mb-4">
-            {isGlobalWordVideoOpen && !isMobile ? (
-              <div>
-                <div className="mb-2 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => closeDesktopVideo(globalWordVideoKey)}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Ocultar vídeo
-                  </button>
-                </div>
-
-                <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
-                  <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
-                    <ExampleVideoPlayer
-                      key={`${globalWordVideoKey}-${wordVideoSource}`}
-                      video={wordVideoSource}
-                      title={titleValue}
-                      autoPlay
-                    />
-                  </AspectRatio>
-                </div>
-              </div>
-            ) : (
-              <ExampleVideoThumbnail
-                video={wordVideoSource}
-                thumbnail={wordThumbnailSource}
-                title={titleValue}
-                isOpen={isGlobalWordVideoOpen}
-                className="aspect-video h-auto"
-                onClick={() =>
-                  openVideo(wordVideoSource, globalWordVideoKey, titleValue)
-                }
-              />
-            )}
-          </div>
-        ) : null}
+        {shouldShowGlobalWordVideoOnTop
+          ? renderTopVideoCarousel({
+              videos: [
+                {
+                  video: wordVideoSource,
+                  thumbnail: wordThumbnailSource,
+                  key: "global-word-video",
+                  title: titleValue,
+                },
+              ],
+              groupKey: "global-word-video-group",
+            })
+          : null}
 
         <div className="space-y-4">
           {sorted.map((entry, index) => {
             const visibleExamples = entry.examples.slice(0, 3);
-
-            const videoExamples = visibleExamples
-              .map((example, exampleIndex) => ({
-                ...example,
-                exampleIndex,
-                key: `${entry.meaning}-${index}-${exampleIndex}`,
-                title: example.sentence || "Vídeo do exemplo",
-              }))
-              .filter((example) => Boolean(example.video));
-
-            const firstVideoExample = videoExamples[0];
-
-            const isFirstVideoOpen = firstVideoExample
-              ? Boolean(openDesktopVideos[firstVideoExample.key])
-              : false;
+            const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
 
             return (
               <section
                 key={`${entry.meaning}-${index}`}
-                className={[
-                  "rounded-xl border border-[#DCE4EE] bg-white shadow-[0_10px_26px_rgba(15,23,42,0.05)]",
-                  isFirstVideoOpen ? "p-3" : "p-4",
-                ].join(" ")}
+                className="rounded-xl border border-[#DCE4EE] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
               >
-                <div
-                  className={
-                    firstVideoExample && !isFirstVideoOpen
-                      ? "grid gap-4 md:grid-cols-[minmax(0,1fr)_160px] md:items-start"
-                      : "grid gap-3"
-                  }
-                >
-                  <div className="min-w-0">
-                    <div
-                      className={[
-                        "mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b border-[#E6EDF5] pb-1.5",
-                        isFirstVideoOpen ? "mb-1.5" : "mb-2",
-                      ].join(" ")}
+                {entry.topVideos.length > 0
+                  ? renderTopVideoCarousel({
+                      videos: entry.topVideos,
+                      groupKey,
+                    })
+                  : null}
+
+                <div className="min-w-0">
+                  <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b border-[#E6EDF5] pb-1.5">
+                    <span
+                      className={
+                        isFlashcard
+                          ? "font-semibold text-[#25B15F]"
+                          : "font-bold text-[#26A95C]"
+                      }
                     >
-                      <span
-                        className={
-                          isFlashcard
-                            ? "font-semibold text-[#25B15F]"
-                            : "font-bold text-[#26A95C]"
-                        }
-                      >
-                        {index + 1}.
+                      {index + 1}.
+                    </span>
+
+                    <span className="font-bold text-[#181818]">
+                      {entry.meaning}
+                    </span>
+
+                    {entry.category ? (
+                      <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                        {entry.category}
                       </span>
-
-                      <span className="font-bold text-[#181818]">
-                        {entry.meaning}
-                      </span>
-
-                      {entry.category ? (
-                        <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
-                          {entry.category}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {visibleExamples.length > 0 ? (
-                      <div
-                        className={[
-                          "border-l-2 border-[#CBD5E1]",
-                          isFirstVideoOpen ? "pl-3" : "pl-4",
-                        ].join(" ")}
-                      >
-                        <div className="space-y-1.5">
-                          {visibleExamples.map((example, exampleIndex) => {
-                            const hasSentence = Boolean(example.sentence);
-                            const hasTranslation = Boolean(example.translation);
-                            const isLastExample =
-                              exampleIndex === visibleExamples.length - 1;
-
-                            return (
-                              <div
-                                key={`${entry.meaning}-${index}-${exampleIndex}`}
-                                className={[
-                                  "space-y-0.5",
-                                  isFirstVideoOpen && isLastExample
-                                    ? "flex items-end justify-between gap-3"
-                                    : "",
-                                ].join(" ")}
-                              >
-                                <div className="min-w-0">
-                                  {hasTranslation ? (
-                                    <p className="text-xs font-medium leading-snug text-[#758195]">
-                                      {example.translation}
-                                    </p>
-                                  ) : null}
-
-                                  {hasSentence ? (
-                                    <p className="text-sm font-semibold leading-snug text-[#0b0e14]">
-                                      {renderHighlightedTerm(
-                                        example.sentence,
-                                        highlightTerm
-                                      )}
-                                    </p>
-                                  ) : null}
-                                </div>
-
-                                {!isMobile &&
-                                firstVideoExample &&
-                                isFirstVideoOpen &&
-                                isLastExample ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      closeDesktopVideo(firstVideoExample.key)
-                                    }
-                                    className="mb-[1px] inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                    Ocultar vídeo
-                                  </button>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="border-l-2 border-[#CBD5E1] pl-4 text-sm italic text-muted-foreground">
-                        Nenhum exemplo cadastrado.
-                      </p>
-                    )}
+                    ) : null}
                   </div>
 
-                  {firstVideoExample && !isFirstVideoOpen ? (
-                    <div className="w-full">
-                      <ExampleVideoThumbnail
-                        video={firstVideoExample.video}
-                        thumbnail={firstVideoExample.thumbnail}
-                        title={firstVideoExample.title}
-                        isOpen={isFirstVideoOpen}
-                        onClick={() =>
-                          openVideo(
-                            firstVideoExample.video,
-                            firstVideoExample.key,
-                            firstVideoExample.title
-                          )
-                        }
-                      />
+                  {visibleExamples.length > 0 ? (
+                    <div className="border-l-2 border-[#CBD5E1] pl-4">
+                      <div className="space-y-1.5">
+                        {visibleExamples.map((example, exampleIndex) => {
+                          const hasSentence = Boolean(example.sentence);
+                          const hasTranslation = Boolean(example.translation);
+
+                          return (
+                            <div
+                              key={`${entry.meaning}-${index}-${exampleIndex}`}
+                              className="space-y-0.5"
+                            >
+                              {hasTranslation ? (
+                                <p className="text-xs font-medium leading-snug text-[#758195]">
+                                  {example.translation}
+                                </p>
+                              ) : null}
+
+                              {hasSentence ? (
+                                <p className="text-sm font-semibold leading-snug text-[#0b0e14]">
+                                  {renderHighlightedTerm(
+                                    example.sentence,
+                                    highlightTerm
+                                  )}
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ) : null}
+                  ) : (
+                    <p className="border-l-2 border-[#CBD5E1] pl-4 text-sm italic text-muted-foreground">
+                      Nenhum exemplo cadastrado.
+                    </p>
+                  )}
                 </div>
 
-                {entry.tip && !isFirstVideoOpen ? (
+                {entry.tip ? (
                   <div className="mt-3">
                     <div className="inline-flex max-w-full items-start gap-1.5 border-b border-[#E6EDF5] pb-1">
                       <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ED9A0A]" />
                       <span className="min-w-0 text-xs italic leading-relaxed text-muted-foreground">
                         {entry.tip}
                       </span>
-                    </div>
-                  </div>
-                ) : null}
-
-                {!isMobile && firstVideoExample && isFirstVideoOpen ? (
-                  <div className="mt-2">
-                    <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
-                      <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
-                        <ExampleVideoPlayer
-                          key={`${firstVideoExample.key}-${firstVideoExample.video}`}
-                          video={firstVideoExample.video}
-                          title={firstVideoExample.title}
-                          autoPlay
-                        />
-                      </AspectRatio>
                     </div>
                   </div>
                 ) : null}
@@ -947,16 +1265,44 @@ export default function ExamplesPanel({
           onClick={closeMobileVideo}
         >
           <div
-            className="absolute left-0 right-0 top-[calc(env(safe-area-inset-top,0px)+7.55vh)] aspect-[5/4] w-screen max-w-none overflow-hidden bg-black"
+            className="absolute left-0 right-0 top-[calc(env(safe-area-inset-top,0px)+7.55vh)] w-screen max-w-none"
             onClick={(event) => event.stopPropagation()}
           >
-            <ExampleVideoPlayer
-              key={mobileVideo?.key || "mobile-video"}
-              video={mobileVideo?.video || ""}
-              title={mobileVideo?.title || ""}
-              autoPlay
-              layout="mobileMockup"
-            />
+            <div className="aspect-[5/4] w-full overflow-hidden bg-black">
+              <ExampleVideoPlayer
+                key={mobileVideo?.key || "mobile-video"}
+                video={mobileVideo?.video || ""}
+                title={mobileVideo?.title || ""}
+                autoPlay
+                layout="mobileMockup"
+              />
+            </div>
+
+            {mobileVideo?.videos?.length > 1 ? (
+              <div className="mt-2 flex items-center justify-between gap-2 px-3">
+                <button
+                  type="button"
+                  onClick={() => goMobileVideoToIndex(mobileVideo.index - 1)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Voltar
+                </button>
+
+                <span className="rounded-full bg-black/40 px-2.5 py-1 text-xs font-bold text-white">
+                  {mobileVideo.index + 1}/{mobileVideo.videos.length}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => goMobileVideoToIndex(mobileVideo.index + 1)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
+                >
+                  Próximo
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
