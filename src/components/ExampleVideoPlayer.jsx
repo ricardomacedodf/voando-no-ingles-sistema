@@ -92,6 +92,195 @@ function addAutoplayToUrl(src) {
   }
 }
 
+const normalizeVideoValue = (value) =>
+  typeof value === "string" ? value.trim() : "";
+
+const extractIframeSrcFromValue = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return "";
+
+  const match = cleanValue.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+  return normalizeVideoValue(match?.[1] || "");
+};
+
+const extractFirstUrlFromValue = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return "";
+
+  const match = cleanValue.match(/https?:\/\/[^\s"'<>[\]]+/i);
+  return normalizeVideoValue(match?.[0] || "");
+};
+
+const getYouTubeVideoIdFromValue = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /youtu\.be\/([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/watch\?[^"'\s>]*v=([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/i,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const getVimeoVideoIdFromValue = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /player\.vimeo\.com\/video\/(\d+)/i,
+    /vimeo\.com\/video\/(\d+)/i,
+    /vimeo\.com\/(\d+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const getDailymotionVideoIdFromValue = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return "";
+
+  const patterns = [
+    /dailymotion\.com\/video\/([a-zA-Z0-9]+)/i,
+    /dai\.ly\/([a-zA-Z0-9]+)/i,
+    /dailymotion\.com\/embed\/video\/([a-zA-Z0-9]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleanValue.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return "";
+};
+
+const cleanEmbedSourceUrl = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return "";
+
+  try {
+    const base =
+      typeof window !== "undefined" ? window.location.origin : "https://local";
+    const url = new URL(cleanValue, base);
+
+    url.searchParams.delete("autoplay");
+    url.searchParams.delete("autoPlay");
+    url.searchParams.delete("mute");
+    url.searchParams.delete("muted");
+
+    return url.toString();
+  } catch {
+    return cleanValue;
+  }
+};
+
+const isLikelyThirdPartyEmbedValue = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return false;
+
+  return (
+    /<iframe/i.test(cleanValue) ||
+    /\[iframe/i.test(cleanValue) ||
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co/i.test(
+      cleanValue
+    )
+  );
+};
+
+const getImmediateEmbedPlayback = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!isLikelyThirdPartyEmbedValue(cleanValue)) return null;
+
+  const iframeSrc = extractIframeSrcFromValue(cleanValue);
+  if (iframeSrc) {
+    const safeSrc = cleanEmbedSourceUrl(iframeSrc);
+    return {
+      type: "iframe",
+      src: safeSrc,
+      originalUrl: cleanValue,
+      openUrl: safeSrc,
+    };
+  }
+
+  const youtubeId = getYouTubeVideoIdFromValue(cleanValue);
+  if (youtubeId) {
+    const src = `https://www.youtube.com/embed/${youtubeId}`;
+    return {
+      type: "iframe",
+      src,
+      originalUrl: cleanValue,
+      openUrl: src,
+    };
+  }
+
+  const vimeoId = getVimeoVideoIdFromValue(cleanValue);
+  if (vimeoId) {
+    const src = `https://player.vimeo.com/video/${vimeoId}`;
+    return {
+      type: "iframe",
+      src,
+      originalUrl: cleanValue,
+      openUrl: src,
+    };
+  }
+
+  const dailymotionId = getDailymotionVideoIdFromValue(cleanValue);
+  if (dailymotionId) {
+    const src = `https://www.dailymotion.com/embed/video/${dailymotionId}`;
+    return {
+      type: "iframe",
+      src,
+      originalUrl: cleanValue,
+      openUrl: src,
+    };
+  }
+
+  const firstUrl = extractFirstUrlFromValue(cleanValue);
+  if (firstUrl) {
+    const safeSrc = cleanEmbedSourceUrl(firstUrl);
+    return {
+      type: "iframe",
+      src: safeSrc,
+      originalUrl: cleanValue,
+      openUrl: safeSrc,
+    };
+  }
+
+  return null;
+};
+
+const getWebEmbedFrameStyle = (embedSrc, isMobileLayout) => {
+  if (isMobileLayout) return undefined;
+
+  const safeSrc = normalizeVideoValue(embedSrc).toLowerCase();
+
+  if (safeSrc.includes("clip.cafe")) {
+    return {
+      left: "51%",
+      top: "50%",
+      width: "107%",
+      height: "107%",
+      transform: "translate(-50%, -50%) scale(0.95)",
+      transformOrigin: "center center",
+      clipPath: "inset(0.5px)",
+    };
+  }
+
+  return undefined;
+};
+
 export default function ExampleVideoPlayer({
   video,
   title = "Vídeo do exemplo",
@@ -142,8 +331,9 @@ export default function ExampleVideoPlayer({
   useEffect(() => {
     let isMounted = true;
     const normalizedVideo = typeof video === "string" ? video.trim() : "";
+    const immediateEmbedPlayback = getImmediateEmbedPlayback(normalizedVideo);
 
-    setPlayback(null);
+    setPlayback(immediateEmbedPlayback || null);
     setFailed(false);
     setIsPlaying(false);
     setControlsVisible(false);
@@ -623,6 +813,11 @@ export default function ExampleVideoPlayer({
   }
 
   if (playback.type === "iframe") {
+    const webEmbedFrameStyle = getWebEmbedFrameStyle(
+      iframeSrc,
+      isMobileMockupLayout
+    );
+
     return (
       <div
         className={
@@ -637,6 +832,7 @@ export default function ExampleVideoPlayer({
           src={iframeSrc}
           title={title}
           className="absolute inset-0 h-full w-full border-0 bg-black"
+          style={webEmbedFrameStyle}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowFullScreen
           loading="eager"

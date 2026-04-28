@@ -481,19 +481,47 @@ const getEmbedPreviewSrc = (value, playback) => {
   return "";
 };
 
+const getWebEmbedPreviewFrameStyle = (embedSrc, isMobile) => {
+  if (isMobile) return undefined;
+
+  const safeSrc = normalizeText(embedSrc).toLowerCase();
+
+  if (safeSrc.includes("clip.cafe")) {
+    return {
+      left: "51%",
+      top: "50%",
+      width: "107%",
+      height: "107%",
+      transform: "translate(-50%, -50%) scale(0.95)",
+      transformOrigin: "center center",
+      clipPath: "inset(0.5px)",
+    };
+  }
+
+  return undefined;
+};
+
 function ExampleVideoThumbnail({
   video,
   thumbnail,
   onClick,
   title = "Vídeo do exemplo",
   isOpen = false,
+  isMobile = false,
   className = "h-[84px]",
 }) {
   const [thumbnailSrc, setThumbnailSrc] = useState("");
   const [embedPreviewSrc, setEmbedPreviewSrc] = useState("");
 
   const isThirdPartyVideo = isThirdPartyEmbeddedVideo(video);
-  const shouldUseDirectEmbed = isThirdPartyVideo && Boolean(embedPreviewSrc);
+  const shouldRenderEmbedPreview =
+    isThirdPartyVideo && Boolean(embedPreviewSrc);
+  const shouldUseDirectEmbed =
+    shouldRenderEmbedPreview && !isMobile;
+  const webEmbedPreviewFrameStyle = getWebEmbedPreviewFrameStyle(
+    embedPreviewSrc,
+    isMobile
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -616,26 +644,12 @@ function ExampleVideoThumbnail({
       }
 
       if (isThirdPartyEmbeddedVideo(rawVideo)) {
-        try {
-          const playback = await resolveExampleVideoPlayback(rawVideo);
+        const embedSrc = getEmbedPreviewSrc(rawVideo, null);
 
-          if (cancelled) return;
-
-          const embedSrc = getEmbedPreviewSrc(rawVideo, playback);
-
-          if (embedSrc) {
-            setEmbedPreviewSrc(embedSrc);
-            setThumbnailSrc("");
-            return;
-          }
-        } catch {
-          const embedSrc = getEmbedPreviewSrc(rawVideo, null);
-
-          if (embedSrc) {
-            setEmbedPreviewSrc(embedSrc);
-            setThumbnailSrc("");
-            return;
-          }
+        if (embedSrc) {
+          setEmbedPreviewSrc(embedSrc);
+          setThumbnailSrc("");
+          return;
         }
 
         const platformThumbnail = getPlatformThumbnailUrl(rawVideo);
@@ -765,7 +779,7 @@ function ExampleVideoThumbnail({
       cancelled = true;
       cleanupVideo();
     };
-  }, [video, thumbnail]);
+  }, [video, thumbnail, isMobile]);
 
   return (
     <div
@@ -798,14 +812,20 @@ function ExampleVideoThumbnail({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
       ].join(" ")}
     >
-      {embedPreviewSrc ? (
+      {shouldRenderEmbedPreview ? (
         <iframe
           src={embedPreviewSrc}
           title={title}
           loading="lazy"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
-          className="absolute inset-0 h-full w-full border-0"
+          className={[
+            "absolute inset-0 h-full w-full border-0",
+            isMobile ? "pointer-events-none" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          style={webEmbedPreviewFrameStyle}
         />
       ) : thumbnailSrc ? (
         <img
@@ -820,10 +840,24 @@ function ExampleVideoThumbnail({
 
       {!shouldUseDirectEmbed ? (
         <>
-          <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
-          <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
+          {shouldRenderEmbedPreview && isMobile ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onClick?.(event);
+              }}
+              className="absolute inset-0 z-20 bg-transparent"
+              aria-label={title}
+              title={title}
+            />
+          ) : null}
 
-          {!isThirdPartyVideo ? (
+          {!shouldRenderEmbedPreview ? (
+            <>
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
+              <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
+
             <div className="absolute inset-0 flex items-center justify-center">
               <div
                 className={[
@@ -837,6 +871,7 @@ function ExampleVideoThumbnail({
                 <Play className="ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
               </div>
             </div>
+            </>
           ) : null}
         </>
       ) : null}
@@ -1123,6 +1158,8 @@ export default function ExamplesPanel({
     if (!currentVideo?.video) return null;
 
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
+    const shouldHideSourceThumbnailOnMobile =
+      isMobile && Boolean(mobileVideo?.key) && mobileVideo.key === currentVideo.key;
 
     return (
       <div className="mb-4">
@@ -1152,7 +1189,13 @@ export default function ExamplesPanel({
               thumbnail={currentVideo.thumbnail}
               title={currentVideo.title}
               isOpen={isVideoOpen}
-              className="aspect-video h-auto"
+              isMobile={isMobile}
+              className={[
+                "aspect-video h-auto",
+                shouldHideSourceThumbnailOnMobile ? "hidden" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               onClick={() =>
                 openVideo({
                   video: currentVideo.video,
