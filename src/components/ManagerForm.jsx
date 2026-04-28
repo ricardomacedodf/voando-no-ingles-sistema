@@ -61,17 +61,57 @@ const emptyMeaning = {
 };
 
 const meaningAccentPalette = [
-  { bar: "#EF4444", border: "rgba(239, 68, 68, 0.24)" },
-  { bar: "#14B8A6", border: "rgba(20, 184, 166, 0.24)" },
-  { bar: "#F59E0B", border: "rgba(245, 158, 11, 0.26)" },
-  { bar: "#3B82F6", border: "rgba(59, 130, 246, 0.24)" },
-  { bar: "#8B5CF6", border: "rgba(139, 92, 246, 0.24)" },
-  { bar: "#EC4899", border: "rgba(236, 72, 153, 0.24)" },
+  { bar: "#D97706", border: "rgba(217, 119, 6, 0.24)" },
+  { bar: "#0F766E", border: "rgba(15, 118, 110, 0.24)" },
+  { bar: "#6366F1", border: "rgba(99, 102, 241, 0.24)" },
+  { bar: "#059669", border: "rgba(5, 150, 105, 0.24)" },
+  { bar: "#334155", border: "rgba(51, 65, 85, 0.24)" },
+  { bar: "#2563EB", border: "rgba(37, 99, 235, 0.24)" },
 ];
 
 const emptyMeaningAccent = {
   bar: "#B91C1C",
-  border: "rgba(239, 68, 68, 0.55)",
+  border: "#FBD2D2",
+};
+
+const meaningAccentLowContrastPairs = new Set([
+  "1-3",
+  "3-1",
+  "2-5",
+  "5-2",
+]);
+
+const isMeaningAccentTooClose = (previousIndex, nextIndex) =>
+  previousIndex === nextIndex ||
+  meaningAccentLowContrastPairs.has(`${previousIndex}-${nextIndex}`);
+
+const getMeaningAccentIndexes = (totalMeanings) => {
+  const paletteLength = meaningAccentPalette.length;
+
+  if (paletteLength === 0 || totalMeanings <= 0) return [];
+
+  const indexes = [];
+
+  for (let meaningIndex = 0; meaningIndex < totalMeanings; meaningIndex += 1) {
+    let accentIndex = meaningIndex % paletteLength;
+
+    if (meaningIndex > 0) {
+      const previousAccentIndex = indexes[meaningIndex - 1];
+      let attempts = 0;
+
+      while (
+        attempts < paletteLength &&
+        isMeaningAccentTooClose(previousAccentIndex, accentIndex)
+      ) {
+        accentIndex = (accentIndex + 1) % paletteLength;
+        attempts += 1;
+      }
+    }
+
+    indexes.push(accentIndex);
+  }
+
+  return indexes;
 };
 
 const getExampleKey = (mIdx, eIdx) => `${mIdx}-${eIdx}`;
@@ -834,7 +874,7 @@ function BrFlagIcon({ className = "h-4 w-4" }) {
 
 function FieldLabel({ children, icon }) {
   return (
-    <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+    <label className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181]">
       {icon}
       <span>{children}</span>
     </label>
@@ -844,11 +884,12 @@ function FieldLabel({ children, icon }) {
 function MeaningLanguageLabel() {
   return (
     <label
-      className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground"
+      className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181]"
       aria-label="Significado em português"
     >
       <Languages className="h-4 w-4 text-primary" />
       <BrFlagIcon />
+      <span>Palavra ou frase em português</span>
       <span className="sr-only">Significado em português</span>
     </label>
   );
@@ -856,11 +897,11 @@ function MeaningLanguageLabel() {
 
 function ExampleLanguageLabel({ flag, code }) {
   return (
-    <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+    <label className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181]">
       {flag}
-      <span className="font-bold text-[#14181F]">Sig.</span>
+      <span>Sig.</span>
       <span className="font-normal text-[#6A7181]">—</span>
-      <span className="font-bold text-[#14181F]">{code}</span>
+      <span>{code}</span>
     </label>
   );
 }
@@ -1348,6 +1389,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         }))
       : [{ ...emptyMeaning }]
   );
+  const [pendingNewMeanings, setPendingNewMeanings] = useState({});
 
   const [expandedMeanings, setExpandedMeanings] = useState(() => {
     if (item?.meanings?.length > 0) {
@@ -1386,6 +1428,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const [deletingVideoKey, setDeletingVideoKey] = useState(null);
   const [videoUploadErrors, setVideoUploadErrors] = useState({});
   const [activeVideoPreviewKey, setActiveVideoPreviewKey] = useState(null);
+  const meaningAccentIndexes = getMeaningAccentIndexes(meanings.length);
 
   const resetActiveVideoPreview = () => {
     setActiveVideoPreviewKey(null);
@@ -1447,6 +1490,16 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     const updated = [...meanings];
     updated[idx] = { ...updated[idx], [field]: value };
     setMeanings(updated);
+
+    if (field === "meaning" && normalizeText(value)) {
+      setPendingNewMeanings((current) => {
+        if (!current[idx]) return current;
+
+        const next = { ...current };
+        delete next[idx];
+        return next;
+      });
+    }
   };
 
   const updateMeaningFields = (idx, fields) => {
@@ -1474,12 +1527,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const addMeaning = () => {
     const nextIndex = meanings.length;
     resetActiveVideoPreview();
-    setMeanings([...meanings, { ...emptyMeaning }]);
-    setExpandedMeanings((current) => ({ ...current, [nextIndex]: true }));
-    setExpandedExamples((current) => ({
-      ...current,
-      [getExampleKey(nextIndex, 0)]: true,
-    }));
+    setMeanings([...meanings, { ...emptyMeaning, examples: [] }]);
+    setExpandedMeanings((current) => ({ ...current, [nextIndex]: false }));
+    setPendingNewMeanings((current) => ({ ...current, [nextIndex]: true }));
   };
 
   const removeMeaning = async (idx) => {
@@ -1511,6 +1561,19 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           if (currentIndex === idx) return;
           const nextIndex = currentIndex > idx ? currentIndex - 1 : currentIndex;
           next[nextIndex] = value;
+        });
+
+        return next;
+      });
+
+      setPendingNewMeanings((current) => {
+        const next = {};
+
+        Object.entries(current).forEach(([key, value]) => {
+          const currentIndex = Number(key);
+          if (!value || currentIndex === idx) return;
+          const nextIndex = currentIndex > idx ? currentIndex - 1 : currentIndex;
+          next[nextIndex] = true;
         });
 
         return next;
@@ -1922,10 +1985,16 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               const isExpanded = Boolean(expandedMeanings[mIdx]);
               const meaningTitle = normalizeText(meaningItem.meaning);
               const isMeaningEmpty = !meaningTitle;
-              const meaningDisplayTitle = meaningTitle || "Significado vazio";
-              const accent =
-                meaningAccentPalette[mIdx % meaningAccentPalette.length];
-              const borderColor = isMeaningEmpty
+              const isPendingNewMeaning = Boolean(pendingNewMeanings[mIdx]);
+              const shouldUseEmptyMeaningAccent =
+                isPendingNewMeaning && isMeaningEmpty;
+              const meaningDisplayTitle =
+                meaningTitle || "adicionar aqui novo significado";
+              const accentIndex =
+                meaningAccentIndexes[mIdx] ??
+                (mIdx % meaningAccentPalette.length);
+              const accent = meaningAccentPalette[accentIndex];
+              const borderColor = shouldUseEmptyMeaningAccent
                 ? emptyMeaningAccent.border
                 : accent.border;
 
@@ -1978,23 +2047,35 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                       )}
 
                       <span className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 leading-snug">
-                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
-                          Sig.
-                        </span>
-                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
-                          —
-                        </span>
-                        <span
-                          className="min-w-0 break-words text-base font-bold leading-snug"
-                          style={{
-                            color: isMeaningEmpty
-                              ? emptyMeaningAccent.bar
-                              : "#14181F",
-                            overflowWrap: "anywhere",
-                          }}
-                        >
-                          {meaningDisplayTitle}
-                        </span>
+                        {shouldUseEmptyMeaningAccent ? (
+                          <span
+                            className="min-w-0 break-words text-sm font-normal leading-snug"
+                            style={{
+                              color: emptyMeaningAccent.bar,
+                              overflowWrap: "anywhere",
+                            }}
+                          >
+                            {meaningDisplayTitle}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                              SIG: {mIdx + 1}
+                            </span>
+                            <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                              —
+                            </span>
+                            <span
+                              className="min-w-0 break-words text-base font-bold leading-snug"
+                              style={{
+                                color: "#14181F",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {meaningDisplayTitle}
+                            </span>
+                          </>
+                        )}
                       </span>
                     </div>
 
@@ -2021,21 +2102,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                   {isExpanded ? (
                     <div className="space-y-4 p-4">
                       <div className="border-b border-[#D8E1EC] pb-4">
-                        <div className="mb-3 flex flex-wrap items-center gap-2">
-                          <span
-                            className="font-bold"
-                            style={{ color: accent.bar }}
-                          >
-                            {mIdx + 1}.
-                          </span>
-                          <span className="text-base font-bold text-[#181818]">
-                            {meaningDisplayTitle}
-                          </span>
-                          <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
-                            {meaningItem.category}
-                          </span>
-                        </div>
-
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
                           <div>
                             <MeaningLanguageLabel />
@@ -2174,8 +2240,31 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                       <div>
                         <div className="mb-3 flex items-center justify-between gap-3">
-                          <span className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">
-                            Exemplos
+                          <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-foreground">
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-3.5 w-3.5 text-[#ED9A0A]"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                              aria-hidden="true"
+                              focusable="false"
+                            >
+                              <path
+                                d="M3.75 5.75C3.75 4.92 4.42 4.25 5.25 4.25H10.5C11.88 4.25 13 5.37 13 6.75V19.75H6.25C4.87 19.75 3.75 18.63 3.75 17.25V5.75Z"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d="M20.25 5.75C20.25 4.92 19.58 4.25 18.75 4.25H13.5C12.12 4.25 11 5.37 11 6.75V19.75H17.75C19.13 19.75 20.25 18.63 20.25 17.25V5.75Z"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                            <span>Exemplos</span>
                           </span>
 
                           <button
@@ -2208,9 +2297,12 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               videoUploadErrors[exampleKey] || "";
                             const isPreviewActive =
                               activeVideoPreviewKey === exampleKey;
+                            const exampleSentence = normalizeExampleText(
+                              example?.sentence
+                            );
+                            const isExampleEmpty = !exampleSentence;
                             const exampleTitle =
-                              normalizeExampleText(example?.sentence) ||
-                              "ainda sem frase";
+                              exampleSentence || "adicione aqui exemplo";
 
                             return (
                               <div
@@ -2236,25 +2328,36 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                   aria-expanded={isExampleExpanded}
                                 >
                                   <div className="min-w-0 flex flex-1 items-center gap-2 text-left">
-                                    <Lightbulb className="h-4 w-4 shrink-0 text-[#ED9A0A]" />
-                                    <span className="shrink-0 text-sm font-normal text-[#6A7181]">
-                                      Exemplo:
-                                    </span>
-                                    <span
-                                      className="shrink-0 text-sm font-bold"
-                                      style={{ color: accent.bar }}
-                                    >
-                                      {eIdx + 1}
-                                    </span>
-                                    <span className="shrink-0 text-sm font-normal text-[#6A7181]">
-                                      —
-                                    </span>
-                                    <span
-                                      className="min-w-0 truncate text-sm font-bold text-[#14181F]"
-                                      title={exampleTitle}
-                                    >
-                                      {exampleTitle}
-                                    </span>
+                                    {isExampleEmpty ? (
+                                      <span
+                                        className="min-w-0 truncate text-sm font-normal"
+                                        style={{ color: emptyMeaningAccent.bar }}
+                                        title={exampleTitle}
+                                      >
+                                        {exampleTitle}
+                                      </span>
+                                    ) : (
+                                      <>
+                                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                                          EX:
+                                        </span>
+                                        <span
+                                          className="shrink-0 text-sm font-bold"
+                                          style={{ color: accent.bar }}
+                                        >
+                                          {eIdx + 1}
+                                        </span>
+                                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                                          —
+                                        </span>
+                                        <span
+                                          className="min-w-0 truncate text-sm font-bold text-[#14181F]"
+                                          title={exampleTitle}
+                                        >
+                                          {exampleTitle}
+                                        </span>
+                                      </>
+                                    )}
                                   </div>
 
                                   <div className="flex shrink-0 items-center gap-2 self-center">
