@@ -8,6 +8,8 @@ import { playSound } from "../lib/gameState";
 import { SFX_EVENTS } from "../lib/sfx";
 
 const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
+const VIDEO_SWIPE_DISTANCE_PX = 42;
+const VIDEO_SWIPE_DIRECTION_RATIO = 1.15;
 
 const VIDEO_FRAME_CLASS =
   "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-contain";
@@ -559,6 +561,8 @@ function ExampleVideoThumbnail({
   video,
   thumbnail,
   onClick,
+  onSwipeLeft,
+  onSwipeRight,
   title = "Vídeo do exemplo",
   isOpen = false,
   isMobile = false,
@@ -566,6 +570,13 @@ function ExampleVideoThumbnail({
 }) {
   const [thumbnailSrc, setThumbnailSrc] = useState("");
   const [embedPreviewSrc, setEmbedPreviewSrc] = useState("");
+  const swipePointerRef = useRef({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+  });
+  const suppressClickRef = useRef(false);
 
   const isThirdPartyVideo = isThirdPartyEmbeddedVideo(video);
   const shouldRenderEmbedPreview =
@@ -835,12 +846,73 @@ function ExampleVideoThumbnail({
     };
   }, [video, thumbnail, isMobile]);
 
+  const resetSwipePointer = () => {
+    swipePointerRef.current = {
+      active: false,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+    };
+  };
+
+  const handlePointerDown = (event) => {
+    if (shouldUseDirectEmbed) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    swipePointerRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+  };
+
+  const handlePointerCancel = () => {
+    resetSwipePointer();
+  };
+
+  const handlePointerUp = (event) => {
+    const swipeState = swipePointerRef.current;
+
+    if (!swipeState.active || swipeState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - swipeState.startX;
+    const deltaY = event.clientY - swipeState.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    const isHorizontalSwipe =
+      absX >= VIDEO_SWIPE_DISTANCE_PX &&
+      absX > absY * VIDEO_SWIPE_DIRECTION_RATIO;
+
+    resetSwipePointer();
+
+    if (!isHorizontalSwipe) return;
+
+    if (deltaX < 0) {
+      onSwipeLeft?.(event);
+    } else {
+      onSwipeRight?.(event);
+    }
+
+    suppressClickRef.current = true;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   return (
     <div
       role={shouldUseDirectEmbed ? undefined : "button"}
       tabIndex={shouldUseDirectEmbed ? undefined : 0}
       onClick={(event) => {
         if (shouldUseDirectEmbed) return;
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         onClick?.(event);
       }}
       onKeyDown={(event) => {
@@ -853,8 +925,12 @@ function ExampleVideoThumbnail({
       }}
       aria-label={title}
       title={title}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onPointerLeave={handlePointerCancel}
       className={[
-        "group relative w-full overflow-hidden rounded-lg border",
+        "group relative w-full touch-pan-y overflow-hidden rounded-lg border",
         shouldUseDirectEmbed ? "" : "cursor-pointer",
         className,
         isOpen ? "border-[#ED9A0A]/80" : "border-[#D9E2EC]",
@@ -898,6 +974,12 @@ function ExampleVideoThumbnail({
             <button
               type="button"
               onClick={(event) => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  return;
+                }
                 event.stopPropagation();
                 onClick?.(event);
               }}
@@ -954,6 +1036,12 @@ export default function ExamplesPanel({
   const [mobileVideo, setMobileVideo] = useState(null);
   const [videoIndexes, setVideoIndexes] = useState({});
   const [expandedMeaningVideoKey, setExpandedMeaningVideoKey] = useState(null);
+  const expandedVideoSwipeRef = useRef({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+  });
 
   const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
 
@@ -1115,6 +1203,8 @@ export default function ExamplesPanel({
       ? "mb-3 flex items-center justify-between border-b border-border pb-2.5"
       : "mb-4 flex items-center justify-between border-b border-border pb-2"
     : "mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3";
+  const isExpandedGlobalWordVideo =
+    mobileVideo?.groupKey === "global-word-video-group";
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -1260,6 +1350,7 @@ export default function ExamplesPanel({
     if (!currentVideo?.video) return null;
 
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
+    const isGlobalWordVideoGroup = groupKey === "global-word-video-group";
     const shouldHideSourceThumbnailOnMobile =
       isMobile && Boolean(mobileVideo?.key) && mobileVideo.key === currentVideo.key;
 
@@ -1292,6 +1383,32 @@ export default function ExamplesPanel({
               title={currentVideo.title}
               isOpen={isVideoOpen}
               isMobile={isMobile}
+              onSwipeLeft={
+                isGlobalWordVideoGroup && safeVideos.length > 1
+                  ? (event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      goToVideoIndex({
+                        groupKey,
+                        videos: safeVideos,
+                        nextIndex: currentIndex + 1,
+                      });
+                    }
+                  : undefined
+              }
+              onSwipeRight={
+                isGlobalWordVideoGroup && safeVideos.length > 1
+                  ? (event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      goToVideoIndex({
+                        groupKey,
+                        videos: safeVideos,
+                        nextIndex: currentIndex - 1,
+                      });
+                    }
+                  : undefined
+              }
               className={[
                 "aspect-video h-auto",
                 shouldHideSourceThumbnailOnMobile ? "hidden" : "",
@@ -1310,11 +1427,13 @@ export default function ExamplesPanel({
               }
             />
 
-            {renderVideoControls({
-              groupKey,
-              videos: safeVideos,
-              currentIndex,
-            })}
+            {!shouldHideSourceThumbnailOnMobile
+              ? renderVideoControls({
+                  groupKey,
+                  videos: safeVideos,
+                  currentIndex,
+                })
+              : null}
           </div>
         )}
       </div>
@@ -1347,6 +1466,64 @@ export default function ExamplesPanel({
       videos,
       index: safeIndex,
     });
+  };
+
+  const resetExpandedVideoSwipe = () => {
+    expandedVideoSwipeRef.current = {
+      active: false,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+    };
+  };
+
+  const handleExpandedVideoPointerDown = (event) => {
+    if (!isExpandedGlobalWordVideo || !mobileVideo?.videos?.length) return;
+    if (mobileVideo.videos.length <= 1) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    const interactiveTarget = event.target?.closest?.("button, input, a");
+    if (interactiveTarget) return;
+
+    expandedVideoSwipeRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+  };
+
+  const handleExpandedVideoPointerCancel = () => {
+    resetExpandedVideoSwipe();
+  };
+
+  const handleExpandedVideoPointerUp = (event) => {
+    const swipeState = expandedVideoSwipeRef.current;
+
+    if (!swipeState.active || swipeState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - swipeState.startX;
+    const deltaY = event.clientY - swipeState.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+    const isHorizontalSwipe =
+      absX >= VIDEO_SWIPE_DISTANCE_PX &&
+      absX > absY * VIDEO_SWIPE_DIRECTION_RATIO;
+
+    resetExpandedVideoSwipe();
+
+    if (!isHorizontalSwipe) return;
+
+    if (deltaX < 0) {
+      goMobileVideoToIndex(mobileVideo.index + 1);
+    } else {
+      goMobileVideoToIndex(mobileVideo.index - 1);
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   if (rawMeanings.length === 0) return null;
@@ -1730,7 +1907,12 @@ export default function ExamplesPanel({
             className="absolute left-0 right-0 top-[calc(env(safe-area-inset-top,0px)+7.55vh)] w-screen max-w-none"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="aspect-[5/4] w-full overflow-hidden bg-black">
+            <div
+              className="aspect-[5/4] w-full touch-pan-y overflow-hidden bg-black"
+              onPointerDown={handleExpandedVideoPointerDown}
+              onPointerUp={handleExpandedVideoPointerUp}
+              onPointerCancel={handleExpandedVideoPointerCancel}
+            >
               <ExampleVideoPlayer
                 key={mobileVideo?.key || "mobile-video"}
                 video={mobileVideo?.video || ""}
@@ -1740,7 +1922,7 @@ export default function ExamplesPanel({
               />
             </div>
 
-            {mobileVideo?.videos?.length > 1 ? (
+            {mobileVideo?.videos?.length > 1 && !isExpandedGlobalWordVideo ? (
               <div className="mt-2 flex items-center justify-between gap-2 px-3">
                 <button
                   type="button"
