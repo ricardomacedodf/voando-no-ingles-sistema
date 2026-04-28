@@ -664,6 +664,7 @@ export default function Combinations() {
                 activeMeaning={focusedMeaning}
                 titleTerm={focusedCard.term}
                 variant="flashcard"
+                panelScope="flashcards"
                 onClose={() => setShowExamples(false)}
               />
             </div>

@@ -1240,6 +1240,7 @@ export default function ExamplesPanel({
     groupKey,
     videos,
     index,
+    autoPlayOnOpen = false,
   }) => {
     if (!video) return;
 
@@ -1251,6 +1252,7 @@ export default function ExamplesPanel({
         groupKey,
         videos,
         index,
+        autoPlay: Boolean(autoPlayOnOpen),
       });
       return;
     }
@@ -1285,6 +1287,7 @@ export default function ExamplesPanel({
         groupKey,
         videos,
         index: safeIndex,
+        autoPlay: false,
       });
     }
   };
@@ -1423,6 +1426,7 @@ export default function ExamplesPanel({
                   groupKey,
                   videos: safeVideos,
                   index: currentIndex,
+                  autoPlayOnOpen: true,
                 })
               }
             />
@@ -1465,6 +1469,7 @@ export default function ExamplesPanel({
       groupKey: mobileVideo.groupKey,
       videos,
       index: safeIndex,
+      autoPlay: false,
     });
   };
 
@@ -1917,7 +1922,7 @@ export default function ExamplesPanel({
                 key={mobileVideo?.key || "mobile-video"}
                 video={mobileVideo?.video || ""}
                 title={mobileVideo?.title || ""}
-                autoPlay={false}
+                autoPlay={Boolean(mobileVideo?.autoPlay)}
                 layout="mobileMockup"
               />
             </div>

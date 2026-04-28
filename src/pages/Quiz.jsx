@@ -721,6 +721,7 @@ export default function Quiz() {
                 activeMeaning={activeMeaning?.meaning}
                 titleTerm={card?.term}
                 variant="flashcard"
+                panelScope="flashcards"
                 onClose={() => setShowExamples(false)}
               />
             </div>
