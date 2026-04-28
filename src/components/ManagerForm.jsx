@@ -39,9 +39,10 @@ const VIDEO_MIME_PREFIX = "video/";
 const WORD_VIDEO_KEY = "word-video";
 const NEW_WORD_VIDEO_KEY = `${WORD_VIDEO_KEY}-new`;
 const getWordVideoKey = (index) => `${WORD_VIDEO_KEY}-${index}`;
-
-const EMBED_IFRAME_RENDER_SCALE = 1.45;
-const EMBED_IFRAME_VISUAL_SCALE = 1 / EMBED_IFRAME_RENDER_SCALE;
+// Third-party/embed only:
+// Render larger and scale down to tune native control size,
+// while keeping the preview fully filled and aligned.
+const EMBED_PREVIEW_VISUAL_SCALE = 0.65;
 
 const emptyExample = {
   sentence: "",
@@ -485,6 +486,44 @@ const getCompactThirdPartyEmbedSrc = (value) => {
   }
 };
 
+const getEmbedPreviewTuning = (embedSrc) => {
+  const cleanSrc = normalizeText(embedSrc);
+  if (!cleanSrc) {
+    return {
+      visualScale: 1,
+      containerOffsetXPercent: 0,
+    };
+  }
+
+  try {
+    const base =
+      typeof window !== "undefined" ? window.location.origin : "https://local";
+    const url = new URL(cleanSrc, base);
+    const host = normalizeText(url.hostname).toLowerCase();
+
+    if (/clip\.cafe/.test(host)) {
+      return {
+        visualScale: 0.525,
+        containerOffsetXPercent: 1.5,
+      };
+    }
+
+    if (/youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly/.test(host)) {
+      return {
+        visualScale: EMBED_PREVIEW_VISUAL_SCALE,
+        containerOffsetXPercent: 0,
+      };
+    }
+  } catch {
+    // keep default fallback
+  }
+
+  return {
+    visualScale: 0.82,
+    containerOffsetXPercent: 2,
+  };
+};
+
 const hasExampleContent = (example) => {
   const sentence = normalizeExampleText(example?.sentence);
   const translation = normalizeExampleText(example?.translation);
@@ -848,7 +887,6 @@ function ExampleVideoPreview({
   isActive,
   onPlay,
   className = "",
-  useProviderEmbedForThirdParty = false,
 }) {
   if (!video) return null;
 
@@ -856,8 +894,17 @@ function ExampleVideoPreview({
   const thumbnailSrc = normalizeText(thumbnail);
   const isThirdPartyVideo = isThirdPartyEmbeddedVideo(cleanVideo);
   const thirdPartyEmbedSrc = getCompactThirdPartyEmbedSrc(cleanVideo);
+  const shouldRenderEmbedPreview =
+    isThirdPartyVideo && Boolean(thirdPartyEmbedSrc);
+  const embedPreviewTuning = getEmbedPreviewTuning(thirdPartyEmbedSrc);
+  const embedPreviewVisualScale = embedPreviewTuning.visualScale;
+  const embedPreviewRenderScale = 1 / embedPreviewVisualScale;
+  const embedPreviewContainerOffsetXPercent =
+    embedPreviewTuning.containerOffsetXPercent;
+  const shouldRenderCustomThumbnail =
+    !isThirdPartyVideo && Boolean(thumbnailSrc);
 
-  if (useProviderEmbedForThirdParty && isThirdPartyVideo && thirdPartyEmbedSrc) {
+  if (shouldRenderEmbedPreview) {
     return (
       <div
         className={[
@@ -871,12 +918,15 @@ function ExampleVideoPreview({
           loading="lazy"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
-          className="absolute left-0 top-0 border-0"
+          className="absolute border-0 bg-black"
           style={{
-            width: `${EMBED_IFRAME_RENDER_SCALE * 100}%`,
-            height: `${EMBED_IFRAME_RENDER_SCALE * 100}%`,
-            transform: `scale(${EMBED_IFRAME_VISUAL_SCALE})`,
-            transformOrigin: "top left",
+            left: `calc(50% + ${embedPreviewContainerOffsetXPercent}%)`,
+            top: "50%",
+            width: `${embedPreviewRenderScale * 100}%`,
+            height: `${embedPreviewRenderScale * 100}%`,
+            transform: `translate(-50%, -50%) scale(${embedPreviewVisualScale})`,
+            transformOrigin: "center center",
+            clipPath: "inset(1px)",
           }}
         />
       </div>
@@ -915,7 +965,7 @@ function ExampleVideoPreview({
       aria-label="Reproduzir vídeo"
       title="Reproduzir vídeo"
     >
-      {thumbnailSrc ? (
+      {shouldRenderCustomThumbnail ? (
         <img
           src={thumbnailSrc}
           alt=""
@@ -936,7 +986,9 @@ function ExampleVideoPreview({
       </div>
     </button>
   );
-}function VideoControlCard({
+}
+
+function VideoControlCard({
   title,
   description,
   emptyLabel,
@@ -2292,7 +2344,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                               )
                                             }
                                             className="w-full md:w-[264px]"
-                                            useProviderEmbedForThirdParty
                                           />
                                         </div>
                                       ) : null}

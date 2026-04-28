@@ -22,80 +22,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const categoryTagStyles = {
-  vocabulário: {
-    backgroundColor: "rgba(59, 130, 246, 0.10)",
-    borderColor: "rgba(59, 130, 246, 0.28)",
-    color: "#1D4ED8",
-  },
-  expressão: {
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    borderColor: "rgba(245, 158, 11, 0.32)",
-    color: "#B45309",
-  },
-  adjetivo: {
-    backgroundColor: "rgba(139, 92, 246, 0.11)",
-    borderColor: "rgba(139, 92, 246, 0.30)",
-    color: "#6D28D9",
-  },
-  verbo: {
-    backgroundColor: "rgba(34, 197, 94, 0.11)",
-    borderColor: "rgba(34, 197, 94, 0.30)",
-    color: "#15803D",
-  },
-  substantivo: {
-    backgroundColor: "rgba(20, 184, 166, 0.11)",
-    borderColor: "rgba(20, 184, 166, 0.30)",
-    color: "#0F766E",
-  },
-  "phrasal verb": {
-    backgroundColor: "rgba(244, 63, 94, 0.10)",
-    borderColor: "rgba(244, 63, 94, 0.28)",
-    color: "#BE123C",
-  },
-  advérbio: {
-    backgroundColor: "rgba(99, 102, 241, 0.11)",
-    borderColor: "rgba(99, 102, 241, 0.30)",
-    color: "#4F46E5",
-  },
-  preposição: {
-    backgroundColor: "rgba(100, 116, 139, 0.11)",
-    borderColor: "rgba(100, 116, 139, 0.28)",
-    color: "#475569",
-  },
-  interjeição: {
-    backgroundColor: "rgba(236, 72, 153, 0.10)",
-    borderColor: "rgba(236, 72, 153, 0.28)",
-    color: "#BE185D",
-  },
-  pronome: {
-    backgroundColor: "rgba(45, 212, 191, 0.13)",
-    borderColor: "rgba(45, 212, 191, 0.34)",
-    color: "#0F766E",
-  },
-  conjunção: {
-    backgroundColor: "rgba(249, 115, 22, 0.11)",
-    borderColor: "rgba(249, 115, 22, 0.30)",
-    color: "#C2410C",
-  },
-  idiom: {
-    backgroundColor: "rgba(168, 85, 247, 0.11)",
-    borderColor: "rgba(168, 85, 247, 0.30)",
-    color: "#7E22CE",
-  },
-  collocation: {
-    backgroundColor: "rgba(14, 165, 233, 0.11)",
-    borderColor: "rgba(14, 165, 233, 0.30)",
-    color: "#0369A1",
-  },
-};
-
-const fallbackCategoryTagStyle = {
-  backgroundColor: "rgba(100, 116, 139, 0.10)",
-  borderColor: "rgba(100, 116, 139, 0.26)",
-  color: "#475569",
-};
-
 const getR2DeleteApiUrl = () => {
   const customUrl = import.meta.env.VITE_R2_DELETE_API_URL;
 
@@ -115,10 +41,6 @@ const getR2DeleteApiUrl = () => {
 
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeCategory(category) {
-  return typeof category === "string" ? category.trim() : "";
 }
 
 function getWordVideoFromMeanings(item) {
@@ -191,6 +113,60 @@ function normalizeWordThumbnail(item) {
   return normalizeText(rawThumbnail);
 }
 
+function normalizeVideoEntry(entry) {
+  if (typeof entry === "string") {
+    const video = normalizeText(entry);
+    return video ? { video } : null;
+  }
+
+  if (!entry || typeof entry !== "object") return null;
+
+  const video = normalizeText(
+    entry.video ??
+      entry.videoUrl ??
+      entry.video_url ??
+      entry.wordVideo ??
+      entry.word_video ??
+      entry.globalVideo ??
+      entry.global_video ??
+      ""
+  );
+
+  return video ? { video } : null;
+}
+
+function normalizeVideoList(value) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeVideoEntry).filter(Boolean);
+  }
+
+  const entry = normalizeVideoEntry(value);
+
+  return entry ? [entry] : [];
+}
+
+function getWordVideosFromMeanings(item) {
+  if (!Array.isArray(item?.meanings)) return [];
+
+  const meaningWithVideos = item.meanings.find((meaning) => {
+    const videos = normalizeVideoList(
+      meaning?._wordVideos || meaning?._globalVideos
+    );
+
+    return videos.length > 0;
+  });
+
+  if (meaningWithVideos) {
+    return normalizeVideoList(
+      meaningWithVideos?._wordVideos || meaningWithVideos?._globalVideos
+    );
+  }
+
+  return normalizeVideoList(getWordVideoFromMeanings(item));
+}
+
 function normalizeMeaningVideo(meaning) {
   const rawVideo =
     meaning?.video ??
@@ -210,26 +186,21 @@ function normalizeExampleVideo(example) {
   return normalizeText(rawVideo);
 }
 
-function getVocabularyCategories(item) {
-  if (!Array.isArray(item?.meanings)) return [];
-
-  const categories = item.meanings
-    .map((meaning) => normalizeCategory(meaning?.category))
-    .filter(Boolean);
-
-  return Array.from(new Set(categories));
-}
-
-function getCategoryTagStyle(category) {
-  const normalizedCategory = normalizeCategory(category).toLowerCase();
-
-  return categoryTagStyles[normalizedCategory] || fallbackCategoryTagStyle;
-}
-
 function collectVocabularyVideoUrls(item) {
   if (!item) return [];
 
-  const wordVideo = normalizeWordVideo(item);
+  const wordVideos = [
+    ...normalizeVideoList(item?.wordVideos),
+    ...normalizeVideoList(item?.word_videos),
+    ...normalizeVideoList(item?.globalVideos),
+    ...normalizeVideoList(item?.global_videos),
+    ...normalizeVideoList(item?.stats?.wordVideos),
+    ...normalizeVideoList(item?.stats?.word_videos),
+    ...normalizeVideoList(item?.stats?.globalVideos),
+    ...normalizeVideoList(item?.stats?.global_videos),
+    ...getWordVideosFromMeanings(item),
+    ...normalizeVideoList(normalizeWordVideo(item)),
+  ].map((entry) => normalizeText(entry?.video));
 
   const meaningAndExampleVideos = Array.isArray(item?.meanings)
     ? item.meanings.flatMap((meaning) => {
@@ -244,7 +215,7 @@ function collectVocabularyVideoUrls(item) {
     : [];
 
   return Array.from(
-    new Set([wordVideo, ...meaningAndExampleVideos].filter(Boolean))
+    new Set([...wordVideos, ...meaningAndExampleVideos].filter(Boolean))
   );
 }
 
@@ -555,8 +526,7 @@ export default function Manager() {
       ) : (
         <div className="space-y-2">
           {filtered.map((item) => {
-            const itemCategories = getVocabularyCategories(item);
-            const hasWordVideo = Boolean(normalizeWordVideo(item));
+            const hasAnyVideo = collectVocabularyVideoUrls(item).length > 0;
 
             return (
               <div
@@ -583,9 +553,9 @@ export default function Manager() {
                       {item.term}
                     </p>
 
-                    {hasWordVideo ? (
+                    {hasAnyVideo ? (
                       <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-primary">
-                        vídeo
+                        VÍDEO
                       </span>
                     ) : null}
                   </div>
@@ -594,28 +564,6 @@ export default function Manager() {
                     {item.meanings?.slice(0, 3).map((m) => m.meaning).join(", ")}
                   </p>
                 </div>
-
-                {itemCategories.length > 0 ? (
-                  <div
-                    className="flex max-w-[48%] shrink-0 flex-wrap justify-end gap-1.5"
-                    aria-label={`Tags de ${item.term}`}
-                  >
-                    {itemCategories.map((category) => {
-                      const tagStyle = getCategoryTagStyle(category);
-
-                      return (
-                        <span
-                          key={category}
-                          className="inline-flex max-w-[110px] items-center rounded-full border px-2 py-0.5 text-[10px] font-bold leading-4"
-                          style={tagStyle}
-                          title={category}
-                        >
-                          <span className="truncate">{category}</span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                ) : null}
 
                 <button
                   type="button"
