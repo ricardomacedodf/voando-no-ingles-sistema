@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Lightbulb, Play, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lightbulb, Menu, Play, X } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
@@ -898,6 +898,7 @@ export default function ExamplesPanel({
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
   const [videoIndexes, setVideoIndexes] = useState({});
+  const [expandedMeaningVideoKey, setExpandedMeaningVideoKey] = useState(null);
 
   const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
 
@@ -980,6 +981,20 @@ export default function ExamplesPanel({
       )
     : normalized;
 
+  const videoMeaningGroupKeys = shouldShowSpecificVideosInsideMeanings
+    ? sorted.reduce((accumulator, entry, index) => {
+        if (Array.isArray(entry?.topVideos) && entry.topVideos.length > 0) {
+          accumulator.push(`meaning-video-group-${entry.meaning}-${index}`);
+        }
+
+        return accumulator;
+      }, [])
+    : [];
+
+  const shouldUseMeaningVideoCollapse = videoMeaningGroupKeys.length > 1;
+  const firstExpandedMeaningVideoKey = videoMeaningGroupKeys[0] || null;
+  const videoMeaningGroupsSignature = videoMeaningGroupKeys.join("||");
+
   useEffect(() => {
     setOpenDesktopVideos({});
     setMobileVideo(null);
@@ -989,6 +1004,25 @@ export default function ExamplesPanel({
     activeMeaning,
     wordVideoSourcesSignature,
     shouldShowGlobalWordVideoOnTop,
+  ]);
+
+  useEffect(() => {
+    if (!shouldUseMeaningVideoCollapse) {
+      setExpandedMeaningVideoKey(null);
+      return;
+    }
+
+    setExpandedMeaningVideoKey((current) => {
+      if (current && videoMeaningGroupKeys.includes(current)) {
+        return current;
+      }
+
+      return firstExpandedMeaningVideoKey;
+    });
+  }, [
+    shouldUseMeaningVideoCollapse,
+    firstExpandedMeaningVideoKey,
+    videoMeaningGroupsSignature,
   ]);
 
   useEffect(() => {
@@ -1323,6 +1357,14 @@ export default function ExamplesPanel({
           {sorted.map((entry, index) => {
             const visibleExamples = entry.examples.slice(0, 3);
             const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
+            const hasMeaningVideo =
+              shouldShowSpecificVideosInsideMeanings &&
+              Array.isArray(entry.topVideos) &&
+              entry.topVideos.length > 0;
+            const shouldUseMeaningCollapse =
+              shouldUseMeaningVideoCollapse && hasMeaningVideo;
+            const isMeaningExpanded =
+              !shouldUseMeaningCollapse || expandedMeaningVideoKey === groupKey;
 
             return (
               <section
@@ -1330,82 +1372,156 @@ export default function ExamplesPanel({
                 className="rounded-xl border border-[#DCE4EE] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
               >
                 <div className="min-w-0">
-                  <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b border-[#E6EDF5] pb-1.5">
-                    <span
-                      className={
-                        isFlashcard
-                          ? "font-semibold text-[#25B15F]"
-                          : "font-bold text-[#26A95C]"
-                      }
+                  {shouldUseMeaningCollapse ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedMeaningVideoKey(groupKey);
+                      }}
+                      className={[
+                        "mb-2 w-full text-left transition-all duration-200",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CBD5E1]",
+                        "active:bg-[#EEF4FA]",
+                        isMeaningExpanded
+                          ? "rounded-md px-1.5 py-1.5 hover:bg-[#F8FAFD]"
+                          : "border-[#DEE6EF] bg-[#FAFCFF] hover:border-[#C8D6E6] hover:bg-[#F5F8FC]",
+                        !isMeaningExpanded ? "rounded-lg border px-2.5 py-2" : "",
+                      ].join(" ")}
+                      aria-label={`Mostrar significado ${entry.meaning}`}
+                      title={`Mostrar significado ${entry.meaning}`}
                     >
-                      {index + 1}.
-                    </span>
+                      <span
+                        className={[
+                          "flex justify-between gap-3",
+                          isMeaningExpanded ? "items-start" : "items-center",
+                        ].join(" ")}
+                      >
+                        <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
+                          <span
+                            className={
+                              isFlashcard
+                                ? "font-semibold text-[#25B15F]"
+                                : "font-bold text-[#26A95C]"
+                            }
+                          >
+                            {index + 1}.
+                          </span>
 
-                    <span className="font-bold text-[#181818]">
-                      {entry.meaning}
-                    </span>
+                          <span className="font-bold text-[#181818]">
+                            {entry.meaning}
+                          </span>
 
-                    {entry.category ? (
-                      <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
-                        {entry.category}
+                          {entry.category ? (
+                            <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                              {entry.category}
+                            </span>
+                          ) : null}
+                        </span>
+
+                        <Menu
+                          className={[
+                            "h-3.5 w-3.5 shrink-0 text-[#98A2B3]",
+                            isMeaningExpanded ? "mt-0.5" : "self-center",
+                          ].join(" ")}
+                        />
                       </span>
-                    ) : null}
-                  </div>
-
-                  {shouldShowSpecificVideosInsideMeanings && entry.topVideos.length > 0
-                    ? renderTopVideoCarousel({
-                        videos: entry.topVideos,
-                        groupKey,
-                      })
-                    : null}
-
-                  {visibleExamples.length > 0 ? (
-                    <div className="border-l-2 border-[#CBD5E1] pl-4">
-                      <div className="space-y-1.5">
-                        {visibleExamples.map((example, exampleIndex) => {
-                          const hasSentence = Boolean(example.sentence);
-                          const hasTranslation = Boolean(example.translation);
-
-                          return (
-                            <div
-                              key={`${entry.meaning}-${index}-${exampleIndex}`}
-                              className="space-y-0.5"
-                            >
-                              {hasTranslation ? (
-                                <p className="text-xs font-medium leading-snug text-[#758195]">
-                                  {example.translation}
-                                </p>
-                              ) : null}
-
-                              {hasSentence ? (
-                                <p className="text-sm font-semibold leading-snug text-[#0b0e14]">
-                                  {renderHighlightedTerm(
-                                    example.sentence,
-                                    highlightTerm
-                                  )}
-                                </p>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    </button>
                   ) : (
-                    <p className="border-l-2 border-[#CBD5E1] pl-4 text-sm italic text-muted-foreground">
-                      Nenhum exemplo cadastrado.
-                    </p>
+                    <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b border-[#E6EDF5] pb-1.5">
+                      <span
+                        className={
+                          isFlashcard
+                            ? "font-semibold text-[#25B15F]"
+                            : "font-bold text-[#26A95C]"
+                        }
+                      >
+                        {index + 1}.
+                      </span>
+
+                      <span className="font-bold text-[#181818]">
+                        {entry.meaning}
+                      </span>
+
+                      {entry.category ? (
+                        <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                          {entry.category}
+                        </span>
+                      ) : null}
+                    </div>
                   )}
+
+                  {isMeaningExpanded ? (
+                    <>
+                      {shouldShowSpecificVideosInsideMeanings &&
+                      entry.topVideos.length > 0
+                        ? renderTopVideoCarousel({
+                            videos: entry.topVideos,
+                            groupKey,
+                          })
+                        : null}
+
+                      {visibleExamples.length > 0 ? (
+                        <div className="border-l-2 border-[#CBD5E1] pl-4">
+                          <div className="space-y-1.5">
+                            {visibleExamples.map((example, exampleIndex) => {
+                              const hasSentence = Boolean(example.sentence);
+                              const hasTranslation = Boolean(example.translation);
+
+                              return (
+                                <div
+                                  key={`${entry.meaning}-${index}-${exampleIndex}`}
+                                  className="space-y-0.5"
+                                >
+                                  {hasTranslation ? (
+                                    <p className="text-xs font-medium leading-snug text-[#758195]">
+                                      {example.translation}
+                                    </p>
+                                  ) : null}
+
+                                  {hasSentence ? (
+                                    <p className="text-sm font-semibold leading-snug text-[#0b0e14]">
+                                      {renderHighlightedTerm(
+                                        example.sentence,
+                                        highlightTerm
+                                      )}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="border-l-2 border-[#CBD5E1] pl-4 text-sm italic text-muted-foreground">
+                          Nenhum exemplo cadastrado.
+                        </p>
+                      )}
+                    </>
+                  ) : null}
                 </div>
 
-                {entry.tip ? (
+                {isMeaningExpanded && entry.tip ? (
                   <div className="mt-3">
-                    <div className="inline-flex max-w-full items-start gap-1.5 border-b border-[#E6EDF5] pb-1">
+                    <div
+                      className={[
+                        "inline-flex max-w-full items-start gap-1.5 pb-1",
+                        shouldUseMeaningCollapse
+                          ? ""
+                          : "border-b border-[#E6EDF5]",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
                       <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ED9A0A]" />
                       <span className="min-w-0 text-xs italic leading-relaxed text-muted-foreground">
                         {entry.tip}
                       </span>
                     </div>
                   </div>
+                ) : null}
+
+                {shouldUseMeaningCollapse && isMeaningExpanded ? (
+                  <div className="mt-2 border-b border-[#E6EDF5]" />
                 ) : null}
               </section>
             );
