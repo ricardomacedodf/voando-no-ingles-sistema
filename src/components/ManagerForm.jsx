@@ -37,6 +37,8 @@ const categories = [
 const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024;
 const VIDEO_MIME_PREFIX = "video/";
 const WORD_VIDEO_KEY = "word-video";
+const NEW_WORD_VIDEO_KEY = `${WORD_VIDEO_KEY}-new`;
+const getWordVideoKey = (index) => `${WORD_VIDEO_KEY}-${index}`;
 
 const EMBED_IFRAME_RENDER_SCALE = 1.45;
 const EMBED_IFRAME_VISUAL_SCALE = 1 / EMBED_IFRAME_RENDER_SCALE;
@@ -190,6 +192,117 @@ const normalizeWordThumbnail = (item) => {
     "";
 
   return normalizeText(rawThumbnail);
+};
+
+const normalizeVideoEntry = (entry, fallbackThumbnail = "") => {
+  if (typeof entry === "string") {
+    const video = normalizeText(entry);
+
+    return video
+      ? {
+          video,
+          thumbnail: normalizeText(fallbackThumbnail),
+        }
+      : null;
+  }
+
+  if (!entry || typeof entry !== "object") return null;
+
+  const video = normalizeText(
+    entry.video ??
+      entry.videoUrl ??
+      entry.video_url ??
+      entry.wordVideo ??
+      entry.word_video ??
+      entry.globalVideo ??
+      entry.global_video ??
+      ""
+  );
+
+  if (!video) return null;
+
+  return {
+    video,
+    thumbnail: normalizeText(
+      entry.thumbnail ??
+        entry.thumbnailUrl ??
+        entry.thumbnail_url ??
+        entry.wordThumbnail ??
+        entry.word_thumbnail ??
+        entry.globalThumbnail ??
+        entry.global_thumbnail ??
+        fallbackThumbnail
+    ),
+  };
+};
+
+const normalizeVideoList = (value, fallbackThumbnail = "") => {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => normalizeVideoEntry(entry, fallbackThumbnail))
+      .filter(Boolean);
+  }
+
+  const entry = normalizeVideoEntry(value, fallbackThumbnail);
+
+  return entry ? [entry] : [];
+};
+
+const dedupeVideoEntries = (entries) => {
+  const seen = new Set();
+
+  return entries.filter((entry) => {
+    const video = normalizeText(entry?.video);
+
+    if (!video || seen.has(video)) return false;
+
+    seen.add(video);
+    return true;
+  });
+};
+
+const getWordVideosFromMeanings = (item) => {
+  if (!Array.isArray(item?.meanings)) return [];
+
+  const meaningWithVideos = item.meanings.find((meaning) => {
+    const videos = normalizeVideoList(
+      meaning?._wordVideos || meaning?._globalVideos,
+      meaning?._wordThumbnail || meaning?._globalThumbnail
+    );
+
+    return videos.length > 0;
+  });
+
+  if (meaningWithVideos) {
+    return normalizeVideoList(
+      meaningWithVideos?._wordVideos || meaningWithVideos?._globalVideos,
+      meaningWithVideos?._wordThumbnail || meaningWithVideos?._globalThumbnail
+    );
+  }
+
+  const singleVideo = getWordVideoFromMeanings(item);
+  const singleThumbnail = getWordThumbnailFromMeanings(item);
+
+  return normalizeVideoList(singleVideo, singleThumbnail);
+};
+
+const normalizeWordVideos = (item) => {
+  const fallbackThumbnail = normalizeWordThumbnail(item);
+
+  return dedupeVideoEntries([
+    ...normalizeVideoList(item?.wordVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.word_videos, fallbackThumbnail),
+    ...normalizeVideoList(item?.globalVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.global_videos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.wordVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.word_videos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.globalVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.global_videos, fallbackThumbnail),
+    ...getWordVideosFromMeanings(item),
+    ...normalizeVideoList(normalizeWordVideo(item), fallbackThumbnail),
+  ]);
 };
 
 const normalizeMeaningVideo = (meaning) => {
@@ -713,6 +826,22 @@ function ExampleLanguageLabel({ flag, code }) {
   );
 }
 
+function VideoAttachedBadge({ className = "" }) {
+  return (
+    <span
+      className={[
+        "inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <CheckCircle2 className="h-3 w-3" />
+      Vídeo anexado
+    </span>
+  );
+}
+
 function ExampleVideoPreview({
   video,
   thumbnail,
@@ -1138,10 +1267,14 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const [term, setTerm] = useState(item?.term || "");
   const [pronunciation, setPronunciation] = useState(item?.pronunciation || "");
-  const [wordVideo, setWordVideo] = useState(normalizeWordVideo(item));
-  const [wordThumbnail, setWordThumbnail] = useState(
-    normalizeWordThumbnail(item)
-  );
+  const [wordVideos, setWordVideos] = useState(() => normalizeWordVideos(item));
+
+  const firstWordVideoEntry = wordVideos[0] || { video: "", thumbnail: "" };
+  const wordVideo = normalizeText(firstWordVideoEntry.video);
+  const wordThumbnail = wordVideo
+    ? normalizeText(firstWordVideoEntry.thumbnail)
+    : "";
+
 
   const [meanings, setMeanings] = useState(
     item?.meanings?.length > 0
@@ -1204,6 +1337,43 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const resetActiveVideoPreview = () => {
     setActiveVideoPreviewKey(null);
+  };
+
+  const appendWordVideo = ({ video, thumbnail = "" }) => {
+    const cleanVideo = normalizeText(video);
+
+    if (!cleanVideo) return;
+
+    setWordVideos((current) =>
+      dedupeVideoEntries([
+        ...current,
+        {
+          video: cleanVideo,
+          thumbnail: normalizeText(thumbnail),
+        },
+      ])
+    );
+  };
+
+  const updateWordVideoAt = (index, { video, thumbnail = "" }) => {
+    const cleanVideo = normalizeText(video);
+
+    if (!cleanVideo) return;
+
+    setWordVideos((current) => {
+      const next = [...current];
+
+      next[index] = {
+        video: cleanVideo,
+        thumbnail: normalizeText(thumbnail),
+      };
+
+      return dedupeVideoEntries(next);
+    });
+  };
+
+  const removeWordVideoAt = (index) => {
+    setWordVideos((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const setVideoError = (key, message = "") => {
@@ -1521,9 +1691,21 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       setSaving(true);
 
       const now = new Date().toISOString();
-      const cleanWordVideo = normalizeText(wordVideo);
+      const cleanWordVideos = dedupeVideoEntries(
+        wordVideos
+          .map((entry) => ({
+            video: normalizeText(entry?.video),
+            thumbnail: entry?.video ? normalizeText(entry?.thumbnail) : "",
+          }))
+          .filter((entry) => entry.video)
+      );
+      const firstCleanWordVideo = cleanWordVideos[0] || {
+        video: "",
+        thumbnail: "",
+      };
+      const cleanWordVideo = normalizeText(firstCleanWordVideo.video);
       const cleanWordThumbnail = cleanWordVideo
-        ? normalizeText(wordThumbnail)
+        ? normalizeText(firstCleanWordVideo.thumbnail)
         : "";
 
       const cleanedMeanings = meanings
@@ -1559,17 +1741,20 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           const {
             _wordVideo,
             _wordThumbnail,
+            _wordVideos,
             _globalVideo,
             _globalThumbnail,
+            _globalVideos,
             ...cleanMeaning
           } = meaningItem;
 
-          if (!cleanWordVideo) return cleanMeaning;
+          if (cleanWordVideos.length === 0) return cleanMeaning;
 
           return {
             ...cleanMeaning,
             _wordVideo: cleanWordVideo,
             _wordThumbnail: cleanWordThumbnail,
+            _wordVideos: cleanWordVideos,
           };
         });
 
@@ -1577,6 +1762,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         ...(item?.stats || getDefaultStats()),
         wordVideo: cleanWordVideo,
         wordThumbnail: cleanWordThumbnail,
+        wordVideos: cleanWordVideos,
       };
 
       if (item?.id) {
@@ -1620,11 +1806,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     }
   };
 
-  const isEditingWordVideo = videoEditor.key === WORD_VIDEO_KEY;
-  const isUploadingWordVideo = uploadingVideoKey === WORD_VIDEO_KEY;
-  const isDeletingWordVideo = deletingVideoKey === WORD_VIDEO_KEY;
-  const wordVideoUploadError = videoUploadErrors[WORD_VIDEO_KEY] || "";
-  const isWordPreviewActive = activeVideoPreviewKey === WORD_VIDEO_KEY;
+  const newWordVideoUploadError = videoUploadErrors[NEW_WORD_VIDEO_KEY] || "";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -1700,6 +1882,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               const meaningThumbnailValue =
                 normalizeMeaningThumbnail(meaningItem);
               const hasMeaningVideo = Boolean(meaningVideoValue);
+              const hasExampleVideoInsideMeaning = meaningItem.examples.some((example) =>
+                Boolean(normalizeExampleVideo(example))
+              );
+              const hasAnyVideoInsideMeaning =
+                hasMeaningVideo || hasExampleVideoInsideMeaning;
               const isEditingMeaningVideo =
                 videoEditor.key === meaningVideoKey;
               const isUploadingMeaningVideo =
@@ -1759,20 +1946,24 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                       </span>
                     </div>
 
-                    {meanings.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void removeMeaning(mIdx);
-                        }}
-                        disabled={deletingVideoKey === `meaning-${mIdx}`}
-                        className="self-center rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
-                        aria-label={`Remover significado ${mIdx + 1}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </button>
-                    ) : null}
+                    <div className="flex shrink-0 items-center gap-2 self-center">
+                      {hasAnyVideoInsideMeaning ? <VideoAttachedBadge /> : null}
+
+                      {meanings.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void removeMeaning(mIdx);
+                          }}
+                          disabled={deletingVideoKey === `meaning-${mIdx}`}
+                          className="rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          aria-label={`Remover significado ${mIdx + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   {isExpanded ? (
@@ -2014,18 +2205,22 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     </span>
                                   </div>
 
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      void removeExample(mIdx, eIdx);
-                                    }}
-                                    disabled={isDeletingVideo}
-                                    className="self-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
-                                    aria-label={`Remover exemplo ${eIdx + 1}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
+                                  <div className="flex shrink-0 items-center gap-2 self-center">
+                                    {hasVideo ? <VideoAttachedBadge /> : null}
+
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void removeExample(mIdx, eIdx);
+                                      }}
+                                      disabled={isDeletingVideo}
+                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
+                                      aria-label={`Remover exemplo ${eIdx + 1}`}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {isExampleExpanded ? (
@@ -2250,73 +2445,152 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </div>
         </div>
 
-        <VideoControlCard
-          title="Vídeo geral da palavra/frase"
-          description="Esse vídeo será usado como padrão quando o exemplo e o significado não tiverem vídeo próprio."
-          emptyLabel="Sem vídeo geral da palavra"
-          video={wordVideo}
-          thumbnail={wordThumbnail}
-          isEditing={isEditingWordVideo}
-          editorValue={videoEditor.value}
-          uploadError={wordVideoUploadError}
-          isUploading={isUploadingWordVideo}
-          isDeleting={isDeletingWordVideo}
-          isPreviewActive={isWordPreviewActive}
-          previewVariant="inline-right"
-          inlineSize="wide"
-          onPlay={() => setActiveVideoPreviewKey(WORD_VIDEO_KEY)}
-          onOpenEditor={() => openVideoEditor(WORD_VIDEO_KEY, wordVideo)}
-          onEditorChange={(value) =>
-            setVideoEditor((current) => ({ ...current, value }))
-          }
-          onSave={() =>
-            void saveVideoFromEditor({
-              key: WORD_VIDEO_KEY,
-              oldVideo: wordVideo,
-              onSuccess: ({ video, thumbnail }) => {
-                setWordVideo(video);
-                setWordThumbnail(thumbnail);
-              },
-            })
-          }
-          onCancel={closeVideoEditor}
-          onTriggerUpload={() => triggerVideoFilePicker(WORD_VIDEO_KEY)}
-          onRemove={() =>
-            void removeVideo({
-              key: WORD_VIDEO_KEY,
-              oldVideo: wordVideo,
-              onSuccess: () => {
-                setWordVideo("");
-                setWordThumbnail("");
-              },
-            })
-          }
-          fileInputRef={(element) => {
-            if (element) {
-              fileInputsRef.current[WORD_VIDEO_KEY] = element;
-            }
-          }}
-          onFileChange={(event) => {
-            const inputElement = event?.target;
-            const file = inputElement?.files?.[0];
+        <div className="space-y-3 rounded-2xl border border-[#DCE4EE] bg-[#F8FAFC] p-3.5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
+                Vídeos gerais da palavra/frase
+              </span>
+              <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                Esses vídeos serão usados como padrão quando o exemplo e o significado não tiverem vídeo próprio.
+              </p>
+            </div>
 
-            if (inputElement) {
-              inputElement.value = "";
-            }
+            <span className="text-[10px] font-semibold text-muted-foreground">
+              {wordVideos.length} vídeo{wordVideos.length === 1 ? "" : "s"}
+            </span>
+          </div>
 
-            void handleVideoFileSelected({
-              key: WORD_VIDEO_KEY,
-              file,
-              scope: "word",
-              oldVideo: wordVideo,
-              onSuccess: ({ video, thumbnail }) => {
-                setWordVideo(video);
-                setWordThumbnail(thumbnail);
-              },
-            });
-          }}
-          uploadButtonText={wordVideo ? "Trocar por upload" : "Enviar arquivo"}
-        />
+          {wordVideos.map((wordVideoEntry, index) => {
+            const wordVideoKey = getWordVideoKey(index);
+            const videoValue = normalizeText(wordVideoEntry?.video);
+            const thumbnailValue = videoValue
+              ? normalizeText(wordVideoEntry?.thumbnail)
+              : "";
+            const isEditingWordVideo = videoEditor.key === wordVideoKey;
+            const isUploadingWordVideo = uploadingVideoKey === wordVideoKey;
+            const isDeletingWordVideo = deletingVideoKey === wordVideoKey;
+            const wordVideoUploadError = videoUploadErrors[wordVideoKey] || "";
+            const isWordPreviewActive = activeVideoPreviewKey === wordVideoKey;
+
+            return (
+              <VideoControlCard
+                key={wordVideoKey}
+                title={`Vídeo geral ${index + 1}`}
+                description="Use para explicar a palavra ou frase de forma geral."
+                emptyLabel="Sem vídeo geral"
+                video={videoValue}
+                thumbnail={thumbnailValue}
+                isEditing={isEditingWordVideo}
+                editorValue={videoEditor.value}
+                uploadError={wordVideoUploadError}
+                isUploading={isUploadingWordVideo}
+                isDeleting={isDeletingWordVideo}
+                isPreviewActive={isWordPreviewActive}
+                previewVariant="inline-right"
+                inlineSize="wide"
+                onPlay={() => setActiveVideoPreviewKey(wordVideoKey)}
+                onOpenEditor={() => openVideoEditor(wordVideoKey, videoValue)}
+                onEditorChange={(value) =>
+                  setVideoEditor((current) => ({ ...current, value }))
+                }
+                onSave={() =>
+                  void saveVideoFromEditor({
+                    key: wordVideoKey,
+                    oldVideo: videoValue,
+                    onSuccess: ({ video, thumbnail }) =>
+                      updateWordVideoAt(index, { video, thumbnail }),
+                  })
+                }
+                onCancel={closeVideoEditor}
+                onTriggerUpload={() => triggerVideoFilePicker(wordVideoKey)}
+                onRemove={() =>
+                  void removeVideo({
+                    key: wordVideoKey,
+                    oldVideo: videoValue,
+                    onSuccess: () => removeWordVideoAt(index),
+                  })
+                }
+                fileInputRef={(element) => {
+                  if (element) {
+                    fileInputsRef.current[wordVideoKey] = element;
+                  }
+                }}
+                onFileChange={(event) => {
+                  const inputElement = event?.target;
+                  const file = inputElement?.files?.[0];
+
+                  if (inputElement) {
+                    inputElement.value = "";
+                  }
+
+                  void handleVideoFileSelected({
+                    key: wordVideoKey,
+                    file,
+                    scope: "word",
+                    oldVideo: videoValue,
+                    onSuccess: ({ video, thumbnail }) =>
+                      updateWordVideoAt(index, { video, thumbnail }),
+                  });
+                }}
+                uploadButtonText={videoValue ? "Trocar por upload" : "Enviar arquivo"}
+              />
+            );
+          })}
+
+          <VideoControlCard
+            title={wordVideos.length > 0 ? "Adicionar outro vídeo geral" : "Adicionar vídeo geral da palavra/frase"}
+            description="Cole um link, iframe/embed ou envie um arquivo para criar mais uma opção de vídeo geral."
+            emptyLabel="Novo vídeo geral"
+            video=""
+            thumbnail=""
+            isEditing={videoEditor.key === NEW_WORD_VIDEO_KEY}
+            editorValue={videoEditor.value}
+            uploadError={newWordVideoUploadError}
+            isUploading={uploadingVideoKey === NEW_WORD_VIDEO_KEY}
+            isDeleting={deletingVideoKey === NEW_WORD_VIDEO_KEY}
+            isPreviewActive={false}
+            previewVariant="inline-right"
+            inlineSize="wide"
+            onPlay={() => undefined}
+            onOpenEditor={() => openVideoEditor(NEW_WORD_VIDEO_KEY, "")}
+            onEditorChange={(value) =>
+              setVideoEditor((current) => ({ ...current, value }))
+            }
+            onSave={() =>
+              void saveVideoFromEditor({
+                key: NEW_WORD_VIDEO_KEY,
+                oldVideo: "",
+                onSuccess: ({ video, thumbnail }) => appendWordVideo({ video, thumbnail }),
+              })
+            }
+            onCancel={closeVideoEditor}
+            onTriggerUpload={() => triggerVideoFilePicker(NEW_WORD_VIDEO_KEY)}
+            onRemove={() => undefined}
+            fileInputRef={(element) => {
+              if (element) {
+                fileInputsRef.current[NEW_WORD_VIDEO_KEY] = element;
+              }
+            }}
+            onFileChange={(event) => {
+              const inputElement = event?.target;
+              const file = inputElement?.files?.[0];
+
+              if (inputElement) {
+                inputElement.value = "";
+              }
+
+              void handleVideoFileSelected({
+                key: NEW_WORD_VIDEO_KEY,
+                file,
+                scope: "word",
+                oldVideo: "",
+                onSuccess: ({ video, thumbnail }) => appendWordVideo({ video, thumbnail }),
+              });
+            }}
+            uploadButtonText="Enviar arquivo"
+          />
+        </div>
 
         <button
           type="button"

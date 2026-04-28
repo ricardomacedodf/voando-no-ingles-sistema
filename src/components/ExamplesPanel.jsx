@@ -92,6 +92,117 @@ const normalizeWordThumbnail = (item) => {
   return normalizeText(rawThumbnail);
 };
 
+const normalizeVideoEntry = (entry, fallbackThumbnail = "") => {
+  if (typeof entry === "string") {
+    const video = normalizeText(entry);
+
+    return video
+      ? {
+          video,
+          thumbnail: normalizeText(fallbackThumbnail),
+        }
+      : null;
+  }
+
+  if (!entry || typeof entry !== "object") return null;
+
+  const video = normalizeText(
+    entry.video ??
+      entry.videoUrl ??
+      entry.video_url ??
+      entry.wordVideo ??
+      entry.word_video ??
+      entry.globalVideo ??
+      entry.global_video ??
+      ""
+  );
+
+  if (!video) return null;
+
+  return {
+    video,
+    thumbnail: normalizeText(
+      entry.thumbnail ??
+        entry.thumbnailUrl ??
+        entry.thumbnail_url ??
+        entry.wordThumbnail ??
+        entry.word_thumbnail ??
+        entry.globalThumbnail ??
+        entry.global_thumbnail ??
+        fallbackThumbnail
+    ),
+  };
+};
+
+const normalizeVideoList = (value, fallbackThumbnail = "") => {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => normalizeVideoEntry(entry, fallbackThumbnail))
+      .filter(Boolean);
+  }
+
+  const entry = normalizeVideoEntry(value, fallbackThumbnail);
+
+  return entry ? [entry] : [];
+};
+
+const dedupeVideoEntries = (entries) => {
+  const seen = new Set();
+
+  return entries.filter((entry) => {
+    const video = normalizeText(entry?.video);
+
+    if (!video || seen.has(video)) return false;
+
+    seen.add(video);
+    return true;
+  });
+};
+
+const getWordVideosFromMeanings = (meanings) => {
+  if (!Array.isArray(meanings)) return [];
+
+  const meaningWithVideos = meanings.find((meaning) => {
+    const videos = normalizeVideoList(
+      meaning?._wordVideos || meaning?._globalVideos,
+      meaning?._wordThumbnail || meaning?._globalThumbnail
+    );
+
+    return videos.length > 0;
+  });
+
+  if (meaningWithVideos) {
+    return normalizeVideoList(
+      meaningWithVideos?._wordVideos || meaningWithVideos?._globalVideos,
+      meaningWithVideos?._wordThumbnail || meaningWithVideos?._globalThumbnail
+    );
+  }
+
+  const singleVideo = getWordVideoFromMeanings(meanings);
+  const singleThumbnail = getWordThumbnailFromMeanings(meanings);
+
+  return normalizeVideoList(singleVideo, singleThumbnail);
+};
+
+const normalizeWordVideos = (item) => {
+  const fallbackThumbnail = normalizeWordThumbnail(item);
+
+  return dedupeVideoEntries([
+    ...normalizeVideoList(item?.wordVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.word_videos, fallbackThumbnail),
+    ...normalizeVideoList(item?.globalVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.global_videos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.wordVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.word_videos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.globalVideos, fallbackThumbnail),
+    ...normalizeVideoList(item?.stats?.global_videos, fallbackThumbnail),
+    ...getWordVideosFromMeanings(item?.meanings),
+    ...normalizeVideoList(normalizeWordVideo(item), fallbackThumbnail),
+  ]);
+};
+
 const normalizeMeaningVideo = (meaning) => {
   const rawVideo =
     meaning?.video ??
@@ -743,6 +854,7 @@ export default function ExamplesPanel({
   onClose,
   wordVideo = "",
   wordThumbnail = "",
+  wordVideos = [],
   item,
   vocabularyItem,
 }) {
@@ -754,23 +866,24 @@ export default function ExamplesPanel({
 
   const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
 
-  const wordVideoSource =
-    normalizeText(wordVideo) ||
-    normalizeWordVideo(item) ||
-    normalizeWordVideo(vocabularyItem) ||
-    getWordVideoFromMeanings(rawMeanings);
+  const wordVideoSources = dedupeVideoEntries([
+    ...normalizeVideoList(wordVideos, wordThumbnail),
+    ...normalizeVideoList(wordVideo, wordThumbnail),
+    ...normalizeWordVideos(item),
+    ...normalizeWordVideos(vocabularyItem),
+    ...getWordVideosFromMeanings(rawMeanings),
+  ]);
 
-  const wordThumbnailSource =
-    normalizeText(wordThumbnail) ||
-    normalizeWordThumbnail(item) ||
-    normalizeWordThumbnail(vocabularyItem) ||
-    getWordThumbnailFromMeanings(rawMeanings);
+  const wordVideoSourcesSignature = wordVideoSources
+    .map((entry) => `${entry.video}::${entry.thumbnail || ""}`)
+    .join("||");
 
-  const hasSpecificVideo = hasMeaningOrExampleVideo(rawMeanings);
 
-  const shouldShowGlobalWordVideoOnTop = Boolean(
-    wordVideoSource && !hasSpecificVideo
-  );
+  // Vídeo geral tem prioridade visual: se existir vídeo global/geral,
+  // ele fica no topo e os vídeos específicos dos significados/exemplos
+  // não são renderizados como carrosséis dentro dos blocos.
+  const shouldShowGlobalWordVideoOnTop = Boolean(wordVideoSources.length > 0);
+  const shouldShowSpecificVideosInsideMeanings = !shouldShowGlobalWordVideoOnTop;
 
   const normalized = rawMeanings.map((entry, index) => {
     const meaningVideo = normalizeMeaningVideo(entry);
@@ -839,7 +952,7 @@ export default function ExamplesPanel({
   }, [
     allMeanings,
     activeMeaning,
-    wordVideoSource,
+    wordVideoSourcesSignature,
     shouldShowGlobalWordVideoOnTop,
   ]);
 
@@ -1150,14 +1263,15 @@ export default function ExamplesPanel({
 
         {shouldShowGlobalWordVideoOnTop
           ? renderTopVideoCarousel({
-              videos: [
-                {
-                  video: wordVideoSource,
-                  thumbnail: wordThumbnailSource,
-                  key: "global-word-video",
-                  title: titleValue,
-                },
-              ],
+              videos: wordVideoSources.map((entry, index) => ({
+                video: entry.video,
+                thumbnail: entry.thumbnail,
+                key: `global-word-video-${index}`,
+                title:
+                  index === 0
+                    ? titleValue
+                    : `${titleValue} — vídeo geral ${index + 1}`,
+              })),
               groupKey: "global-word-video-group",
             })
           : null}
@@ -1172,13 +1286,6 @@ export default function ExamplesPanel({
                 key={`${entry.meaning}-${index}`}
                 className="rounded-xl border border-[#DCE4EE] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
               >
-                {entry.topVideos.length > 0
-                  ? renderTopVideoCarousel({
-                      videos: entry.topVideos,
-                      groupKey,
-                    })
-                  : null}
-
                 <div className="min-w-0">
                   <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b border-[#E6EDF5] pb-1.5">
                     <span
@@ -1201,6 +1308,13 @@ export default function ExamplesPanel({
                       </span>
                     ) : null}
                   </div>
+
+                  {shouldShowSpecificVideosInsideMeanings && entry.topVideos.length > 0
+                    ? renderTopVideoCarousel({
+                        videos: entry.topVideos,
+                        groupKey,
+                      })
+                    : null}
 
                   {visibleExamples.length > 0 ? (
                     <div className="border-l-2 border-[#CBD5E1] pl-4">
