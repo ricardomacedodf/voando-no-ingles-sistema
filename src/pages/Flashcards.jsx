@@ -894,6 +894,7 @@ export default function Flashcards() {
                 activeMeaning={activeMeaning?.meaning}
                 titleTerm={card?.term}
                 variant="flashcard"
+                panelScope="flashcards"
                 onClose={() => setShowExamples(false)}
               />
             </div>

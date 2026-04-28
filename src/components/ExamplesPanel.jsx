@@ -16,6 +16,45 @@ const videoThumbnailCache = new Map();
 
 const DESCENDER_CHAR_REGEX = /[gjpqy]/;
 
+const FLASHCARD_MOBILE_MEANING_PALETTE = [
+  {
+    border: "#CEEBD8",
+    background: "#F7FCF9",
+    accent: "#2AA55A",
+    bullet: "#35B56A",
+    tipBackground: "#EEF9F2",
+    tipBorder: "#D9F0E1",
+    underline: "#2AA55A",
+  },
+  {
+    border: "#D3E5F9",
+    background: "#F6FAFE",
+    accent: "#2F7FD9",
+    bullet: "#3E8EE6",
+    tipBackground: "#EEF5FD",
+    tipBorder: "#D8E8FA",
+    underline: "#2F7FD9",
+  },
+  {
+    border: "#F6DFC4",
+    background: "#FFFAF3",
+    accent: "#C97A24",
+    bullet: "#D88A34",
+    tipBackground: "#FFF4E7",
+    tipBorder: "#F6E2CA",
+    underline: "#C97A24",
+  },
+  {
+    border: "#E3D8F8",
+    background: "#FAF8FF",
+    accent: "#7A55C3",
+    bullet: "#8A67CF",
+    tipBackground: "#F4F0FD",
+    tipBorder: "#E7DDF9",
+    underline: "#7A55C3",
+  },
+];
+
 const normalizeText = (value) =>
   typeof value === "string" ? value.trim() : "";
 
@@ -266,9 +305,18 @@ const hasMeaningOrExampleVideo = (meanings) => {
   });
 };
 
+const getMeaningPaletteByIndex = (index) =>
+  FLASHCARD_MOBILE_MEANING_PALETTE[
+    index % FLASHCARD_MOBILE_MEANING_PALETTE.length
+  ];
+
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const renderUnderlineSequence = (value, keyPrefix) =>
+const renderUnderlineSequence = (
+  value,
+  keyPrefix,
+  underlineColor = "#ED9A0A"
+) =>
   Array.from(value).map((char, index) => {
     const isDescender = DESCENDER_CHAR_REGEX.test(char);
     const isSpace = char === " ";
@@ -279,7 +327,9 @@ const renderUnderlineSequence = (value, keyPrefix) =>
         style={{
           display: "inline-block",
           paddingBottom: "0.1em",
-          boxShadow: isDescender ? "none" : "inset 0 -1px 0 #ED9A0A",
+          boxShadow: isDescender
+            ? "none"
+            : `inset 0 -1px 0 ${underlineColor}`,
           lineHeight: "inherit",
           verticalAlign: "baseline",
         }}
@@ -289,7 +339,11 @@ const renderUnderlineSequence = (value, keyPrefix) =>
     );
   });
 
-const renderHighlightedTerm = (text, term) => {
+const renderHighlightedTerm = (
+  text,
+  term,
+  { underlineColor = "#ED9A0A" } = {}
+) => {
   const safeText = typeof text === "string" ? text : "";
   const safeTerm = typeof term === "string" ? term.trim() : "";
 
@@ -313,7 +367,7 @@ const renderHighlightedTerm = (text, term) => {
 
     return (
       <Fragment key={`${part}-${index}`}>
-        {renderUnderlineSequence(part, `${part}-${index}`)}
+        {renderUnderlineSequence(part, `${part}-${index}`, underlineColor)}
       </Fragment>
     );
   });
@@ -886,6 +940,7 @@ export default function ExamplesPanel({
   meaning,
   titleTerm,
   variant = "default",
+  panelScope = "shared",
   onClose,
   wordVideo = "",
   wordThumbnail = "",
@@ -980,6 +1035,7 @@ export default function ExamplesPanel({
         a.meaning === activeMeaning ? -1 : b.meaning === activeMeaning ? 1 : 0
       )
     : normalized;
+  const hasMultipleMeanings = sorted.length > 1;
 
   const videoMeaningGroupKeys = shouldShowSpecificVideosInsideMeanings
     ? sorted.reduce((accumulator, entry, index) => {
@@ -991,7 +1047,8 @@ export default function ExamplesPanel({
       }, [])
     : [];
 
-  const shouldUseMeaningVideoCollapse = videoMeaningGroupKeys.length > 1;
+  const shouldUseMeaningVideoCollapse =
+    hasMultipleMeanings && videoMeaningGroupKeys.length > 1;
   const firstExpandedMeaningVideoKey = videoMeaningGroupKeys[0] || null;
   const videoMeaningGroupsSignature = videoMeaningGroupKeys.join("||");
 
@@ -1044,8 +1101,20 @@ export default function ExamplesPanel({
   }, [mobileVideo]);
 
   const isFlashcard = variant === "flashcard";
+  const isFlashcardMobileLayout =
+    isFlashcard && isMobile && panelScope === "flashcards";
   const titleValue = titleTerm ? titleTerm.trim() : "Exemplos";
   const highlightTerm = titleTerm ? titleTerm.trim() : "";
+  const panelContainerClass = isFlashcard
+    ? isFlashcardMobileLayout
+      ? "mt-0 bg-transparent p-0 text-[#1A1A1A]"
+      : "mt-0 rounded-xl border border-[#EDF0F3] bg-white p-6 text-[#1A1A1A]"
+    : "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] p-5 animate-in fade-in slide-in-from-top-2 duration-200";
+  const panelHeaderClass = isFlashcard
+    ? isFlashcardMobileLayout
+      ? "mb-3 flex items-center justify-between border-b border-border pb-2.5"
+      : "mb-4 flex items-center justify-between border-b border-border pb-2"
+    : "mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3";
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -1118,7 +1187,7 @@ export default function ExamplesPanel({
       [groupKey]: safeIndex,
     }));
 
-    if (isMobile) {
+    if (isMobile && mobileVideo?.groupKey === groupKey) {
       setMobileVideo({
         video: nextVideo.video,
         key: nextVideo.key,
@@ -1127,12 +1196,7 @@ export default function ExamplesPanel({
         videos,
         index: safeIndex,
       });
-      return;
     }
-
-    setOpenDesktopVideos({
-      [groupKey]: true,
-    });
   };
 
   const renderVideoControls = ({ groupKey, videos, currentIndex }) => {
@@ -1142,13 +1206,15 @@ export default function ExamplesPanel({
       <div className="mt-2 flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={() =>
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
             goToVideoIndex({
               groupKey,
               videos,
               nextIndex: currentIndex - 1,
-            })
-          }
+            });
+          }}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -1161,13 +1227,15 @@ export default function ExamplesPanel({
 
         <button
           type="button"
-          onClick={() =>
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
             goToVideoIndex({
               groupKey,
               videos,
               nextIndex: currentIndex + 1,
-            })
-          }
+            });
+          }}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
         >
           Próximo
@@ -1196,7 +1264,7 @@ export default function ExamplesPanel({
       isMobile && Boolean(mobileVideo?.key) && mobileVideo.key === currentVideo.key;
 
     return (
-      <div className="mb-4">
+      <div className={isFlashcardMobileLayout ? "mb-3" : "mb-4"}>
         {isVideoOpen && !isMobile ? (
           <div>
             <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
@@ -1205,7 +1273,7 @@ export default function ExamplesPanel({
                   key={`${currentVideo.key}-${currentVideo.video}`}
                   video={currentVideo.video}
                   title={currentVideo.title}
-                  autoPlay
+                  autoPlay={false}
                 />
               </AspectRatio>
             </div>
@@ -1286,19 +1354,9 @@ export default function ExamplesPanel({
   return (
     <>
       <div
-        className={
-          isFlashcard
-            ? "mt-0 rounded-xl border border-[#EDF0F3] bg-white p-6 text-[#1A1A1A] animate-in slide-in-from-top-4 duration-200"
-            : "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] p-5 animate-in fade-in slide-in-from-top-2 duration-200"
-        }
+        className={panelContainerClass}
       >
-        <div
-          className={
-            isFlashcard
-              ? "mb-4 flex items-center justify-between border-b border-border pb-2"
-              : "mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3"
-          }
-        >
+        <div className={panelHeaderClass}>
           <div className="flex min-w-0 items-center gap-2 text-foreground">
             <Lightbulb
               className={
@@ -1353,25 +1411,64 @@ export default function ExamplesPanel({
             })
           : null}
 
-        <div className="space-y-4">
+        <div className={isFlashcardMobileLayout ? "space-y-3.5" : "space-y-4"}>
           {sorted.map((entry, index) => {
             const visibleExamples = entry.examples.slice(0, 3);
             const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
+            const meaningPalette = getMeaningPaletteByIndex(index);
             const hasMeaningVideo =
               shouldShowSpecificVideosInsideMeanings &&
               Array.isArray(entry.topVideos) &&
               entry.topVideos.length > 0;
+            const shouldShowMeaningVideoIndicator =
+              isFlashcardMobileLayout &&
+              hasMultipleMeanings &&
+              hasMeaningVideo;
             const shouldUseMeaningCollapse =
               shouldUseMeaningVideoCollapse && hasMeaningVideo;
             const isMeaningExpanded =
               !shouldUseMeaningCollapse || expandedMeaningVideoKey === groupKey;
+            const shouldRenderMeaningVideoIndicator =
+              shouldShowMeaningVideoIndicator && !isMeaningExpanded;
 
             return (
               <section
                 key={`${entry.meaning}-${index}`}
-                className="rounded-xl border border-[#DCE4EE] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
+                className={
+                  isFlashcardMobileLayout
+                    ? "relative rounded-2xl border p-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
+                    : "rounded-xl border border-[#DCE4EE] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
+                }
+                style={
+                  isFlashcardMobileLayout
+                    ? {
+                        borderColor: meaningPalette.border,
+                        backgroundColor: meaningPalette.background,
+                      }
+                    : undefined
+                }
               >
-                <div className="min-w-0">
+                {shouldRenderMeaningVideoIndicator ? (
+                  <span
+                    className="pointer-events-none absolute right-3.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border bg-white/65 shadow-[0_8px_18px_rgba(17,24,39,0.08)]"
+                    style={{
+                      borderColor: "rgba(37,177,95,0.35)",
+                      color: "rgba(37,177,95,0.85)",
+                    }}
+                    aria-hidden="true"
+                  >
+                    <Play className="ml-[1px] h-3.5 w-3.5 stroke-[2.3]" />
+                  </span>
+                ) : null}
+
+                <div
+                  className={[
+                    "min-w-0",
+                    shouldRenderMeaningVideoIndicator ? "pr-12" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
                   {shouldUseMeaningCollapse ? (
                     <button
                       type="button"
@@ -1380,13 +1477,30 @@ export default function ExamplesPanel({
                       }}
                       className={[
                         "mb-2 w-full text-left transition-all duration-200",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CBD5E1]",
-                        "active:bg-[#EEF4FA]",
+                        "focus-visible:outline-none focus-visible:ring-2",
+                        isFlashcardMobileLayout
+                          ? ""
+                          : "focus-visible:ring-[#CBD5E1]",
+                        isFlashcardMobileLayout ? "" : "active:bg-[#EEF4FA]",
                         isMeaningExpanded
-                          ? "rounded-md px-1.5 py-1.5 hover:bg-[#F8FAFD]"
+                          ? isFlashcardMobileLayout
+                            ? "rounded-lg px-1 py-1.5"
+                            : "rounded-md px-1.5 py-1.5 hover:bg-[#F8FAFD]"
                           : "border-[#DEE6EF] bg-[#FAFCFF] hover:border-[#C8D6E6] hover:bg-[#F5F8FC]",
                         !isMeaningExpanded ? "rounded-lg border px-2.5 py-2" : "",
                       ].join(" ")}
+                      style={
+                        isFlashcardMobileLayout
+                          ? {
+                              borderColor: isMeaningExpanded
+                                ? "transparent"
+                                : meaningPalette.border,
+                              backgroundColor: isMeaningExpanded
+                                ? "transparent"
+                                : meaningPalette.tipBackground,
+                            }
+                          : undefined
+                      }
                       aria-label={`Mostrar significado ${entry.meaning}`}
                       title={`Mostrar significado ${entry.meaning}`}
                     >
@@ -1398,10 +1512,11 @@ export default function ExamplesPanel({
                       >
                         <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
                           <span
-                            className={
-                              isFlashcard
-                                ? "font-semibold text-[#25B15F]"
-                                : "font-bold text-[#26A95C]"
+                            className={isFlashcard ? "font-semibold" : "font-bold"}
+                            style={
+                              isFlashcardMobileLayout
+                                ? { color: meaningPalette.accent }
+                                : undefined
                             }
                           >
                             {index + 1}.
@@ -1418,21 +1533,31 @@ export default function ExamplesPanel({
                           ) : null}
                         </span>
 
-                        <Menu
-                          className={[
-                            "h-3.5 w-3.5 shrink-0 text-[#98A2B3]",
-                            isMeaningExpanded ? "mt-0.5" : "self-center",
-                          ].join(" ")}
-                        />
+                        {!isFlashcardMobileLayout ? (
+                          <Menu
+                            className={[
+                              "h-3.5 w-3.5 shrink-0 text-[#98A2B3]",
+                              isMeaningExpanded ? "mt-0.5" : "self-center",
+                            ].join(" ")}
+                          />
+                        ) : null}
                       </span>
                     </button>
                   ) : (
-                    <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b border-[#E6EDF5] pb-1.5">
+                    <div
+                      className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b pb-1.5"
+                      style={
+                        isFlashcardMobileLayout
+                          ? { borderBottomColor: meaningPalette.border }
+                          : { borderBottomColor: "#E6EDF5" }
+                      }
+                    >
                       <span
-                        className={
-                          isFlashcard
-                            ? "font-semibold text-[#25B15F]"
-                            : "font-bold text-[#26A95C]"
+                        className={isFlashcard ? "font-semibold" : "font-bold"}
+                        style={
+                          isFlashcardMobileLayout
+                            ? { color: meaningPalette.accent }
+                            : undefined
                         }
                       >
                         {index + 1}.
@@ -1461,8 +1586,12 @@ export default function ExamplesPanel({
                         : null}
 
                       {visibleExamples.length > 0 ? (
-                        <div className="border-l-2 border-[#CBD5E1] pl-4">
-                          <div className="space-y-1.5">
+                        <div
+                          className={
+                            isFlashcardMobileLayout ? "space-y-2.5" : "border-l-2 border-[#CBD5E1] pl-4"
+                          }
+                        >
+                          <div className={isFlashcardMobileLayout ? "space-y-2.5" : "space-y-1.5"}>
                             {visibleExamples.map((example, exampleIndex) => {
                               const hasSentence = Boolean(example.sentence);
                               const hasTranslation = Boolean(example.translation);
@@ -1470,29 +1599,65 @@ export default function ExamplesPanel({
                               return (
                                 <div
                                   key={`${entry.meaning}-${index}-${exampleIndex}`}
-                                  className="space-y-0.5"
+                                  className={
+                                    isFlashcardMobileLayout
+                                      ? "flex items-start gap-2.5 rounded-lg px-0.5 py-0.5"
+                                      : "space-y-0.5"
+                                  }
                                 >
-                                  {hasTranslation ? (
-                                    <p className="text-xs font-medium leading-snug text-[#758195]">
-                                      {example.translation}
-                                    </p>
+                                  {isFlashcardMobileLayout ? (
+                                    <span
+                                      className="mt-[0.48rem] h-2.5 w-2.5 shrink-0 rounded-full"
+                                      style={{ backgroundColor: meaningPalette.bullet }}
+                                    />
                                   ) : null}
 
-                                  {hasSentence ? (
-                                    <p className="text-sm font-semibold leading-snug text-[#0b0e14]">
-                                      {renderHighlightedTerm(
-                                        example.sentence,
-                                        highlightTerm
-                                      )}
-                                    </p>
-                                  ) : null}
+                                  <div className={isFlashcardMobileLayout ? "min-w-0 space-y-1.5" : ""}>
+                                    {hasTranslation ? (
+                                      <p
+                                        className={
+                                          isFlashcardMobileLayout
+                                            ? "text-sm font-medium leading-snug text-[#5D6677]"
+                                            : "text-xs font-medium leading-snug text-[#758195]"
+                                        }
+                                      >
+                                        {example.translation}
+                                      </p>
+                                    ) : null}
+
+                                    {hasSentence ? (
+                                      <p
+                                        className={
+                                          isFlashcardMobileLayout
+                                            ? "text-[15px] font-semibold leading-snug text-[#101827]"
+                                            : "text-sm font-semibold leading-snug text-[#0b0e14]"
+                                        }
+                                      >
+                                        {renderHighlightedTerm(
+                                          example.sentence,
+                                          highlightTerm,
+                                          {
+                                            underlineColor: isFlashcardMobileLayout
+                                              ? meaningPalette.underline
+                                              : "#ED9A0A",
+                                          }
+                                        )}
+                                      </p>
+                                    ) : null}
+                                  </div>
                                 </div>
                               );
                             })}
                           </div>
                         </div>
                       ) : (
-                        <p className="border-l-2 border-[#CBD5E1] pl-4 text-sm italic text-muted-foreground">
+                        <p
+                          className={
+                            isFlashcardMobileLayout
+                              ? "text-sm italic text-muted-foreground"
+                              : "border-l-2 border-[#CBD5E1] pl-4 text-sm italic text-muted-foreground"
+                          }
+                        >
                           Nenhum exemplo cadastrado.
                         </p>
                       )}
@@ -1504,23 +1669,47 @@ export default function ExamplesPanel({
                   <div className="mt-3">
                     <div
                       className={[
-                        "inline-flex max-w-full items-start gap-1.5 pb-1",
-                        shouldUseMeaningCollapse
+                        "inline-flex max-w-full items-start gap-1.5",
+                        isFlashcardMobileLayout ? "w-full rounded-lg border px-2.5 py-2" : "pb-1",
+                        shouldUseMeaningCollapse || isFlashcardMobileLayout
                           ? ""
                           : "border-b border-[#E6EDF5]",
                       ]
                         .filter(Boolean)
                         .join(" ")}
+                      style={
+                        isFlashcardMobileLayout
+                          ? {
+                              borderColor: meaningPalette.tipBorder,
+                              backgroundColor: meaningPalette.tipBackground,
+                            }
+                          : undefined
+                      }
                     >
-                      <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ED9A0A]" />
-                      <span className="min-w-0 text-xs italic leading-relaxed text-muted-foreground">
+                      <Lightbulb
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                        style={{
+                          color: isFlashcardMobileLayout
+                            ? meaningPalette.accent
+                            : "#ED9A0A",
+                        }}
+                      />
+                      <span
+                        className={
+                          isFlashcardMobileLayout
+                            ? "min-w-0 text-xs italic leading-relaxed text-[#5E6778]"
+                            : "min-w-0 text-xs italic leading-relaxed text-muted-foreground"
+                        }
+                      >
                         {entry.tip}
                       </span>
                     </div>
                   </div>
                 ) : null}
 
-                {shouldUseMeaningCollapse && isMeaningExpanded ? (
+                {shouldUseMeaningCollapse &&
+                isMeaningExpanded &&
+                !isFlashcardMobileLayout ? (
                   <div className="mt-2 border-b border-[#E6EDF5]" />
                 ) : null}
               </section>
@@ -1546,7 +1735,7 @@ export default function ExamplesPanel({
                 key={mobileVideo?.key || "mobile-video"}
                 video={mobileVideo?.video || ""}
                 title={mobileVideo?.title || ""}
-                autoPlay
+                autoPlay={false}
                 layout="mobileMockup"
               />
             </div>
@@ -1555,7 +1744,11 @@ export default function ExamplesPanel({
               <div className="mt-2 flex items-center justify-between gap-2 px-3">
                 <button
                   type="button"
-                  onClick={() => goMobileVideoToIndex(mobileVideo.index - 1)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    goMobileVideoToIndex(mobileVideo.index - 1);
+                  }}
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
@@ -1568,7 +1761,11 @@ export default function ExamplesPanel({
 
                 <button
                   type="button"
-                  onClick={() => goMobileVideoToIndex(mobileVideo.index + 1)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    goMobileVideoToIndex(mobileVideo.index + 1);
+                  }}
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
                 >
                   Próximo
