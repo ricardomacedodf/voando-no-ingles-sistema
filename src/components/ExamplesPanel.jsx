@@ -1927,7 +1927,7 @@ export default function ExamplesPanel({
               />
             </div>
 
-            {mobileVideo?.videos?.length > 1 && !isExpandedGlobalWordVideo ? (
+            {false && mobileVideo?.videos?.length > 1 && !isExpandedGlobalWordVideo ? (
               <div className="mt-2 flex items-center justify-between gap-2 px-3">
                 <button
                   type="button"
