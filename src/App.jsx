@@ -140,7 +140,7 @@ const LoginRequiredScreen = () => {
     : "Cadastrar";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div className="app-mobile-safe-shell min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
       <div className="w-full max-w-md">
         <div className="text-card-foreground relative overflow-hidden border-0 shadow-2xl bg-white/95 backdrop-blur-sm rounded-2xl">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200"></div>
@@ -383,7 +383,7 @@ const LoginRequiredScreen = () => {
 
 const PrivacyPage = () => {
   return (
-    <div className="min-h-screen bg-background px-4 py-10">
+    <div className="app-mobile-safe-shell min-h-screen bg-background px-4 py-10">
       <div className="mx-auto max-w-4xl rounded-3xl border border-border bg-card p-6 md:p-10 shadow-sm space-y-6">
         <div className="space-y-3">
           <div className="inline-flex items-center rounded-full border border-border px-3 py-1 text-sm text-muted-foreground">
@@ -463,7 +463,7 @@ const PrivacyPage = () => {
 
 const TermsPage = () => {
   return (
-    <div className="min-h-screen bg-background px-4 py-10">
+    <div className="app-mobile-safe-shell min-h-screen bg-background px-4 py-10">
       <div className="mx-auto max-w-4xl rounded-3xl border border-border bg-card p-6 md:p-10 shadow-sm space-y-6">
         <div className="space-y-3">
           <div className="inline-flex items-center rounded-full border border-border px-3 py-1 text-sm text-muted-foreground">

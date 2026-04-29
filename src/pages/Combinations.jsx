@@ -509,24 +509,22 @@ export default function Combinations() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
-      <div className="flex items-start justify-between gap-2 sm:hidden">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-foreground">Comb.</h1>
-          <button
-            onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            title={soundEnabled ? "Desativar audio" : "Ativar audio"}
-          >
-            {soundEnabled ? (
-              <Volume2 className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <VolumeX className="h-5 w-5 text-muted-foreground" />
-            )}
-          </button>
-        </div>
-        <div className="min-w-0 shrink-0 self-start">
+      <div className="relative flex items-center justify-center sm:hidden">
+        <div className="min-w-0">
           <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
         </div>
+
+        <button
+          onClick={toggleSound}
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          title={soundEnabled ? "Desativar audio" : "Ativar audio"}
+        >
+          {soundEnabled ? (
+            <Volume2 className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <VolumeX className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
       </div>
 
       <div className="hidden flex-wrap items-center justify-between gap-3 sm:flex">

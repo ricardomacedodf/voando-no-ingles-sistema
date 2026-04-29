@@ -572,6 +572,91 @@ const hasExampleContent = (example) => {
   return Boolean(sentence || translation || video);
 };
 
+const buildEditableDraftSnapshot = ({ term, pronunciation, wordVideos, meanings }) => {
+  const cleanWordVideos = dedupeVideoEntries(
+    (Array.isArray(wordVideos) ? wordVideos : [])
+      .map((entry) => ({
+        video: normalizeText(entry?.video),
+        thumbnail: entry?.video ? normalizeText(entry?.thumbnail) : "",
+      }))
+      .filter((entry) => entry.video)
+  );
+
+  const firstCleanWordVideo = cleanWordVideos[0] || {
+    video: "",
+    thumbnail: "",
+  };
+  const cleanWordVideo = normalizeText(firstCleanWordVideo.video);
+  const cleanWordThumbnail = cleanWordVideo
+    ? normalizeText(firstCleanWordVideo.thumbnail)
+    : "";
+
+  const cleanedMeanings = (Array.isArray(meanings) ? meanings : [])
+    .map((meaningItem) => {
+      const meaningVideo = normalizeMeaningVideo(meaningItem);
+
+      return {
+        meaning: normalizeText(meaningItem.meaning),
+        category: meaningItem.category,
+        tip: normalizeText(meaningItem.tip),
+        video: meaningVideo,
+        thumbnail: meaningVideo ? normalizeMeaningThumbnail(meaningItem) : "",
+        examples: (Array.isArray(meaningItem.examples) ? meaningItem.examples : [])
+          .map((example) => {
+            const video = normalizeExampleVideo(example);
+
+            return {
+              sentence: normalizeExampleText(example?.sentence),
+              translation: normalizeExampleText(example?.translation),
+              video,
+              thumbnail: video ? normalizeExampleThumbnail(example) : "",
+            };
+          })
+          .filter(hasExampleContent),
+      };
+    })
+    .filter((meaningItem) => meaningItem.meaning)
+    .map((meaningItem, index) => {
+      if (index !== 0) return meaningItem;
+
+      const {
+        _wordVideo,
+        _wordThumbnail,
+        _wordVideos,
+        _globalVideo,
+        _globalThumbnail,
+        _globalVideos,
+        ...cleanMeaning
+      } = meaningItem;
+
+      if (cleanWordVideos.length === 0) return cleanMeaning;
+
+      return {
+        ...cleanMeaning,
+        _wordVideo: cleanWordVideo,
+        _wordThumbnail: cleanWordThumbnail,
+        _wordVideos: cleanWordVideos,
+      };
+    });
+
+  return {
+    term: normalizeText(term),
+    pronunciation: normalizeText(pronunciation),
+    cleanWordVideos,
+    cleanWordVideo,
+    cleanWordThumbnail,
+    cleanedMeanings,
+  };
+};
+
+const createEditableDraftSignature = (snapshot) =>
+  JSON.stringify({
+    term: snapshot.term,
+    pronunciation: snapshot.pronunciation,
+    wordVideos: snapshot.cleanWordVideos,
+    meanings: snapshot.cleanedMeanings,
+  });
+
 const createVideoThumbnailFromFile = async (file) =>
   new Promise((resolve) => {
     if (!file || typeof window === "undefined") {
@@ -1054,36 +1139,84 @@ function VideoControlCard({
   previewVariant = "default",
   inlineSize = "normal",
   showPreview = true,
+  mobileCompact = false,
+  removeButtonMode = "button",
 }) {
   const hasVideo = Boolean(video);
   const isInlinePreview = previewVariant === "inline-right";
   const isWideInline = inlineSize === "wide";
+  const showRemoveIcon =
+    hasVideo &&
+    !isEditing &&
+    removeButtonMode === "mobile-icon";
+  const showRemoveInlineIcon =
+    hasVideo &&
+    !isEditing &&
+    removeButtonMode === "icon";
+  const showTextRemoveButton =
+    hasVideo &&
+    (removeButtonMode === "button" || removeButtonMode === "mobile-icon");
+  const removeIconResponsiveClass =
+    removeButtonMode === "mobile-icon" ? "lg:hidden" : "";
+  const removeTextResponsiveClass =
+    removeButtonMode === "mobile-icon" ? "hidden lg:inline-flex" : "";
 
   if (isInlinePreview) {
     return (
       <div
         className={[
           isWideInline
-            ? "min-h-[146px] rounded-2xl"
+            ? mobileCompact
+              ? "min-h-[116px] rounded-xl md:min-h-[146px] md:rounded-2xl"
+              : "min-h-[146px] rounded-2xl"
+            : mobileCompact
+            ? "min-h-[108px] rounded-xl md:min-h-[132px]"
             : "min-h-[132px] rounded-xl",
-          "border border-[#DCE4EE] bg-white px-3.5 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]",
+          mobileCompact
+            ? "border border-[#DCE4EE] bg-white px-3 py-2.5 shadow-[0_4px_12px_rgba(15,23,42,0.04)] md:px-3.5 md:py-3 md:shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
+            : "border border-[#DCE4EE] bg-white px-3.5 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]",
+          "relative",
         ].join(" ")}
       >
+        {showRemoveIcon ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={isDeleting}
+            className={`absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50 ${removeIconResponsiveClass}`}
+            aria-label="Remover vídeo"
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </button>
+        ) : null}
+
         <div
           className={
             hasVideo && !isEditing
               ? isWideInline
-                ? "grid min-h-[122px] gap-3 md:grid-cols-[minmax(0,1fr)_252px] md:items-center"
+                ? mobileCompact
+                  ? "grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_252px] lg:items-center"
+                  : "grid min-h-[122px] gap-3 md:grid-cols-[minmax(0,1fr)_252px] md:items-center"
+                : mobileCompact
+                ? "grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_192px] lg:items-center"
                 : "grid min-h-[108px] gap-3 md:grid-cols-[minmax(0,1fr)_192px] md:items-center"
               : isWideInline
-              ? "min-h-[122px]"
+              ? mobileCompact
+                ? "space-y-0"
+                : "min-h-[122px]"
+              : mobileCompact
+              ? "space-y-0"
               : "min-h-[108px]"
           }
         >
           <div
             className={
               isWideInline
-                ? "flex min-h-[122px] flex-col justify-between"
+                ? mobileCompact
+                  ? "flex min-w-0 flex-col justify-between gap-2 lg:min-h-[122px]"
+                  : "flex min-h-[122px] flex-col justify-between"
+                : mobileCompact
+                ? "flex min-w-0 flex-col justify-between gap-2 lg:min-h-[108px]"
                 : "flex min-h-[108px] flex-col justify-between"
             }
           >
@@ -1100,10 +1233,10 @@ function VideoControlCard({
                 ) : null}
               </div>
 
-              {hasVideo ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Vídeo anexado
+                {hasVideo ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Vídeo anexado
                 </span>
               ) : (
                 <span className="text-[10px] font-medium text-muted-foreground">
@@ -1113,28 +1246,39 @@ function VideoControlCard({
             </div>
 
             {hasVideo && !isEditing ? (
-              <p className="mt-2 truncate text-[11px] text-muted-foreground">
+              <p
+                title={getExampleVideoDisplayLabel(video)}
+                className="mt-2 w-full min-w-0 max-w-full truncate text-[11px] text-muted-foreground"
+              >
                 {getExampleVideoDisplayLabel(video)}
               </p>
             ) : null}
 
             {isEditing ? (
-              <div className="mt-3 space-y-2">
+              <div className={mobileCompact ? "mt-2.5 space-y-2" : "mt-3 space-y-2"}>
                 <textarea
                   value={editorValue}
                   onChange={(e) => onEditorChange(e.target.value)}
                   placeholder="Cole o link do vídeo, iframe/embed completo ou BBCode"
-                  rows={4}
+                  rows={mobileCompact ? 3 : 4}
                   spellCheck={false}
                   className="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-xs transition-all focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
 
-                <div className="flex flex-wrap gap-2">
+                <div
+                  className={
+                    mobileCompact
+                      ? "grid grid-cols-2 gap-2 lg:flex lg:flex-wrap"
+                      : "flex flex-wrap gap-2"
+                  }
+                >
                   <button
                     type="button"
                     onClick={onSave}
                     disabled={!editorValue.trim() || isDeleting}
-                    className="rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    className={`rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 ${
+                      mobileCompact ? "w-full text-center lg:w-auto" : ""
+                    }`}
                   >
                     {isDeleting
                       ? "Salvando..."
@@ -1147,19 +1291,31 @@ function VideoControlCard({
                     type="button"
                     onClick={onCancel}
                     disabled={isDeleting}
-                    className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                    className={`rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50 ${
+                      mobileCompact ? "w-full text-center lg:w-auto" : ""
+                    }`}
                   >
                     Cancelar
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
+                <div
+                  className={
+                    mobileCompact
+                      ? showRemoveInlineIcon
+                        ? "mt-2.5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 lg:mt-3 lg:flex lg:flex-wrap"
+                        : "mt-2.5 grid grid-cols-2 gap-2 lg:mt-3 lg:flex lg:flex-wrap"
+                      : "mt-3 flex flex-wrap gap-2"
+                  }
+              >
                 <button
                   type="button"
                   onClick={onOpenEditor}
                   disabled={isDeleting}
-                  className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                  className={`rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50 ${
+                    mobileCompact ? "w-full text-center lg:w-auto" : ""
+                  }`}
                 >
                   {hasVideo ? "Trocar vídeo" : "Adicionar vídeo"}
                 </button>
@@ -1176,18 +1332,36 @@ function VideoControlCard({
                   type="button"
                   onClick={onTriggerUpload}
                   disabled={isUploading || isDeleting}
-                  className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                  className={`inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50 ${
+                    mobileCompact ? "w-full justify-center lg:w-auto" : ""
+                  }`}
                 >
                   <Upload className="h-3 w-3" />
                   {isUploading ? "Enviando para R2..." : uploadButtonText}
                 </button>
 
-                {hasVideo ? (
+                {showRemoveInlineIcon ? (
                   <button
                     type="button"
                     onClick={onRemove}
                     disabled={isDeleting}
-                    className="rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-destructive/40 text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
+                    aria-label="Remover vídeo"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                ) : null}
+
+                {showTextRemoveButton ? (
+                  <button
+                    type="button"
+                    onClick={onRemove}
+                    disabled={isDeleting}
+                    className={`rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50 ${removeTextResponsiveClass} ${
+                      mobileCompact
+                        ? "w-full text-center lg:w-auto"
+                        : ""
+                    }`}
                   >
                     {isDeleting ? "Removendo..." : "Remover vídeo"}
                   </button>
@@ -1203,14 +1377,26 @@ function VideoControlCard({
           </div>
 
           {hasVideo && !isEditing ? (
-            <div className="flex w-full justify-end md:pl-1">
+            <div
+              className={
+                mobileCompact
+                  ? "flex w-full justify-center overflow-hidden lg:justify-end lg:pl-1"
+                  : "flex w-full justify-end md:pl-1"
+              }
+            >
               <ExampleVideoPreview
                 video={video}
                 thumbnail={thumbnail}
                 isActive={isPreviewActive}
                 onPlay={onPlay}
                 className={
-                  isWideInline ? "w-full md:w-[252px]" : "w-full md:w-[192px]"
+                  isWideInline
+                    ? mobileCompact
+                      ? "mx-auto w-full max-w-[320px] lg:w-[252px] lg:max-w-none"
+                      : "w-full md:w-[252px]"
+                    : mobileCompact
+                    ? "mx-auto w-full max-w-[192px] lg:w-[192px] lg:max-w-none"
+                    : "w-full md:w-[192px]"
                 }
               />
             </div>
@@ -1221,7 +1407,19 @@ function VideoControlCard({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card px-3.5 py-3">
+    <div className="relative rounded-xl border border-border bg-card px-3.5 py-3">
+      {showRemoveIcon ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={isDeleting}
+          className={`absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50 ${removeIconResponsiveClass}`}
+          aria-label="Remover vídeo"
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </button>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
@@ -1332,17 +1530,17 @@ function VideoControlCard({
             {isUploading ? "Enviando para R2..." : uploadButtonText}
           </button>
 
-          {hasVideo ? (
-            <button
-              type="button"
-              onClick={onRemove}
-              disabled={isDeleting}
-              className="rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
-            >
-              {isDeleting ? "Removendo..." : "Remover vídeo"}
-            </button>
-          ) : null}
-        </div>
+        {showTextRemoveButton ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={isDeleting}
+            className={`rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50 ${removeTextResponsiveClass}`}
+          >
+            {isDeleting ? "Removendo..." : "Remover vídeo"}
+          </button>
+        ) : null}
+      </div>
       )}
 
       {uploadError ? (
@@ -1389,6 +1587,39 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         }))
       : [{ ...emptyMeaning }]
   );
+  const initialDraftSignatureRef = useRef(null);
+  if (initialDraftSignatureRef.current === null) {
+    initialDraftSignatureRef.current = createEditableDraftSignature(
+      buildEditableDraftSnapshot({
+        term: item?.term || "",
+        pronunciation: item?.pronunciation || "",
+        wordVideos: normalizeWordVideos(item),
+        meanings:
+          item?.meanings?.length > 0
+            ? item.meanings.map((m) => ({
+                meaning: m.meaning || "",
+                category: m.category || "vocabulário",
+                tip: m.tip || "",
+                video: normalizeMeaningVideo(m),
+                thumbnail: normalizeMeaningThumbnail(m),
+                examples:
+                  m.examples?.length > 0
+                    ? m.examples.map((e) => ({
+                        sentence: e?.sentence || "",
+                        translation: e?.translation || "",
+                        video: normalizeExampleVideo(e),
+                        thumbnail: normalizeExampleThumbnail(e),
+                      }))
+                    : [{ ...emptyExample }],
+              }))
+            : [{ ...emptyMeaning }],
+      })
+    );
+  }
+
+  const [savedDraftSignature, setSavedDraftSignature] = useState(
+    initialDraftSignatureRef.current
+  );
   const [pendingNewMeanings, setPendingNewMeanings] = useState({});
 
   const [expandedMeanings, setExpandedMeanings] = useState(() => {
@@ -1429,6 +1660,15 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const [videoUploadErrors, setVideoUploadErrors] = useState({});
   const [activeVideoPreviewKey, setActiveVideoPreviewKey] = useState(null);
   const meaningAccentIndexes = getMeaningAccentIndexes(meanings.length);
+  const currentDraftSnapshot = buildEditableDraftSnapshot({
+    term,
+    pronunciation,
+    wordVideos,
+    meanings,
+  });
+  const currentDraftSignature = createEditableDraftSignature(currentDraftSnapshot);
+  const hasPendingChanges = currentDraftSignature !== savedDraftSignature;
+  const canSave = !saving && Boolean(term.trim()) && hasPendingChanges;
 
   const resetActiveVideoPreview = () => {
     setActiveVideoPreviewKey(null);
@@ -1795,7 +2035,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   };
 
   const handleSave = async () => {
-    if (!term.trim()) return;
+    if (!term.trim() || !hasPendingChanges) return;
 
     if (!user?.id) {
       alert("Usuário não identificado.");
@@ -1806,72 +2046,14 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       setSaving(true);
 
       const now = new Date().toISOString();
-      const cleanWordVideos = dedupeVideoEntries(
-        wordVideos
-          .map((entry) => ({
-            video: normalizeText(entry?.video),
-            thumbnail: entry?.video ? normalizeText(entry?.thumbnail) : "",
-          }))
-          .filter((entry) => entry.video)
-      );
-      const firstCleanWordVideo = cleanWordVideos[0] || {
-        video: "",
-        thumbnail: "",
-      };
-      const cleanWordVideo = normalizeText(firstCleanWordVideo.video);
-      const cleanWordThumbnail = cleanWordVideo
-        ? normalizeText(firstCleanWordVideo.thumbnail)
-        : "";
-
-      const cleanedMeanings = meanings
-        .map((meaningItem) => {
-          const meaningVideo = normalizeMeaningVideo(meaningItem);
-
-          return {
-            meaning: normalizeText(meaningItem.meaning),
-            category: meaningItem.category,
-            tip: normalizeText(meaningItem.tip),
-            video: meaningVideo,
-            thumbnail: meaningVideo
-              ? normalizeMeaningThumbnail(meaningItem)
-              : "",
-            examples: meaningItem.examples
-              .map((example) => {
-                const video = normalizeExampleVideo(example);
-
-                return {
-                  sentence: normalizeExampleText(example?.sentence),
-                  translation: normalizeExampleText(example?.translation),
-                  video,
-                  thumbnail: video ? normalizeExampleThumbnail(example) : "",
-                };
-              })
-              .filter(hasExampleContent),
-          };
-        })
-        .filter((meaningItem) => meaningItem.meaning)
-        .map((meaningItem, index) => {
-          if (index !== 0) return meaningItem;
-
-          const {
-            _wordVideo,
-            _wordThumbnail,
-            _wordVideos,
-            _globalVideo,
-            _globalThumbnail,
-            _globalVideos,
-            ...cleanMeaning
-          } = meaningItem;
-
-          if (cleanWordVideos.length === 0) return cleanMeaning;
-
-          return {
-            ...cleanMeaning,
-            _wordVideo: cleanWordVideo,
-            _wordThumbnail: cleanWordThumbnail,
-            _wordVideos: cleanWordVideos,
-          };
-        });
+      const {
+        term: cleanTerm,
+        pronunciation: cleanPronunciation,
+        cleanWordVideos,
+        cleanWordVideo,
+        cleanWordThumbnail,
+        cleanedMeanings,
+      } = currentDraftSnapshot;
 
       const stats = {
         ...(item?.stats || getDefaultStats()),
@@ -1882,8 +2064,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
       if (item?.id) {
         const payload = {
-          term: term.trim(),
-          pronunciation: pronunciation.trim(),
+          term: cleanTerm,
+          pronunciation: cleanPronunciation,
           meanings: cleanedMeanings,
           stats,
           updated_at: now,
@@ -1899,25 +2081,60 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       } else {
         const payload = {
           user_id: user.id,
-          term: term.trim(),
-          pronunciation: pronunciation.trim(),
+          term: cleanTerm,
+          pronunciation: cleanPronunciation,
           meanings: cleanedMeanings,
           stats,
           created_at: now,
           updated_at: now,
         };
 
-        const { error } = await supabase.from("vocabulary").insert([payload]);
+        const { data: insertedItem, error } = await supabase
+          .from("vocabulary")
+          .insert([payload])
+          .select("*")
+          .single();
 
         if (error) throw error;
+
+        onSaved?.({
+          ...(item || {}),
+          id: insertedItem?.id || null,
+          term: cleanTerm,
+          pronunciation: cleanPronunciation,
+          meanings: cleanedMeanings,
+          stats,
+        });
+
+        setSavedDraftSignature(currentDraftSignature);
+        return;
       }
 
-      onSaved?.();
+      onSaved?.({
+        ...(item || {}),
+        id: item?.id || null,
+        term: cleanTerm,
+        pronunciation: cleanPronunciation,
+        meanings: cleanedMeanings,
+        stats,
+      });
+      setSavedDraftSignature(currentDraftSignature);
     } catch (error) {
       console.error("Erro ao salvar item no Supabase:", error);
       alert("Não foi possível salvar. Tente novamente.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBackClick = () => {
+    if (typeof onBack === "function") {
+      onBack();
+      return;
+    }
+
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
     }
   };
 
@@ -1927,8 +2144,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     <div className="mx-auto max-w-5xl">
       <button
         type="button"
-        onClick={onBack}
-        className="mb-4 flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+        onClick={handleBackClick}
+        className="mb-4 -ml-2 inline-flex min-h-[44px] touch-manipulation items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 hover:text-primary/80 active:bg-primary/15"
       >
         <ArrowLeft className="h-4 w-4" /> Voltar
       </button>
@@ -2162,6 +2379,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             isDeleting={isDeletingMeaningVideo}
                             isPreviewActive={isMeaningPreviewActive}
                             previewVariant="inline-right"
+                            removeButtonMode="mobile-icon"
                             onPlay={() =>
                               setActiveVideoPreviewKey(meaningVideoKey)
                             }
@@ -2478,6 +2696,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                         isDeleting={isDeletingVideo}
                                         isPreviewActive={isPreviewActive}
                                         showPreview={false}
+                                        removeButtonMode="mobile-icon"
                                         onPlay={() =>
                                           setActiveVideoPreviewKey(exampleKey)
                                         }
@@ -2599,7 +2818,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </div>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-[#DCE4EE] bg-[#F8FAFC] p-3.5">
+        <div className="space-y-2.5 rounded-xl border border-[#DCE4EE] bg-[#F8FAFC] p-3 md:space-y-3 md:rounded-2xl md:p-3.5">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
@@ -2643,6 +2862,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                 isPreviewActive={isWordPreviewActive}
                 previewVariant="inline-right"
                 inlineSize="wide"
+                mobileCompact
+                removeButtonMode="icon"
                 onPlay={() => setActiveVideoPreviewKey(wordVideoKey)}
                 onOpenEditor={() => openVideoEditor(wordVideoKey, videoValue)}
                 onEditorChange={(value) =>
@@ -2706,6 +2927,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
             isPreviewActive={false}
             previewVariant="inline-right"
             inlineSize="wide"
+            mobileCompact
             onPlay={() => undefined}
             onOpenEditor={() => openVideoEditor(NEW_WORD_VIDEO_KEY, "")}
             onEditorChange={(value) =>
@@ -2749,8 +2971,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving || !term.trim()}
-          className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 disabled:opacity-50"
+          disabled={!canSave}
+          className={`w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all ${
+            canSave ? "hover:bg-primary/90" : "opacity-60 cursor-not-allowed"
+          }`}
         >
           {saving ? "Salvando..." : "Salvar"}
         </button>

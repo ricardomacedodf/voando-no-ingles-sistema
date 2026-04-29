@@ -75,8 +75,8 @@ export default function AppLayout() {
   const isPersonalizeActive = isPersonalizeOpen;
 
   return (
-    <div className="min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-50 hidden border-r border-border bg-white md:flex md:w-[255px] md:min-w-[255px] md:max-w-[255px]">
+    <div className="app-mobile-safe-shell min-h-screen bg-background">
+      <aside className="fixed inset-y-0 left-0 z-50 hidden border-r border-border bg-white md:bottom-0 md:top-[env(safe-area-inset-top,0px)] md:flex md:w-[255px] md:min-w-[255px] md:max-w-[255px] lg:top-0">
         <Sidebar />
       </aside>
 
@@ -88,7 +88,7 @@ export default function AppLayout() {
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-50 w-[86vw] max-w-[320px] transform border-l border-border bg-white transition-transform duration-300 ease-out md:hidden ${
+        className={`app-mobile-safe-slide-panel fixed inset-y-0 right-0 z-50 w-[86vw] max-w-[320px] transform border-l border-border bg-white transition-transform duration-300 ease-out md:hidden ${
           isPersonalizeOpen ? "translate-x-0" : "translate-x-full"
         }`}
         aria-hidden={!isPersonalizeOpen}
@@ -177,14 +177,14 @@ export default function AppLayout() {
       </aside>
 
       <div className="md:ml-[255px]">
-        <main className="min-h-screen p-4 pb-24 pt-4 md:p-6 md:pt-6 lg:p-8">
+        <main className="app-mobile-safe-main min-h-screen lg:p-8">
           <div className="mx-auto max-w-6xl">
             <Outlet />
           </div>
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 shadow-[0_-6px_16px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
+      <nav className="app-mobile-safe-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 shadow-[0_-6px_16px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
         <div className="grid grid-cols-5">
           {mobilePrimaryNavItems.map((item) => {
             const Icon = item.icon;

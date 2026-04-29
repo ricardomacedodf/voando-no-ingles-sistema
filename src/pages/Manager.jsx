@@ -402,9 +402,11 @@ export default function Manager() {
     setView("form");
   };
 
-  const handleSaved = () => {
-    setView("list");
-    setEditItem(null);
+  const handleSaved = (savedItem) => {
+    if (savedItem && typeof savedItem === "object") {
+      setEditItem(savedItem);
+    }
+
     loadVocab();
   };
 

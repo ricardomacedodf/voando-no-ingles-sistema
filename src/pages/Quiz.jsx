@@ -595,7 +595,24 @@ export default function Quiz() {
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="relative flex items-center justify-center sm:hidden">
+        <div className="min-w-0">
+          <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
+        </div>
+        <button
+          onClick={toggleSound}
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          title={soundEnabled ? "Desativar audio" : "Ativar audio"}
+        >
+          {soundEnabled ? (
+            <Volume2 className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <VolumeX className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+      </div>
+
+      <div className="hidden flex-wrap items-center justify-between gap-3 sm:flex">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Quiz</h1>
           <button
@@ -666,7 +683,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-[0.675rem] md:grid-cols-2 md:gap-4">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-4">
         {options.map((opt, idx) => {
           let classes = "border-border text-foreground hover:border-primary";
           const isWrongSelection = answered && idx === selected && !opt.correct;
@@ -684,7 +701,7 @@ export default function Quiz() {
               onPointerDown={() => handleOptionPointerDown(idx)}
               onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
-              className={`flex h-[74px] w-full items-center gap-3 rounded-2xl border bg-white p-4 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+              className={`flex h-[62px] w-full items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >

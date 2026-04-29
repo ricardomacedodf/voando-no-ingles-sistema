@@ -714,19 +714,38 @@ export default function Flashcards() {
       className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6"
       style={{ touchAction: "pan-y" }}
     >
-      <div className="flex items-center justify-between gap-2 sm:gap-4">
-        <h1 className="flex min-w-0 items-center gap-1.5 text-[1.12rem] font-bold text-foreground sm:gap-2 sm:text-2xl">
+      <div className="relative flex items-center justify-center sm:hidden">
+        <div className="min-w-0">
+          <FlashcardModeSelector mode={mode} setMode={setMode} />
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleSound}
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted"
+          title={soundEnabled ? "Desativar Ã¡udio" : "Ativar Ã¡udio"}
+        >
+          {soundEnabled ? (
+            <Volume2 className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <VolumeX className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+      </div>
+
+      <div className="hidden items-center justify-between gap-4 sm:flex">
+        <h1 className="flex min-w-0 items-center gap-2 text-2xl font-bold text-foreground">
           Flashcards
           <button
             type="button"
             onClick={toggleSound}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted sm:h-9 sm:w-9"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted"
             title={soundEnabled ? "Desativar Ã¡udio" : "Ativar Ã¡udio"}
           >
             {soundEnabled ? (
-              <Volume2 className="h-4 w-4 text-muted-foreground sm:h-5 sm:w-5" />
+              <Volume2 className="h-5 w-5 text-muted-foreground" />
             ) : (
-              <VolumeX className="h-4 w-4 text-muted-foreground sm:h-5 sm:w-5" />
+              <VolumeX className="h-5 w-5 text-muted-foreground" />
             )}
           </button>
         </h1>
@@ -846,11 +865,6 @@ export default function Flashcards() {
                   {back}
                 </p>
               </div>
-              {card?.pronunciation ? (
-                <p className="flashcard-pronunciation select-text text-xs text-muted-foreground">
-                  /{card.pronunciation}/
-                </p>
-              ) : null}
             </div>
           </div>
         </div>
