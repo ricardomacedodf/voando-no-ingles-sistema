@@ -1160,6 +1160,8 @@ function VideoControlCard({
     removeButtonMode === "mobile-icon" ? "lg:hidden" : "";
   const removeTextResponsiveClass =
     removeButtonMode === "mobile-icon" ? "hidden lg:inline-flex" : "";
+  const shouldPlaceActionsBelowPreview =
+    mobileCompact && hasVideo && !isEditing && showRemoveInlineIcon;
 
   if (isInlinePreview) {
     return (
@@ -1304,7 +1306,9 @@ function VideoControlCard({
                   className={
                     mobileCompact
                       ? showRemoveInlineIcon
-                        ? "mt-2.5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 lg:mt-3 lg:flex lg:flex-wrap"
+                        ? shouldPlaceActionsBelowPreview
+                          ? "mt-2.5 hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 lg:mt-3 lg:flex lg:flex-wrap"
+                          : "mt-2.5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 lg:mt-3 lg:flex lg:flex-wrap"
                         : "mt-2.5 grid grid-cols-2 gap-2 lg:mt-3 lg:flex lg:flex-wrap"
                       : "mt-3 flex flex-wrap gap-2"
                   }
@@ -1399,6 +1403,39 @@ function VideoControlCard({
                     : "w-full md:w-[192px]"
                 }
               />
+            </div>
+          ) : null}
+
+          {shouldPlaceActionsBelowPreview ? (
+            <div className="mt-2.5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 lg:hidden">
+              <button
+                type="button"
+                onClick={onOpenEditor}
+                disabled={isDeleting}
+                className="w-full rounded-lg border border-border px-3 py-1.5 text-center text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                {hasVideo ? "Trocar vídeo" : "Adicionar vídeo"}
+              </button>
+
+              <button
+                type="button"
+                onClick={onTriggerUpload}
+                disabled={isUploading || isDeleting}
+                className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                <Upload className="h-3 w-3" />
+                {isUploading ? "Enviando para R2..." : uploadButtonText}
+              </button>
+
+              <button
+                type="button"
+                onClick={onRemove}
+                disabled={isDeleting}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-destructive/40 text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
+                aria-label="Remover vídeo"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
           ) : null}
         </div>
