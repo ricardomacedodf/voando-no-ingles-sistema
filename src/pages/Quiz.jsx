@@ -702,7 +702,7 @@ export default function Quiz() {
           onClick={handleNext}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Proximo <ArrowRight className="h-4 w-4" />
+          {"Pr\u00f3ximo"} <ArrowRight className="h-4 w-4" />
         </button>
       )}
 

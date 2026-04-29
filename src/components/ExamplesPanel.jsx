@@ -99,7 +99,16 @@ function BrFlagIcon({ className = "h-4 w-4" }) {
       aria-hidden="true"
       focusable="false"
     >
-      <rect width="36" height="24" rx="4" fill="#229E45" />
+      <rect
+        x="0.75"
+        y="0.75"
+        width="34.5"
+        height="22.5"
+        rx="4"
+        fill="#229E45"
+        stroke="#CEEBD8"
+        strokeWidth="1.5"
+      />
       <path d="M18 4 31 12 18 20 5 12 18 4Z" fill="#F8D34B" />
       <circle cx="18" cy="12" r="5" fill="#234B9B" />
       <path
@@ -1456,7 +1465,7 @@ export default function ExamplesPanel({
           }}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
         >
-          PrÃ³ximo
+          {"Pr\u00f3ximo"}
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -1956,8 +1965,8 @@ export default function ExamplesPanel({
                                   <span
                                     className={
                                       isFlashcardMobileLayout
-                                        ? "mt-[0.48rem] h-2.5 w-2.5 shrink-0 rounded-full"
-                                        : "mt-[0.52rem] h-2.5 w-2.5 shrink-0 rounded-full"
+                                        ? "mt-[0.44rem] h-[5px] w-[5px] shrink-0 rounded-full"
+                                        : "mt-[0.36rem] h-[5px] w-[5px] shrink-0 rounded-full"
                                     }
                                     style={{ backgroundColor: meaningPalette.bullet }}
                                   />
@@ -2101,7 +2110,7 @@ export default function ExamplesPanel({
                   }}
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
                 >
-                  PrÃ³ximo
+                  {"Pr\u00f3ximo"}
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
