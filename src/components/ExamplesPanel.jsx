@@ -1,5 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Lightbulb, Menu, Play, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Lightbulb,
+  Play,
+  X,
+} from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
@@ -1077,6 +1084,7 @@ export default function ExamplesPanel({
             thumbnail: meaningThumbnail,
             key: `${entry?.meaning || "meaning"}-${index}-meaning-video`,
             title: entry?.meaning || `Significado ${index + 1}`,
+            level: "meaning",
           }
         : null,
       ...rawExamples
@@ -1091,6 +1099,7 @@ export default function ExamplesPanel({
             key: `${
               entry?.meaning || "meaning"
             }-${index}-example-${exampleIndex}`,
+            level: "example",
             title:
               normalizeExampleText(example?.sentence) ||
               entry?.meaning ||
@@ -1338,7 +1347,7 @@ export default function ExamplesPanel({
     );
   };
 
-  const renderTopVideoCarousel = ({ videos, groupKey }) => {
+  const renderTopVideoCarousel = ({ videos, groupKey, meaningPalette = null }) => {
     const safeVideos = Array.isArray(videos) ? videos.filter(Boolean) : [];
 
     if (safeVideos.length === 0) return null;
@@ -1353,12 +1362,49 @@ export default function ExamplesPanel({
     if (!currentVideo?.video) return null;
 
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
-    const isGlobalWordVideoGroup = groupKey === "global-word-video-group";
+    const isDesktopDirectEmbedPreview =
+      !isMobile && isThirdPartyEmbeddedVideo(currentVideo.video);
+    const shouldShowAttachedChip =
+      !isMobile &&
+      !isVideoOpen &&
+      !isDesktopDirectEmbedPreview &&
+      groupKey !== "global-word-video-group";
+    const attachedChipPalette = meaningPalette
+      ? {
+          borderColor: meaningPalette.tipBorder,
+          backgroundColor: meaningPalette.tipBackground,
+          textColor: meaningPalette.accent,
+          dotColor: meaningPalette.bullet,
+        }
+      : {
+          borderColor: "#F6DFC4",
+          backgroundColor: "#FFF4E7",
+          textColor: "#B86F00",
+          dotColor: "#ED9A0A",
+        };
     const shouldHideSourceThumbnailOnMobile =
       isMobile && Boolean(mobileVideo?.key) && mobileVideo.key === currentVideo.key;
 
     return (
       <div className={isFlashcardMobileLayout ? "mb-3" : "mb-4"}>
+        {shouldShowAttachedChip ? (
+          <div className="mb-2 flex items-center">
+            <span
+              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-none"
+              style={{
+                borderColor: attachedChipPalette.borderColor,
+                backgroundColor: attachedChipPalette.backgroundColor,
+                color: attachedChipPalette.textColor,
+              }}
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: attachedChipPalette.dotColor }}
+              />
+              {"V\u00eddeo anexado"}
+            </span>
+          </div>
+        ) : null}
         {isVideoOpen && !isMobile ? (
           <div>
             <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
@@ -1387,7 +1433,7 @@ export default function ExamplesPanel({
               isOpen={isVideoOpen}
               isMobile={isMobile}
               onSwipeLeft={
-                isGlobalWordVideoGroup && safeVideos.length > 1
+                groupKey === "global-word-video-group" && safeVideos.length > 1
                   ? (event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -1400,7 +1446,7 @@ export default function ExamplesPanel({
                   : undefined
               }
               onSwipeRight={
-                isGlobalWordVideoGroup && safeVideos.length > 1
+                groupKey === "global-word-video-group" && safeVideos.length > 1
                   ? (event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -1584,6 +1630,7 @@ export default function ExamplesPanel({
                 video: entry.video,
                 thumbnail: entry.thumbnail,
                 key: `global-word-video-${index}`,
+                level: "global",
                 title:
                   index === 0
                     ? titleValue
@@ -1602,87 +1649,54 @@ export default function ExamplesPanel({
               shouldShowSpecificVideosInsideMeanings &&
               Array.isArray(entry.topVideos) &&
               entry.topVideos.length > 0;
-            const shouldShowMeaningVideoIndicator =
-              isFlashcardMobileLayout &&
-              hasMultipleMeanings &&
-              hasMeaningVideo;
             const shouldUseMeaningCollapse =
               shouldUseMeaningVideoCollapse && hasMeaningVideo;
             const isMeaningExpanded =
               !shouldUseMeaningCollapse || expandedMeaningVideoKey === groupKey;
-            const shouldRenderMeaningVideoIndicator =
-              shouldShowMeaningVideoIndicator && !isMeaningExpanded;
 
             return (
-              <section
-                key={`${entry.meaning}-${index}`}
-                className={
-                  isFlashcardMobileLayout
-                    ? "relative rounded-2xl border p-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
-                    : "rounded-xl border border-[#DCE4EE] bg-white p-4 shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
-                }
-                style={
-                  isFlashcardMobileLayout
-                    ? {
-                        borderColor: meaningPalette.border,
-                        backgroundColor: meaningPalette.background,
-                      }
-                    : undefined
-                }
+                <section
+                  key={`${entry.meaning}-${index}`}
+                  className={
+                    isFlashcardMobileLayout
+                      ? "relative rounded-2xl border p-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
+                      : [
+                          "group/meaning rounded-xl border px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.05)]",
+                          shouldUseMeaningCollapse
+                            ? "cursor-pointer transition-colors duration-200 hover:border-[var(--meaning-hover-border)]"
+                            : "",
+                        ].join(" ")
+                  }
+                  style={{
+                    borderColor: meaningPalette.border,
+                    backgroundColor: meaningPalette.background,
+                    ...(!isFlashcardMobileLayout && shouldUseMeaningCollapse
+                      ? { "--meaning-hover-border": meaningPalette.tipBorder }
+                      : {}),
+                  }}
               >
-                {shouldRenderMeaningVideoIndicator ? (
-                  <span
-                    className="pointer-events-none absolute right-3.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border bg-white/65 shadow-[0_8px_18px_rgba(17,24,39,0.08)]"
-                    style={{
-                      borderColor: "rgba(37,177,95,0.35)",
-                      color: "rgba(37,177,95,0.85)",
-                    }}
-                    aria-hidden="true"
-                  >
-                    <Play className="ml-[1px] h-3.5 w-3.5 stroke-[2.3]" />
-                  </span>
-                ) : null}
-
-                <div
-                  className={[
-                    "min-w-0",
-                    shouldRenderMeaningVideoIndicator ? "pr-12" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
+                <div className="min-w-0">
                   {shouldUseMeaningCollapse ? (
                     <button
                       type="button"
                       onClick={() => {
-                        setExpandedMeaningVideoKey(groupKey);
+                        setExpandedMeaningVideoKey((current) =>
+                          current === groupKey ? null : groupKey
+                        );
                       }}
                       className={[
-                        "mb-2 w-full text-left transition-all duration-200",
+                        "w-full text-left transition-colors duration-200",
                         "focus-visible:outline-none focus-visible:ring-2",
-                        isFlashcardMobileLayout
-                          ? ""
-                          : "focus-visible:ring-[#CBD5E1]",
-                        isFlashcardMobileLayout ? "" : "active:bg-[#EEF4FA]",
+                        isFlashcardMobileLayout ? "" : "focus-visible:ring-[#CBD5E1]",
+                        isMeaningExpanded ? "mb-2" : "mb-0",
                         isMeaningExpanded
                           ? isFlashcardMobileLayout
                             ? "rounded-lg px-1 py-1.5"
-                            : "rounded-md px-1.5 py-1.5 hover:bg-[#F8FAFD]"
-                          : "border-[#DEE6EF] bg-[#FAFCFF] hover:border-[#C8D6E6] hover:bg-[#F5F8FC]",
-                        !isMeaningExpanded ? "rounded-lg border px-2.5 py-2" : "",
+                            : "rounded-md px-1 py-1"
+                          : isFlashcardMobileLayout
+                            ? "rounded-lg px-1 py-1.5"
+                            : "rounded-md px-1 py-1",
                       ].join(" ")}
-                      style={
-                        isFlashcardMobileLayout
-                          ? {
-                              borderColor: isMeaningExpanded
-                                ? "transparent"
-                                : meaningPalette.border,
-                              backgroundColor: isMeaningExpanded
-                                ? "transparent"
-                                : meaningPalette.tipBackground,
-                            }
-                          : undefined
-                      }
                       aria-label={`Mostrar significado ${entry.meaning}`}
                       title={`Mostrar significado ${entry.meaning}`}
                     >
@@ -1695,11 +1709,7 @@ export default function ExamplesPanel({
                         <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
                           <span
                             className={isFlashcard ? "font-semibold" : "font-bold"}
-                            style={
-                              isFlashcardMobileLayout
-                                ? { color: meaningPalette.accent }
-                                : undefined
-                            }
+                            style={{ color: meaningPalette.accent }}
                           >
                             {index + 1}.
                           </span>
@@ -1709,38 +1719,57 @@ export default function ExamplesPanel({
                           </span>
 
                           {entry.category ? (
-                            <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                            <span
+                              className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                              style={{
+                                borderColor: meaningPalette.tipBorder,
+                                backgroundColor: meaningPalette.tipBackground,
+                                color: meaningPalette.accent,
+                              }}
+                            >
                               {entry.category}
                             </span>
                           ) : null}
                         </span>
 
-                        {!isFlashcardMobileLayout ? (
-                          <Menu
+                        <span className="inline-flex items-center gap-2 self-center">
+                          <ChevronDown
                             className={[
-                              "h-3.5 w-3.5 shrink-0 text-[#98A2B3]",
-                              isMeaningExpanded ? "mt-0.5" : "self-center",
+                              "h-3.5 w-3.5 shrink-0 scale-x-[1.2] transform-gpu opacity-80 transition-all duration-200 ease-out",
+                              isMeaningExpanded
+                                ? "-translate-y-[0.5px] -rotate-180"
+                                : "translate-y-0 rotate-0",
                             ].join(" ")}
+                            style={{ color: meaningPalette.accent }}
+                            aria-hidden="true"
                           />
-                        ) : null}
+
+                          {!isMeaningExpanded && hasMeaningVideo ? (
+                            <span
+                              className={[
+                                "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border opacity-80 transition-all duration-200 ease-out",
+                              ].join(" ")}
+                              style={{
+                                borderColor: meaningPalette.tipBorder,
+                                backgroundColor: meaningPalette.tipBackground,
+                                color: meaningPalette.accent,
+                              }}
+                              aria-hidden="true"
+                            >
+                              <Play className="ml-[1px] h-2.5 w-2.5 fill-current stroke-[2.2]" />
+                            </span>
+                          ) : null}
+                        </span>
                       </span>
                     </button>
                   ) : (
                     <div
                       className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b pb-1.5"
-                      style={
-                        isFlashcardMobileLayout
-                          ? { borderBottomColor: meaningPalette.border }
-                          : { borderBottomColor: "#E6EDF5" }
-                      }
+                      style={{ borderBottomColor: meaningPalette.border }}
                     >
                       <span
                         className={isFlashcard ? "font-semibold" : "font-bold"}
-                        style={
-                          isFlashcardMobileLayout
-                            ? { color: meaningPalette.accent }
-                            : undefined
-                        }
+                        style={{ color: meaningPalette.accent }}
                       >
                         {index + 1}.
                       </span>
@@ -1750,7 +1779,14 @@ export default function ExamplesPanel({
                       </span>
 
                       {entry.category ? (
-                        <span className="rounded-full bg-[#EEF2F7] px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+                        <span
+                          className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                          style={{
+                            borderColor: meaningPalette.tipBorder,
+                            backgroundColor: meaningPalette.tipBackground,
+                            color: meaningPalette.accent,
+                          }}
+                        >
                           {entry.category}
                         </span>
                       ) : null}
@@ -1764,16 +1800,13 @@ export default function ExamplesPanel({
                         ? renderTopVideoCarousel({
                             videos: entry.topVideos,
                             groupKey,
+                            meaningPalette,
                           })
                         : null}
 
                       {visibleExamples.length > 0 ? (
-                        <div
-                          className={
-                            isFlashcardMobileLayout ? "space-y-2.5" : "border-l-2 border-[#CBD5E1] pl-4"
-                          }
-                        >
-                          <div className={isFlashcardMobileLayout ? "space-y-2.5" : "space-y-1.5"}>
+                        <div className={isFlashcardMobileLayout ? "space-y-2.5" : "space-y-2"}>
+                          <div className={isFlashcardMobileLayout ? "space-y-2.5" : "space-y-2"}>
                             {visibleExamples.map((example, exampleIndex) => {
                               const hasSentence = Boolean(example.sentence);
                               const hasTranslation = Boolean(example.translation);
@@ -1784,23 +1817,31 @@ export default function ExamplesPanel({
                                   className={
                                     isFlashcardMobileLayout
                                       ? "flex items-start gap-2.5 rounded-lg px-0.5 py-0.5"
-                                      : "space-y-0.5"
+                                      : "flex items-start gap-2 rounded-md px-0.5 py-0.5"
                                   }
                                 >
-                                  {isFlashcardMobileLayout ? (
-                                    <span
-                                      className="mt-[0.48rem] h-2.5 w-2.5 shrink-0 rounded-full"
-                                      style={{ backgroundColor: meaningPalette.bullet }}
-                                    />
-                                  ) : null}
+                                  <span
+                                    className={
+                                      isFlashcardMobileLayout
+                                        ? "mt-[0.48rem] h-2.5 w-2.5 shrink-0 rounded-full"
+                                        : "mt-[0.52rem] h-2.5 w-2.5 shrink-0 rounded-full"
+                                    }
+                                    style={{ backgroundColor: meaningPalette.bullet }}
+                                  />
 
-                                  <div className={isFlashcardMobileLayout ? "min-w-0 space-y-1.5" : ""}>
+                                  <div
+                                    className={
+                                      isFlashcardMobileLayout
+                                        ? "min-w-0 space-y-1.5"
+                                        : "min-w-0 space-y-1"
+                                    }
+                                  >
                                     {hasTranslation ? (
                                       <p
                                         className={
                                           isFlashcardMobileLayout
                                             ? "text-sm font-medium leading-snug text-[#5D6677]"
-                                            : "text-xs font-medium leading-snug text-[#758195]"
+                                            : "text-xs font-medium leading-snug text-[#5D6677]"
                                         }
                                       >
                                         {example.translation}
@@ -1812,16 +1853,14 @@ export default function ExamplesPanel({
                                         className={
                                           isFlashcardMobileLayout
                                             ? "text-[15px] font-semibold leading-snug text-[#101827]"
-                                            : "text-sm font-semibold leading-snug text-[#0b0e14]"
+                                            : "text-sm font-semibold leading-snug text-[#101827]"
                                         }
                                       >
                                         {renderHighlightedTerm(
                                           example.sentence,
                                           highlightTerm,
                                           {
-                                            underlineColor: isFlashcardMobileLayout
-                                              ? meaningPalette.underline
-                                              : "#ED9A0A",
+                                            underlineColor: meaningPalette.underline,
                                           }
                                         )}
                                       </p>
@@ -1837,7 +1876,7 @@ export default function ExamplesPanel({
                           className={
                             isFlashcardMobileLayout
                               ? "text-sm italic text-muted-foreground"
-                              : "border-l-2 border-[#CBD5E1] pl-4 text-sm italic text-muted-foreground"
+                              : "text-sm italic text-muted-foreground"
                           }
                         >
                           Nenhum exemplo cadastrado.
@@ -1850,49 +1889,23 @@ export default function ExamplesPanel({
                 {isMeaningExpanded && entry.tip ? (
                   <div className="mt-3">
                     <div
-                      className={[
-                        "inline-flex max-w-full items-start gap-1.5",
-                        isFlashcardMobileLayout ? "w-full rounded-lg border px-2.5 py-2" : "pb-1",
-                        shouldUseMeaningCollapse || isFlashcardMobileLayout
-                          ? ""
-                          : "border-b border-[#E6EDF5]",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      style={
-                        isFlashcardMobileLayout
-                          ? {
-                              borderColor: meaningPalette.tipBorder,
-                              backgroundColor: meaningPalette.tipBackground,
-                            }
-                          : undefined
-                      }
+                      className="inline-flex w-full max-w-full items-start gap-1.5 rounded-lg border px-2.5 py-2"
+                      style={{
+                        borderColor: meaningPalette.tipBorder,
+                        backgroundColor: meaningPalette.tipBackground,
+                      }}
                     >
                       <Lightbulb
                         className="mt-0.5 h-3.5 w-3.5 shrink-0"
-                        style={{
-                          color: isFlashcardMobileLayout
-                            ? meaningPalette.accent
-                            : "#ED9A0A",
-                        }}
+                        style={{ color: meaningPalette.accent }}
                       />
                       <span
-                        className={
-                          isFlashcardMobileLayout
-                            ? "min-w-0 text-xs italic leading-relaxed text-[#5E6778]"
-                            : "min-w-0 text-xs italic leading-relaxed text-muted-foreground"
-                        }
+                        className="min-w-0 text-xs italic leading-relaxed text-[#5E6778]"
                       >
                         {entry.tip}
                       </span>
                     </div>
                   </div>
-                ) : null}
-
-                {shouldUseMeaningCollapse &&
-                isMeaningExpanded &&
-                !isFlashcardMobileLayout ? (
-                  <div className="mt-2 border-b border-[#E6EDF5]" />
                 ) : null}
               </section>
             );
