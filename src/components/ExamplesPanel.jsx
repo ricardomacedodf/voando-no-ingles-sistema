@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+﻿import { Fragment, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Languages,
   Lightbulb,
   Play,
   X,
@@ -63,6 +64,54 @@ const FLASHCARD_MOBILE_MEANING_PALETTE = [
     underline: "#7A55C3",
   },
 ];
+
+function UsFlagIcon({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      viewBox="0 0 36 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="36" height="24" rx="4" fill="#ffffff" />
+      <path
+        fill="#D22F27"
+        d="M0 0h36v3H0V0Zm0 6h36v3H0V6Zm0 6h36v3H0v-3Zm0 6h36v3H0v-3Z"
+      />
+      <rect width="16" height="12" rx="3" fill="#234B9B" />
+      <circle cx="4" cy="3" r="0.8" fill="#ffffff" />
+      <circle cx="8" cy="3" r="0.8" fill="#ffffff" />
+      <circle cx="12" cy="3" r="0.8" fill="#ffffff" />
+      <circle cx="6" cy="6" r="0.8" fill="#ffffff" />
+      <circle cx="10" cy="6" r="0.8" fill="#ffffff" />
+      <circle cx="4" cy="9" r="0.8" fill="#ffffff" />
+      <circle cx="8" cy="9" r="0.8" fill="#ffffff" />
+      <circle cx="12" cy="9" r="0.8" fill="#ffffff" />
+    </svg>
+  );
+}
+
+function BrFlagIcon({ className = "h-4 w-4" }) {
+  return (
+    <svg
+      viewBox="0 0 36 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="36" height="24" rx="4" fill="#229E45" />
+      <path d="M18 4 31 12 18 20 5 12 18 4Z" fill="#F8D34B" />
+      <circle cx="18" cy="12" r="5" fill="#234B9B" />
+      <path
+        d="M13.5 11.4c3.5-.9 6.8-.5 9.3 1.2"
+        stroke="#ffffff"
+        strokeWidth="1.2"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 const clampByte = (value) => Math.max(0, Math.min(255, Math.round(value)));
 
@@ -611,7 +660,7 @@ function ExampleVideoThumbnail({
   onClick,
   onSwipeLeft,
   onSwipeRight,
-  title = "Vídeo do exemplo",
+  title = "VÃ­deo do exemplo",
   isOpen = false,
   isMobile = false,
   className = "h-[84px]",
@@ -1126,13 +1175,14 @@ export default function ExamplesPanel({
     .join("||");
 
 
-  // Vídeo geral tem prioridade visual: se existir vídeo global/geral,
-  // ele fica no topo e os vídeos específicos dos significados/exemplos
-  // não são renderizados como carrosséis dentro dos blocos.
+  // VÃ­deo geral tem prioridade visual: se existir vÃ­deo global/geral,
+  // ele fica no topo e os vÃ­deos especÃ­ficos dos significados/exemplos
+  // nÃ£o sÃ£o renderizados como carrossÃ©is dentro dos blocos.
   const shouldShowGlobalWordVideoOnTop = Boolean(wordVideoSources.length > 0);
   const shouldShowSpecificVideosInsideMeanings = !shouldShowGlobalWordVideoOnTop;
 
   const normalized = rawMeanings.map((entry, index) => {
+    const normalizedMeaningText = normalizeText(entry?.meaning);
     const meaningVideo = normalizeMeaningVideo(entry);
     const meaningThumbnail = normalizeMeaningThumbnail(entry);
 
@@ -1143,8 +1193,8 @@ export default function ExamplesPanel({
         ? {
             video: meaningVideo,
             thumbnail: meaningThumbnail,
-            key: `${entry?.meaning || "meaning"}-${index}-meaning-video`,
-            title: entry?.meaning || `Significado ${index + 1}`,
+            key: `${normalizedMeaningText || "meaning"}-${index}-meaning-video`,
+            title: normalizedMeaningText || `Significado ${index + 1}`,
             level: "meaning",
           }
         : null,
@@ -1158,21 +1208,21 @@ export default function ExamplesPanel({
             video: exampleVideo,
             thumbnail: normalizeExampleThumbnail(example),
             key: `${
-              entry?.meaning || "meaning"
+              normalizedMeaningText || "meaning"
             }-${index}-example-${exampleIndex}`,
             level: "example",
             title:
               normalizeExampleText(example?.sentence) ||
-              entry?.meaning ||
-              "Vídeo do exemplo",
+              normalizedMeaningText ||
+              "VÃ­deo do exemplo",
           };
         })
         .filter(Boolean),
     ].filter(Boolean);
 
     return {
-      meaning: entry?.meaning || `Significado ${index + 1}`,
-      category: entry?.category || "vocabulário",
+      meaning: normalizedMeaningText,
+      category: entry?.category || "vocabulÃ¡rio",
       tip: entry?.tip || "",
       video: meaningVideo,
       thumbnail: meaningThumbnail,
@@ -1406,7 +1456,7 @@ export default function ExamplesPanel({
           }}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
         >
-          Próximo
+          PrÃ³ximo
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -1659,23 +1709,21 @@ export default function ExamplesPanel({
       >
         <div className={panelHeaderClass}>
           <div className="flex min-w-0 items-center gap-2 text-foreground">
-            <Lightbulb
+            <UsFlagIcon className={isFlashcard ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0"} />
+
+            <Languages
               className={
                 isFlashcard
-                  ? "h-[18px] w-[18px] shrink-0 text-[#ED9A0A]"
-                  : "h-4 w-4 shrink-0 text-[#ED9A0A]"
+                  ? "h-[18px] w-[18px] shrink-0 text-primary"
+                  : "h-4 w-4 shrink-0 text-primary"
               }
+              aria-hidden="true"
             />
 
             <h3 className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 leading-snug">
               <span className="shrink-0 text-sm font-normal text-[#6A7181]">
-                Exemplo
-              </span>
-
-              <span className="shrink-0 text-sm font-normal text-[#6A7181]">
                 —
               </span>
-
               <span className="min-w-0 break-words text-base font-bold leading-snug text-[#14181F]">
                 {titleValue}
               </span>
@@ -1707,7 +1755,7 @@ export default function ExamplesPanel({
                 title:
                   index === 0
                     ? titleValue
-                    : `${titleValue} — vídeo geral ${index + 1}`,
+                    : `${titleValue} â€” vÃ­deo geral ${index + 1}`,
               })),
               groupKey: "global-word-video-group",
             })
@@ -1792,11 +1840,11 @@ export default function ExamplesPanel({
                         ].join(" ")}
                       >
                         <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
-                          <span
-                            className={isFlashcard ? "font-semibold" : "font-bold"}
-                            style={{ color: meaningPalette.accent }}
-                          >
-                            {index + 1}.
+                          <span className="inline-flex items-center gap-1">
+                            <BrFlagIcon className="h-[clamp(16px,4.4vw,18px)] w-[clamp(16px,4.4vw,18px)]" />
+                            <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                              —
+                            </span>
                           </span>
 
                           <span className="font-bold text-[#181818]">
@@ -1852,11 +1900,11 @@ export default function ExamplesPanel({
                       className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b pb-1.5"
                       style={{ borderBottomColor: meaningPalette.border }}
                     >
-                      <span
-                        className={isFlashcard ? "font-semibold" : "font-bold"}
-                        style={{ color: meaningPalette.accent }}
-                      >
-                        {index + 1}.
+                      <span className="inline-flex items-center gap-1">
+                        <BrFlagIcon className="h-[clamp(16px,4.4vw,18px)] w-[clamp(16px,4.4vw,18px)]" />
+                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                          —
+                        </span>
                       </span>
 
                       <span className="font-bold text-[#181818]">
@@ -2003,7 +2051,7 @@ export default function ExamplesPanel({
           className="fixed inset-0 z-[9999] bg-black/80"
           role="dialog"
           aria-modal="true"
-          aria-label="Vídeo do exemplo"
+          aria-label="VÃ­deo do exemplo"
           onClick={closeMobileVideo}
         >
           <div
@@ -2053,7 +2101,7 @@ export default function ExamplesPanel({
                   }}
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
                 >
-                  Próximo
+                  PrÃ³ximo
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
