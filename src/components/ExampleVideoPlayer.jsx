@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Maximize,
   Minimize,
   Pause,
   Play,
   Repeat,
+  Square,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
 
-const FALLBACK_MESSAGE = "Este vídeo não permite reprodução direta aqui.";
+const FALLBACK_MESSAGE = "Este vÃ­deo nÃ£o permite reproduÃ§Ã£o direta aqui.";
 const FULLSCREEN_CONTROLS_HIDE_DELAY = 1000;
 
 function GlassControlButton({
@@ -283,7 +284,7 @@ const getWebEmbedFrameStyle = (embedSrc, isMobileLayout) => {
 
 export default function ExampleVideoPlayer({
   video,
-  title = "Vídeo do exemplo",
+  title = "VÃ­deo do exemplo",
   autoPlay = false,
   layout = "fill",
   controlsMode = "full",
@@ -295,6 +296,7 @@ export default function ExampleVideoPlayer({
   const videoRef = useRef(null);
   const wrapperRef = useRef(null);
   const hideFullscreenControlsTimerRef = useRef(null);
+  const hasConsumedAutoPlayRef = useRef(false);
 
   const [playback, setPlayback] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -332,6 +334,7 @@ export default function ExampleVideoPlayer({
     let isMounted = true;
     const normalizedVideo = typeof video === "string" ? video.trim() : "";
     const immediateEmbedPlayback = getImmediateEmbedPlayback(normalizedVideo);
+    hasConsumedAutoPlayRef.current = false;
 
     setPlayback(immediateEmbedPlayback || null);
     setFailed(false);
@@ -360,7 +363,7 @@ export default function ExampleVideoPlayer({
         if (isMounted) setPlayback(nextPlayback);
       })
       .catch((error) => {
-        console.error("Erro ao carregar o vídeo do exemplo:", error);
+        console.error("Erro ao carregar o vÃ­deo do exemplo:", error);
 
         if (isMounted) {
           setPlayback({
@@ -709,6 +712,25 @@ export default function ExampleVideoPlayer({
     clearSystemMediaSession();
   }
 
+  function restartFromBeginning() {
+    const player = videoRef.current;
+    if (!player) return;
+
+    hasConsumedAutoPlayRef.current = true;
+    player.pause();
+
+    try {
+      player.currentTime = 0;
+    } catch {
+      return;
+    }
+
+    setCurrentTime(0);
+    setIsPlaying(false);
+    showControls();
+    clearSystemMediaSession();
+  }
+
   function handleVideoClick() {
     if (isFullscreenMode()) {
       showControlsTemporarilyInFullscreen();
@@ -803,7 +825,7 @@ export default function ExampleVideoPlayer({
             : "flex h-full w-full items-center justify-center bg-black text-xs font-medium text-white"
         }
       >
-        Carregando vídeo...
+        Carregando vÃ­deo...
       </div>
     );
   }
@@ -932,7 +954,9 @@ export default function ExampleVideoPlayer({
           clearSystemMediaSession();
         }}
         onCanPlay={(event) => {
-          if (!autoPlay) return;
+          if (!autoPlay || hasConsumedAutoPlayRef.current) return;
+
+          hasConsumedAutoPlayRef.current = true;
 
           event.currentTarget.play().catch(() => {
             setIsPlaying(false);
@@ -963,17 +987,20 @@ export default function ExampleVideoPlayer({
               onClick={togglePlay}
               className={[
                 "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full",
-                "border border-white/70 bg-white/55 text-[#ED9A0A]",
-                "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
-                "backdrop-blur-md transition-all duration-200 hover:scale-105 hover:bg-white/72",
+                "border border-white/55 bg-white/10 text-white",
+                "shadow-[0_4px_10px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.22)]",
+                "backdrop-blur-[2px] transition-[transform,background-color,border-color] duration-200 ease-out",
+                isTouchLike || isMobileMockupLayout
+                  ? ""
+                  : "hover:scale-[1.15] hover:border-white/75 hover:bg-white/16",
               ].join(" ")}
-              aria-label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
-              title={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
+              aria-label={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
+              title={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
             >
               {isPlaying ? (
-                <Pause className="h-[17px] w-[17px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+                <Pause className="h-[17px] w-[17px] fill-white text-white stroke-[2]" />
               ) : (
-                <Play className="ml-[2px] h-[17px] w-[17px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+                <Play className="ml-[2px] h-[17px] w-[17px] fill-white text-white stroke-[2]" />
               )}
             </button>
           </div>
@@ -986,8 +1013,8 @@ export default function ExampleVideoPlayer({
               "border border-white/55 bg-black/35 text-white shadow-sm backdrop-blur-md",
               "transition-all duration-200 hover:bg-black/55",
             ].join(" ")}
-            aria-label="Expandir vídeo"
-            title="Expandir vídeo"
+            aria-label="Expandir vÃ­deo"
+            title="Expandir vÃ­deo"
           >
             <Maximize className="h-3.5 w-3.5" />
           </button>
@@ -1026,18 +1053,26 @@ export default function ExampleVideoPlayer({
               "[&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full md:[&::-moz-range-thumb]:h-3 md:[&::-moz-range-thumb]:w-3",
               "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white",
             ].join(" ")}
-            aria-label="Progresso do vídeo"
+            aria-label="Progresso do vÃ­deo"
           />
 
           <div className="flex w-full items-end justify-between gap-3 px-1 md:gap-2 md:px-3">
-            <div className="flex items-center justify-start">
+            <div className="flex items-center justify-start gap-2">
               <GlassControlButton
-                label={isPlaying ? "Pausar vídeo" : "Reproduzir vídeo"}
+                label={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
                 onClick={togglePlay}
                 variant="primary"
               >
                 {isPlaying ? <Pause /> : <Play className="translate-x-[2px]" />}
               </GlassControlButton>
+              {!isTouchLike && !isMobileMockupLayout ? (
+                <GlassControlButton
+                  label="Voltar ao início"
+                  onClick={restartFromBeginning}
+                >
+                  <Square />
+                </GlassControlButton>
+              ) : null}
             </div>
 
             <div className="flex items-end justify-end gap-2 md:gap-2">
@@ -1071,13 +1106,13 @@ export default function ExampleVideoPlayer({
                       "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full",
                       "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white",
                     ].join(" ")}
-                    aria-label="Volume do vídeo"
+                    aria-label="Volume do vÃ­deo"
                   />
                 </div>
 
                 <GlassControlButton
                   label={
-                    isMuted || volume === 0 ? "Ativar som" : "Silenciar vídeo"
+                    isMuted || volume === 0 ? "Ativar som" : "Silenciar vÃ­deo"
                   }
                   onClick={toggleMute}
                   active={!isMuted && volume > 0}
@@ -1100,3 +1135,4 @@ export default function ExampleVideoPlayer({
     </div>
   );
 }
+

@@ -64,6 +64,47 @@ const FLASHCARD_MOBILE_MEANING_PALETTE = [
   },
 ];
 
+const clampByte = (value) => Math.max(0, Math.min(255, Math.round(value)));
+
+const hexToRgb = (value) => {
+  const hex = typeof value === "string" ? value.trim().replace("#", "") : "";
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : hex;
+
+  if (!/^[\da-fA-F]{6}$/.test(normalized)) return null;
+
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+};
+
+const rgbToHex = ({ r, g, b }) =>
+  `#${[r, g, b]
+    .map((channel) => clampByte(channel).toString(16).padStart(2, "0"))
+    .join("")}`;
+
+const mixHexColors = (baseHex, targetHex, ratio = 0.5) => {
+  const base = hexToRgb(baseHex);
+  const target = hexToRgb(targetHex);
+
+  if (!base || !target) return baseHex;
+
+  const weight = Math.max(0, Math.min(1, ratio));
+
+  return rgbToHex({
+    r: base.r + (target.r - base.r) * weight,
+    g: base.g + (target.g - base.g) * weight,
+    b: base.b + (target.b - base.b) * weight,
+  });
+};
+
 const normalizeText = (value) =>
   typeof value === "string" ? value.trim() : "";
 
@@ -590,6 +631,7 @@ function ExampleVideoThumbnail({
     isThirdPartyVideo && Boolean(embedPreviewSrc);
   const shouldUseDirectEmbed =
     shouldRenderEmbedPreview && !isMobile;
+  const shouldUseOwnedPlayVisual = !isThirdPartyVideo;
   const webEmbedPreviewFrameStyle = getWebEmbedPreviewFrameStyle(
     embedPreviewSrc,
     isMobile
@@ -1001,19 +1043,37 @@ function ExampleVideoThumbnail({
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
               <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
 
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div
-                className={[
-                  "flex h-11 w-11 items-center justify-center rounded-full",
-                  "border border-white/70 bg-white/55",
-                  "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
-                  "backdrop-blur-md transition-all duration-200",
-                  "group-hover:scale-105 group-hover:bg-white/72",
-                ].join(" ")}
-              >
-                <Play className="ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div
+                  className={
+                    shouldUseOwnedPlayVisual
+                      ? [
+                          "flex h-11 w-11 items-center justify-center rounded-full",
+                          "border border-white/55 bg-white/10",
+                          "shadow-[0_4px_10px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.22)]",
+                          "backdrop-blur-[2px] transition-[transform,background-color,border-color] duration-200 ease-out",
+                          isMobile
+                            ? ""
+                            : "group-hover:scale-[1.15] group-hover:border-white/75 group-hover:bg-white/16",
+                        ].join(" ")
+                      : [
+                          "flex h-11 w-11 items-center justify-center rounded-full",
+                          "border border-white/70 bg-white/55",
+                          "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
+                          "backdrop-blur-md transition-all duration-200",
+                          "group-hover:scale-105 group-hover:bg-white/72",
+                        ].join(" ")
+                  }
+                >
+                  <Play
+                    className={
+                      shouldUseOwnedPlayVisual
+                        ? "ml-[2px] h-[18px] w-[18px] fill-white text-white stroke-[2]"
+                        : "ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]"
+                    }
+                  />
+                </div>
               </div>
-            </div>
             </>
           ) : null}
         </>
@@ -1040,6 +1100,7 @@ export default function ExamplesPanel({
   const lastClosePointerSfxAtRef = useRef(0);
   const isMobile = useIsMobile();
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
+  const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
   const [videoIndexes, setVideoIndexes] = useState({});
   const [expandedMeaningVideoKey, setExpandedMeaningVideoKey] = useState(null);
@@ -1151,6 +1212,7 @@ export default function ExamplesPanel({
 
   useEffect(() => {
     setOpenDesktopVideos({});
+    setDesktopAutoplayByGroup({});
     setMobileVideo(null);
     setVideoIndexes({});
   }, [
@@ -1250,6 +1312,7 @@ export default function ExamplesPanel({
     videos,
     index,
     autoPlayOnOpen = false,
+    desktopAutoPlayOnOpen = false,
   }) => {
     if (!video) return;
 
@@ -1268,6 +1331,9 @@ export default function ExamplesPanel({
 
     setOpenDesktopVideos({
       [groupKey]: true,
+    });
+    setDesktopAutoplayByGroup({
+      [groupKey]: Boolean(desktopAutoPlayOnOpen),
     });
   };
 
@@ -1362,6 +1428,10 @@ export default function ExamplesPanel({
     if (!currentVideo?.video) return null;
 
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
+    const shouldAutoPlayDesktopVideo =
+      isVideoOpen &&
+      Boolean(desktopAutoplayByGroup[groupKey]) &&
+      !isThirdPartyEmbeddedVideo(currentVideo.video);
     const isDesktopDirectEmbedPreview =
       !isMobile && isThirdPartyEmbeddedVideo(currentVideo.video);
     const shouldShowAttachedChip =
@@ -1413,7 +1483,7 @@ export default function ExamplesPanel({
                   key={`${currentVideo.key}-${currentVideo.video}`}
                   video={currentVideo.video}
                   title={currentVideo.title}
-                  autoPlay={false}
+                  autoPlay={shouldAutoPlayDesktopVideo}
                 />
               </AspectRatio>
             </div>
@@ -1473,6 +1543,9 @@ export default function ExamplesPanel({
                   videos: safeVideos,
                   index: currentIndex,
                   autoPlayOnOpen: true,
+                  desktopAutoPlayOnOpen: !isThirdPartyEmbeddedVideo(
+                    currentVideo.video
+                  ),
                 })
               }
             />
@@ -1653,25 +1726,37 @@ export default function ExamplesPanel({
               shouldUseMeaningVideoCollapse && hasMeaningVideo;
             const isMeaningExpanded =
               !shouldUseMeaningCollapse || expandedMeaningVideoKey === groupKey;
+            const meaningHoverBorderColor = mixHexColors(
+              meaningPalette.border,
+              meaningPalette.accent,
+              0.5
+            );
 
             return (
                 <section
                   key={`${entry.meaning}-${index}`}
                   className={
                     isFlashcardMobileLayout
-                      ? "relative rounded-2xl border p-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
+                      ? "relative rounded-2xl border border-[var(--meaning-border)] p-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
                       : [
-                          "group/meaning rounded-xl border px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.05)]",
+                          "group/meaning rounded-xl border border-[var(--meaning-border)] px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.05)]",
                           shouldUseMeaningCollapse
-                            ? "cursor-pointer transition-colors duration-200 hover:border-[var(--meaning-hover-border)]"
+                            ? [
+                                "cursor-pointer",
+                                !isMeaningExpanded
+                                  ? "transition-colors duration-200 hover:border-[var(--meaning-hover-border)]"
+                                  : "",
+                              ].join(" ")
                             : "",
                         ].join(" ")
                   }
                   style={{
-                    borderColor: meaningPalette.border,
                     backgroundColor: meaningPalette.background,
-                    ...(!isFlashcardMobileLayout && shouldUseMeaningCollapse
-                      ? { "--meaning-hover-border": meaningPalette.tipBorder }
+                    "--meaning-border": meaningPalette.border,
+                    ...(!isFlashcardMobileLayout &&
+                    shouldUseMeaningCollapse &&
+                    !isMeaningExpanded
+                      ? { "--meaning-hover-border": meaningHoverBorderColor }
                       : {}),
                   }}
               >
