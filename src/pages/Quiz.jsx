@@ -454,22 +454,27 @@ export default function Quiz() {
     return Date.now() - lastOptionPointerSfxAtRef.current < QUIZ_POINTER_SFX_GUARD_MS;
   };
 
-  const playOptionSfx = (idx, triggerEvent) => {
-    if (answered || !user?.id || !options[idx]) return;
+  const playOptionSelectSfx = (triggerEvent) => {
     if (shouldSkipClickSfxAfterPointer(triggerEvent)) return;
-    const correct = options[idx].correct;
-    playSound(correct ? SFX_EVENTS.QUIZ_SUCCESS : SFX_EVENTS.QUIZ_ERROR);
+    playSound(SFX_EVENTS.MATCH_SELECT);
   };
 
-  const handleSelect = async (idx, event) => {
+  const handleSelect = (idx, event) => {
     if (answered || !user?.id || !options[idx]) return;
-
-    playOptionSfx(idx, event);
+    playOptionSelectSfx(event);
 
     setSelected(idx);
+    setShowExamples(false);
+  };
+
+  const handleConfirm = async () => {
+    if (answered || !user?.id || selected === null || !options[selected]) return;
+
+    const selectedOption = options[selected];
+    const correct = selectedOption.correct;
     setAnswered(true);
 
-    const correct = options[idx].correct;
+    playSound(correct ? SFX_EVENTS.QUIZ_SUCCESS : SFX_EVENTS.QUIZ_ERROR);
     const xpDelta = correct ? CORRECT_XP_DELTA : INCORRECT_XP_DELTA;
 
     addXP(xpDelta);
@@ -560,7 +565,7 @@ export default function Quiz() {
   const handleOptionPointerDown = (idx) => {
     if (answered || !user?.id || !options[idx]) return;
     lastOptionPointerSfxAtRef.current = Date.now();
-    playOptionSfx(idx);
+    playSound(SFX_EVENTS.MATCH_SELECT);
   };
 
   const handleNext = () => {
@@ -770,7 +775,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[671.2px] rounded-xl border bg-white p-5 text-center shadow-sm sm:rounded-2xl sm:p-8">
+      <div className="mx-auto w-full max-w-[671.2px] rounded-xl border border-[#D6DCE4] bg-white p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] sm:rounded-2xl sm:p-8">
         <div
           ref={questionTextSlotRef}
           className="mx-auto flex h-[148px] min-h-[148px] w-full items-center justify-center overflow-hidden px-2 md:h-[132px] md:min-h-[132px]"
@@ -796,14 +801,28 @@ export default function Quiz() {
 
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-4">
         {options.map((opt, idx) => {
-          let classes = "border-border text-foreground hover:border-[#93C5FD]";
+          let classes =
+            "bg-white border border-[#D6DCE4] text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30";
           const isWrongSelection = answered && idx === selected && !opt.correct;
+          const isSelectedUnconfirmed = !answered && idx === selected;
+          let badgeClasses = "bg-muted text-muted-foreground";
 
           if (answered) {
-            if (opt.correct) classes = "border-primary bg-emerald-50 text-foreground";
+            if (opt.correct) {
+              classes =
+                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)]";
+              badgeClasses = "bg-primary/15 text-primary";
+            }
             else if (idx === selected && !opt.correct)
-              classes = "border-destructive bg-red-50 text-foreground";
-            else classes = "border-border/60 text-muted-foreground opacity-60";
+              classes =
+                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)]";
+            if (idx === selected && !opt.correct) {
+              badgeClasses = "bg-destructive/15 text-destructive";
+            }
+          } else if (isSelectedUnconfirmed) {
+            classes =
+              "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)]";
+            badgeClasses = "bg-[#7CC8F8]/25 text-[#2D8FC2]";
           }
 
           return (
@@ -816,23 +835,34 @@ export default function Quiz() {
                 isWrongSelection ? "shake-top" : ""
               }`}
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-base font-bold text-muted-foreground md:h-8 md:w-8 md:text-sm">
+              <span
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base font-bold md:h-8 md:w-8 md:text-sm ${badgeClasses}`}
+              >
                 {letters[idx]}
               </span>
               <span className="break-words">{opt.text}</span>
+              {answered && opt.correct ? (
+                <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />
+              ) : null}
             </button>
           );
         })}
       </div>
 
-      {answered && (
+      {selected !== null ? (
         <button
-          onClick={handleNext}
+          onClick={answered ? handleNext : handleConfirm}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          {"Pr\u00f3ximo"} <ArrowRight className="h-4 w-4" />
+          {answered ? (
+            <>
+              {"Pr\u00f3ximo"} <ArrowRight className="h-4 w-4" />
+            </>
+          ) : (
+            "Confirmar"
+          )}
         </button>
-      )}
+      ) : null}
 
       {answered && card?.meanings?.length > 0 ? (
         <div className="space-y-0">
