@@ -23,6 +23,7 @@ const CORRECT_XP_DELTA = 1;
 const INCORRECT_XP_DELTA = -2;
 const COMBINATIONS_POINTER_SFX_GUARD_MS = 700;
 const COMBINATIONS_MATCH_RESULT_GUARD_MS = 250;
+const COMBINATIONS_MOBILE_BREAKPOINT = 767;
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -169,6 +170,10 @@ export default function Combinations() {
   const [matched, setMatched] = useState(new Set());
   const [errorPair, setErrorPair] = useState(null);
   const [roundComplete, setRoundComplete] = useState(false);
+  const [showRoundSummary, setShowRoundSummary] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth <= COMBINATIONS_MOBILE_BREAKPOINT
+  );
   const [errors, setErrors] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showExamples, setShowExamples] = useState(false);
@@ -247,6 +252,21 @@ export default function Combinations() {
     return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
   }, [showExamples]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const syncViewport = () => {
+      setIsMobileViewport(window.innerWidth <= COMBINATIONS_MOBILE_BREAKPOINT);
+    };
+
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+
+    return () => {
+      window.removeEventListener("resize", syncViewport);
+    };
+  }, []);
+
   const setupRound = () => {
     const pairs = weightedSample(pool, difficultyMap.current, PAIRS_PER_ROUND);
     const directions = buildRoundDirections(mode, pairs.length);
@@ -286,6 +306,7 @@ export default function Combinations() {
     setSelectedLeft(null);
     setSelectedRight(null);
     setRoundComplete(false);
+    setShowRoundSummary(false);
     setErrors(0);
     setErrorPair(null);
     setShowExamples(false);
@@ -401,6 +422,9 @@ export default function Combinations() {
 
       if (newMatched.size / 2 >= roundPairs.length) {
         setRoundComplete(true);
+        if (!isMobileViewport) {
+          setShowRoundSummary(true);
+        }
       }
     } else {
       if (!shouldSkipRepeatedMatchResultSfx("error", leftIdx, rightIdx)) {
@@ -439,6 +463,11 @@ export default function Combinations() {
     setRound((r) => r + 1);
   };
 
+  const handleConcludeRound = () => {
+    if (!roundComplete) return;
+    setShowRoundSummary(true);
+  };
+
   const toggleSound = () => {
     const state = getSoundState();
     const newEnabled = !state.enabled;
@@ -468,13 +497,15 @@ export default function Combinations() {
   const progressCurrent = Math.min(correctMatches, PAIRS_PER_ROUND);
   const progressPct = PAIRS_PER_ROUND > 0 ? (progressCurrent / PAIRS_PER_ROUND) * 100 : 0;
   const roundBalanceText = `${roundXpBalance > 0 ? "+" : ""}${roundXpBalance}XP`;
+  const shouldShowRoundSummary = roundComplete && (!isMobileViewport || showRoundSummary);
+  const shouldShowMobileConcludeRound = roundComplete && isMobileViewport && !showRoundSummary;
 
   const focusedCard = allVocab.find((item) => item.id === focusedPair?.vocabId);
   const focusedMeaning = focusedCard?.meanings?.[focusedPair?.meaningIdx]?.meaning || null;
   const hasFocusedExamples =
     Array.isArray(focusedCard?.meanings) && focusedCard.meanings.length > 0;
 
-  if (roundComplete) {
+  if (shouldShowRoundSummary) {
     return (
       <div className="flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
         <div className="w-full max-w-md text-center">
@@ -672,6 +703,16 @@ export default function Combinations() {
           })}
         </div>
       </div>
+
+      {shouldShowMobileConcludeRound ? (
+        <button
+          type="button"
+          onClick={handleConcludeRound}
+          className="sm:hidden flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Concluir rodada
+        </button>
+      ) : null}
 
       {hasFocusedExamples ? (
         <div className="space-y-0">

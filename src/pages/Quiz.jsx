@@ -778,7 +778,7 @@ export default function Quiz() {
       <div className="mx-auto w-full max-w-[671.2px] rounded-xl border border-[#D6DCE4] bg-white p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] sm:rounded-2xl sm:p-8">
         <div
           ref={questionTextSlotRef}
-          className="mx-auto flex h-[148px] min-h-[148px] w-full items-center justify-center overflow-hidden px-2 md:h-[132px] md:min-h-[132px]"
+          className="mx-auto flex h-[136px] min-h-[136px] w-full items-center justify-center overflow-hidden px-2 md:h-[132px] md:min-h-[132px]"
         >
           <p
             ref={questionTextRef}
@@ -831,7 +831,7 @@ export default function Quiz() {
               onPointerDown={() => handleOptionPointerDown(idx)}
               onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
-              className={`flex h-[clamp(62px,8.8svh,76px)] w-full items-center gap-3 rounded-[13px] border bg-white px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+              className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-white px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >
