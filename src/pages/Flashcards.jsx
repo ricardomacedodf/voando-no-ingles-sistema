@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Check, X, Volume2, VolumeX } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import FlashcardModeSelector from "../components/FlashcardModeSelector";
@@ -19,6 +20,13 @@ import {
   getGameState,
   saveGameState,
 } from "../lib/gameState";
+import {
+  LEARNING_STATUS,
+  getStudyQueue,
+  loadReviewPreferences,
+  normalizeVocabularyItem,
+  updateStatsAfterReview,
+} from "../lib/learningEngine";
 
 const FLASHCARD_CARD_WIDTH = 671.2;
 const FLASHCARD_CARD_HEIGHT = 335.3;
@@ -34,9 +42,6 @@ const FLASHCARD_DISCARD_ROTATE_DEG = 20;
 const FLASHCARD_DISCARD_SCALE = 0.9;
 const FLASHCARD_DISCARD_EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
 const FLASHCARD_POINTER_SFX_GUARD_MS = 700;
-const STATUS_NOVA = "nova";
-const STATUS_DOMINADA = "dominada";
-const STATUS_DIFICIL = "dificil";
 
 function shuffleArray(arr) {
   const shuffled = [...arr];
@@ -50,52 +55,9 @@ function shuffleArray(arr) {
 function updateDominatedCount(items) {
   const game = getGameState();
   game.dominatedCount = items.filter(
-    (item) => item?.stats?.status === STATUS_DOMINADA
+    (item) => item?.stats?.status === LEARNING_STATUS.DOMINADA
   ).length;
   saveGameState(game);
-}
-
-function normalizeStatus(rawStatus) {
-  const status = String(rawStatus || "")
-    .trim()
-    .toLowerCase();
-
-  if (status === STATUS_DOMINADA) return STATUS_DOMINADA;
-  if (status === STATUS_DIFICIL || status === "difícil") return STATUS_DIFICIL;
-  return STATUS_NOVA;
-}
-
-function normalizeStats(rawStats) {
-  const merged = {
-    correct: 0,
-    incorrect: 0,
-    total_reviews: 0,
-    avg_response_time: 0,
-    status: STATUS_NOVA,
-    ...(rawStats || {}),
-  };
-
-  return {
-    ...merged,
-    correct: Number(merged.correct) || 0,
-    incorrect: Number(merged.incorrect) || 0,
-    total_reviews: Number(merged.total_reviews) || 0,
-    avg_response_time: Number(merged.avg_response_time) || 0,
-    status: normalizeStatus(merged.status),
-  };
-}
-
-function mapVocabularyRow(row) {
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    term: row.term || "",
-    pronunciation: row.pronunciation || "",
-    meanings: Array.isArray(row.meanings) ? row.meanings : [],
-    stats: normalizeStats(row.stats),
-    createdAt: row.created_at || null,
-    updatedAt: row.updated_at || null,
-  };
 }
 
 function clamp(value, min, max) {
@@ -209,6 +171,7 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
 
 export default function Flashcards() {
   const { user } = useAuth();
+  const location = useLocation();
 
   const [baseVocab, setBaseVocab] = useState([]);
   const [vocab, setVocab] = useState([]);
@@ -309,6 +272,8 @@ export default function Flashcards() {
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
+    const reviewPreferences = loadReviewPreferences();
+    const focus = new URLSearchParams(location.search).get("focus");
 
     const { data, error } = await supabase
       .from("vocabulary")
@@ -320,7 +285,11 @@ export default function Flashcards() {
       throw error;
     }
 
-    return Array.isArray(data) ? data.map(mapVocabularyRow) : [];
+    const normalizedItems = Array.isArray(data)
+      ? data.map((row) => normalizeVocabularyItem(row, reviewPreferences))
+      : [];
+
+    return getStudyQueue(normalizedItems, reviewPreferences, focus).items;
   };
 
   useEffect(() => {
@@ -366,7 +335,7 @@ export default function Flashcards() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
+  }, [user?.id, location.search]);
 
   useEffect(() => {
     if (loading || baseVocab.length === 0) return;
@@ -544,32 +513,14 @@ export default function Flashcards() {
     }
 
     const responseTime = card._startTime ? Date.now() - card._startTime : 0;
-
-    const stats = normalizeStats(card.stats);
-
-    const newCorrect = stats.correct + (correct ? 1 : 0);
-    const newIncorrect = stats.incorrect + (correct ? 0 : 1);
-    const newTotal = stats.total_reviews + 1;
-    const newAvg =
-      ((stats.avg_response_time || 0) * (stats.total_reviews || 0) + responseTime) /
-      newTotal;
-
-    let newStatus = STATUS_NOVA;
-    if (newTotal >= 3) {
-      const rate = newCorrect / newTotal;
-      if (rate >= 0.8) newStatus = STATUS_DOMINADA;
-      else if (rate < 0.5) newStatus = STATUS_DIFICIL;
-    }
-
     const now = new Date().toISOString();
-    const updatedStats = {
-      correct: newCorrect,
-      incorrect: newIncorrect,
-      total_reviews: newTotal,
-      avg_response_time: Math.round(newAvg),
-      last_reviewed: now,
-      status: newStatus,
-    };
+    const reviewPreferences = loadReviewPreferences();
+    const updatedStats = updateStatsAfterReview(card, correct, {
+      responseTimeMs: responseTime,
+      reviewedAt: now,
+      mode: "flashcards",
+      preferences: reviewPreferences,
+    });
 
     const xpDelta = correct ? 1 : -2;
     addXP(xpDelta);
@@ -823,7 +774,7 @@ export default function Flashcards() {
               suppressFlipResetTransition ? "!transition-none" : ""
             }`}
           >
-            <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center">
+            <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-card text-center">
               <div ref={frontTextSlotRef} className="flashcard-main-text-slot">
                 <p
                   ref={frontTextRef}
@@ -847,7 +798,7 @@ export default function Flashcards() {
               </p>
             </div>
 
-            <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-white text-center">
+            <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-card text-center">
               <div ref={backTextSlotRef} className="flashcard-main-text-slot">
                 <p
                   ref={backTextRef}
@@ -883,7 +834,7 @@ export default function Flashcards() {
           onPointerDown={handleResponsePointerDown}
           onClick={(event) => handleResponse(false, event)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg border border-red-500 px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
+          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg border border-red-500 bg-transparent px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500 hover:text-white active:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-400/70 dark:bg-red-950/30 dark:text-red-200 dark:hover:border-red-300 dark:hover:bg-red-500/20 dark:hover:text-red-100 dark:active:bg-red-500/28 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
           Não sei
         </button>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, FileJson, Download, Loader2 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { createInitialStats } from "../lib/learningEngine";
 
 const normalizeExampleVideo = (example) => {
   const rawVideo =
@@ -131,13 +132,7 @@ export default function ManagerImport({ vocab, onBack, onDone }) {
               .filter(hasExampleContent),
           }))
           .filter((m) => m.meaning),
-        stats: {
-          correct: 0,
-          incorrect: 0,
-          total_reviews: 0,
-          avg_response_time: 0,
-          status: "nova",
-        },
+        stats: createInitialStats(),
         created_at: now,
         updated_at: now,
       }));

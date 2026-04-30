@@ -13,6 +13,7 @@ import {
 import Logo from "./Logo";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import ThemeToggle from "./ThemeToggle";
 
 const navItems = [
   { label: "Início", path: "/", icon: Home },
@@ -100,6 +101,10 @@ export default function Sidebar({ onClose }) {
         </div>
       </nav>
 
+      <div className="px-4 pb-2">
+        <ThemeToggle align="start" className="mx-auto w-[222px]" />
+      </div>
+
       <div className="border-t border-border px-4 py-3">
         <div ref={profileAreaRef} className="relative mx-auto w-[222px]">
           <button
@@ -120,9 +125,9 @@ export default function Sidebar({ onClose }) {
           </button>
 
           {isProfileMenuOpen && (
-            <div className="absolute bottom-full left-0 right-0 z-10 mb-2 rounded-xl border border-border bg-white p-3 shadow-sm">
+            <div className="absolute bottom-full left-0 right-0 z-10 mb-2 rounded-xl border border-border bg-card p-3 shadow-sm">
               <div className="flex items-center gap-2.5 rounded-md bg-muted/40 px-2.5 py-2">
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-muted-foreground">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-card text-muted-foreground">
                   {avatarUrl && !avatarError ? (
                     <img
                       src={avatarUrl}
@@ -149,7 +154,7 @@ export default function Sidebar({ onClose }) {
                   await handleLogout();
                 }}
                 disabled={isLoggingOut}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
               >
                 <LogOut className="h-4 w-4" />
                 <span>{isLoggingOut ? "Saindo..." : "Sair"}</span>

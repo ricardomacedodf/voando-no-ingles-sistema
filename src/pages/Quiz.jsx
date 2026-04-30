@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Volume2, VolumeX, ArrowRight, Check } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ModeSelector from "../components/ModeSelector";
@@ -18,6 +19,14 @@ import {
   getGameState,
   saveGameState
 } from "../lib/gameState";
+import {
+  LEARNING_STATUS,
+  REVIEW_FOCUS,
+  getStudyQueue,
+  loadReviewPreferences,
+  normalizeVocabularyItem,
+  updateStatsAfterReview,
+} from "../lib/learningEngine";
 
 const QUESTIONS_PER_ROUND = 10;
 const MAX_ROUNDS = 20;
@@ -34,9 +43,6 @@ const QUIZ_TEXT_MAX_SIZE_MOBILE = 40;
 const QUIZ_TEXT_SCALE_DESKTOP = 0.9;
 const QUIZ_TEXT_SCALE_MOBILE = 0.95;
 const QUIZ_SINGLE_LINE_LARGE_REDUCTION_MOBILE = 0.9;
-const STATUS_NOVA = "nova";
-const STATUS_DOMINADA = "dominada";
-const STATUS_DIFICIL = "dificil";
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -55,7 +61,10 @@ function buildRoundQueue(vocab, size = QUESTIONS_PER_ROUND) {
     : [];
 
   if (source.length === 0) return [];
-  if (source.length >= size) return shuffleArray(source).slice(0, size);
+  if (source.length >= size) {
+    const priorityWindowSize = Math.min(source.length, size * 2);
+    return shuffleArray(source.slice(0, priorityWindowSize)).slice(0, size);
+  }
 
   const queue = [...shuffleArray(source)];
   while (queue.length < size) {
@@ -207,38 +216,33 @@ function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
 function updateDominatedCount(items) {
   const game = getGameState();
   game.dominatedCount = items.filter(
-    (item) => item?.stats?.status === STATUS_DOMINADA
+    (item) => item?.stats?.status === LEARNING_STATUS.DOMINADA
   ).length;
   saveGameState(game);
 }
 
 function normalizeStatus(rawStatus) {
-  const status = String(rawStatus || "")
-    .trim()
-    .toLowerCase();
-
-  if (status === STATUS_DOMINADA) return STATUS_DOMINADA;
-  if (status === STATUS_DIFICIL || status === "difícil") return STATUS_DIFICIL;
-  return STATUS_NOVA;
+  return normalizeVocabularyItem(
+    {
+      stats: {
+        status: rawStatus,
+      },
+    },
+    loadReviewPreferences()
+  ).stats.status;
 }
 
 function normalizeStats(rawStats) {
-  const merged = {
-    correct: 0,
-    incorrect: 0,
-    total_reviews: 0,
-    avg_response_time: 0,
-    status: STATUS_NOVA,
-    ...(rawStats || {}),
-  };
+  const normalizedStats = normalizeVocabularyItem(
+    {
+      stats: rawStats,
+    },
+    loadReviewPreferences()
+  ).stats;
 
   return {
-    ...merged,
-    correct: Number(merged.correct) || 0,
-    incorrect: Number(merged.incorrect) || 0,
-    total_reviews: Number(merged.total_reviews) || 0,
-    avg_response_time: Number(merged.avg_response_time) || 0,
-    status: normalizeStatus(merged.status),
+    ...normalizedStats,
+    status: normalizeStatus(normalizedStats.status),
   };
 }
 
@@ -257,6 +261,7 @@ function mapVocabularyRow(row) {
 
 export default function Quiz() {
   const { user } = useAuth();
+  const location = useLocation();
 
   const [allVocab, setAllVocab] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -308,6 +313,8 @@ export default function Quiz() {
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
+    const reviewPreferences = loadReviewPreferences();
+    const focus = new URLSearchParams(location.search).get("focus");
 
     const { data, error } = await supabase
       .from("vocabulary")
@@ -319,7 +326,18 @@ export default function Quiz() {
       throw error;
     }
 
-    return Array.isArray(data) ? data.map(mapVocabularyRow) : [];
+    const normalizedItems = Array.isArray(data)
+      ? data
+          .map(mapVocabularyRow)
+          .map((row) => normalizeVocabularyItem(row, reviewPreferences))
+      : [];
+
+    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    if (prioritized.length >= 4 || normalizedItems.length < 4) {
+      return prioritized;
+    }
+
+    return getStudyQueue(normalizedItems, reviewPreferences, REVIEW_FOCUS.ALL).items;
   };
 
   const startRound = (nextRoundNumber, sourceVocab = allVocab) => {
@@ -382,7 +400,7 @@ export default function Quiz() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
+  }, [user?.id, location.search]);
 
   useEffect(() => {
     if (loading || allVocab.length === 0) return;
@@ -493,38 +511,21 @@ export default function Quiz() {
 
     const card = queue[current];
     const responseTime = Date.now() - startTime.current;
-
-    const stats = normalizeStats(card.stats);
-
-    const newCorrect = stats.correct + (correct ? 1 : 0);
-    const newIncorrect = stats.incorrect + (correct ? 0 : 1);
-    const newTotal = stats.total_reviews + 1;
-    const newAvg =
-      ((stats.avg_response_time || 0) * (stats.total_reviews || 0) + responseTime) /
-      newTotal;
-
-    let newStatus = STATUS_NOVA;
-    if (newTotal >= 3) {
-      const rate = newCorrect / newTotal;
-      if (rate >= 0.8) newStatus = STATUS_DOMINADA;
-      else if (rate < 0.5) newStatus = STATUS_DIFICIL;
-    }
-
-    const updatedStats = {
-      correct: newCorrect,
-      incorrect: newIncorrect,
-      total_reviews: newTotal,
-      avg_response_time: Math.round(newAvg),
-      last_reviewed: new Date().toISOString(),
-      status: newStatus
-    };
+    const now = new Date().toISOString();
+    const reviewPreferences = loadReviewPreferences();
+    const updatedStats = updateStatsAfterReview(card, correct, {
+      responseTimeMs: responseTime,
+      reviewedAt: now,
+      mode: "quiz",
+      preferences: reviewPreferences,
+    });
 
     try {
       const { error } = await supabase
         .from("vocabulary")
         .update({
           stats: updatedStats,
-          updated_at: new Date().toISOString()
+          updated_at: now
         })
         .eq("id", card.id)
         .eq("user_id", user.id);
@@ -538,7 +539,7 @@ export default function Quiz() {
           ? {
               ...item,
               stats: updatedStats,
-              updatedAt: new Date().toISOString()
+              updatedAt: now
             }
           : item
       );
@@ -550,7 +551,7 @@ export default function Quiz() {
             ? {
                 ...item,
                 stats: updatedStats,
-                updatedAt: new Date().toISOString()
+                updatedAt: now
               }
             : item
         )
@@ -775,7 +776,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[671.2px] rounded-xl border border-[#D6DCE4] bg-white p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] sm:rounded-2xl sm:p-8">
+      <div className="mx-auto w-full max-w-[671.2px] rounded-xl border border-border bg-card p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] sm:rounded-2xl sm:p-8">
         <div
           ref={questionTextSlotRef}
           className="mx-auto flex h-[136px] min-h-[136px] w-full items-center justify-center overflow-hidden px-2 md:h-[132px] md:min-h-[132px]"
@@ -802,7 +803,7 @@ export default function Quiz() {
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-4">
         {options.map((opt, idx) => {
           let classes =
-            "bg-white border border-[#D6DCE4] text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30";
+            "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:hover:border-sky-500/70 dark:hover:bg-sky-500/15";
           const isWrongSelection = answered && idx === selected && !opt.correct;
           const isSelectedUnconfirmed = !answered && idx === selected;
           let badgeClasses = "bg-muted text-muted-foreground";
@@ -810,19 +811,19 @@ export default function Quiz() {
           if (answered) {
             if (opt.correct) {
               classes =
-                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)]";
+                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)] dark:bg-emerald-500/20 dark:border-emerald-400/70 dark:text-emerald-300 dark:shadow-[0_2px_0_rgba(6,78,59,0.5)]";
               badgeClasses = "bg-primary/15 text-primary";
             }
             else if (idx === selected && !opt.correct)
               classes =
-                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)]";
+                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)] dark:bg-red-500/20 dark:border-red-400/70 dark:text-red-300 dark:shadow-[0_2px_0_rgba(127,29,29,0.55)]";
             if (idx === selected && !opt.correct) {
               badgeClasses = "bg-destructive/15 text-destructive";
             }
           } else if (isSelectedUnconfirmed) {
             classes =
-              "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)]";
-            badgeClasses = "bg-[#7CC8F8]/25 text-[#2D8FC2]";
+              "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)] dark:bg-sky-500/20 dark:border-sky-400/70 dark:text-sky-300 dark:shadow-[0_2px_0_rgba(7,89,133,0.55)]";
+            badgeClasses = "bg-[#7CC8F8]/25 text-[#2D8FC2] dark:bg-sky-500/30 dark:text-sky-300";
           }
 
           return (
@@ -831,7 +832,7 @@ export default function Quiz() {
               onPointerDown={() => handleOptionPointerDown(idx)}
               onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
-              className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-white px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+              className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-card px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >

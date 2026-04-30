@@ -11,6 +11,7 @@ import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ManagerForm from "../components/ManagerForm";
 import ManagerImport from "../components/ManagerImport";
+import { createInitialStats, normalizeVocabularyItem } from "../lib/learningEngine";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -260,23 +261,15 @@ async function deleteVideosFromR2(videoUrls) {
 }
 
 function mapVocabularyRow(row) {
+  const normalized = normalizeVocabularyItem({
+    ...row,
+    stats: row.stats || createInitialStats(),
+  });
+
   return {
-    id: row.id,
-    user_id: row.user_id,
-    term: row.term || "",
-    pronunciation: row.pronunciation || "",
+    ...normalized,
     video: normalizeWordVideo(row),
     thumbnail: normalizeWordThumbnail(row),
-    meanings: Array.isArray(row.meanings) ? row.meanings : [],
-    stats: row.stats || {
-      correct: 0,
-      incorrect: 0,
-      total_reviews: 0,
-      avg_response_time: 0,
-      status: "nova",
-    },
-    createdAt: row.created_at || null,
-    updatedAt: row.updated_at || null,
   };
 }
 

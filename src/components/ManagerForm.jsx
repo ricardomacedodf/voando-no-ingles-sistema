@@ -17,6 +17,8 @@ import { supabase } from "@/api/supabaseClient";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
 import { getExampleVideoDisplayLabel } from "@/lib/exampleVideoStorage";
 import { useAuth } from "../contexts/AuthContext";
+import { useTheme } from "../contexts/ThemeContext";
+import { createInitialStats } from "../lib/learningEngine";
 
 const categories = [
   "vocabulário",
@@ -69,6 +71,15 @@ const meaningAccentPalette = [
   { bar: "#2563EB", border: "rgba(37, 99, 235, 0.24)" },
 ];
 
+const meaningAccentPaletteDark = [
+  { bar: "#F59E0B", border: "rgba(245, 158, 11, 0.5)" },
+  { bar: "#2DD4BF", border: "rgba(45, 212, 191, 0.5)" },
+  { bar: "#A5B4FC", border: "rgba(165, 180, 252, 0.5)" },
+  { bar: "#34D399", border: "rgba(52, 211, 153, 0.5)" },
+  { bar: "#7DD3FC", border: "rgba(125, 211, 252, 0.5)" },
+  { bar: "#60A5FA", border: "rgba(96, 165, 250, 0.5)" },
+];
+
 const emptyMeaningAccent = {
   bar: "#B91C1C",
   border: "#FBD2D2",
@@ -85,8 +96,10 @@ const isMeaningAccentTooClose = (previousIndex, nextIndex) =>
   previousIndex === nextIndex ||
   meaningAccentLowContrastPairs.has(`${previousIndex}-${nextIndex}`);
 
-const getMeaningAccentIndexes = (totalMeanings) => {
-  const paletteLength = meaningAccentPalette.length;
+const getMeaningAccentIndexes = (
+  totalMeanings,
+  paletteLength = meaningAccentPalette.length
+) => {
 
   if (paletteLength === 0 || totalMeanings <= 0) return [];
 
@@ -124,11 +137,7 @@ const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
 
 const getDefaultStats = () => ({
-  correct: 0,
-  incorrect: 0,
-  total_reviews: 0,
-  avg_response_time: 0,
-  status: "nova",
+  ...createInitialStats(),
 });
 
 const getR2UploadApiUrl = () => {
@@ -959,7 +968,7 @@ function BrFlagIcon({ className = "h-4 w-4" }) {
 
 function FieldLabel({ children, icon }) {
   return (
-    <label className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181]">
+    <label className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181] dark:text-slate-300">
       {icon}
       <span>{children}</span>
     </label>
@@ -969,7 +978,7 @@ function FieldLabel({ children, icon }) {
 function MeaningLanguageLabel() {
   return (
     <label
-      className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181]"
+      className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181] dark:text-slate-300"
       aria-label="Significado em português"
     >
       <Languages className="h-4 w-4 text-primary" />
@@ -982,10 +991,10 @@ function MeaningLanguageLabel() {
 
 function ExampleLanguageLabel({ flag, code }) {
   return (
-    <label className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181]">
+    <label className="mb-2 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.01em] text-[#6A7181] dark:text-slate-300">
       {flag}
       <span>Sig.</span>
-      <span className="font-normal text-[#6A7181]">—</span>
+      <span className="font-normal text-[#6A7181] dark:text-slate-300">—</span>
       <span>{code}</span>
     </label>
   );
@@ -1034,7 +1043,7 @@ function ExampleVideoPreview({
     return (
       <div
         className={[
-          "relative aspect-video overflow-hidden rounded-xl border border-[#D9E2EC] bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)]",
+          "relative aspect-video overflow-hidden rounded-xl border border-[#D9E2EC] bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)] dark:border-border dark:shadow-[0_12px_24px_rgba(2,6,23,0.55)]",
           className,
         ].join(" ")}
       >
@@ -1063,7 +1072,7 @@ function ExampleVideoPreview({
     return (
       <div
         className={[
-          "aspect-video overflow-hidden rounded-xl bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)]",
+          "aspect-video overflow-hidden rounded-xl bg-black shadow-[0_10px_22px_rgba(15,23,42,0.12)] dark:shadow-[0_12px_24px_rgba(2,6,23,0.55)]",
           className,
         ].join(" ")}
       >
@@ -1083,8 +1092,8 @@ function ExampleVideoPreview({
       onClick={onPlay}
       className={[
         "group relative aspect-video w-full overflow-hidden rounded-xl border border-[#D9E2EC]",
-        "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)]",
-        "transition-all duration-200 hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)]",
+        "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)] dark:border-border dark:bg-muted/40 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_24px_rgba(2,6,23,0.5)]",
+        "transition-all duration-200 hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)] dark:hover:bg-muted/55 dark:hover:shadow-[0_14px_28px_rgba(2,6,23,0.6)]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
         className,
       ].join(" ")}
@@ -1106,7 +1115,7 @@ function ExampleVideoPreview({
       <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
 
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/55 shadow-[0_10px_20px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)] backdrop-blur-md transition-all duration-200 group-hover:scale-105 group-hover:bg-white/72">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/55 shadow-[0_10px_20px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)] backdrop-blur-md transition-all duration-200 group-hover:scale-105 group-hover:bg-white/72 dark:border-white/35 dark:bg-white/25 dark:shadow-[0_10px_20px_rgba(2,6,23,0.45)] dark:group-hover:bg-white/35">
           <Play className="ml-[2px] h-4 w-4 fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
         </div>
       </div>
@@ -1175,8 +1184,8 @@ function VideoControlCard({
             ? "min-h-[108px] rounded-xl md:min-h-[132px]"
             : "min-h-[132px] rounded-xl",
           mobileCompact
-            ? "border border-[#DCE4EE] bg-white px-3 py-2.5 shadow-[0_4px_12px_rgba(15,23,42,0.04)] md:px-3.5 md:py-3 md:shadow-[0_8px_20px_rgba(15,23,42,0.04)]"
-            : "border border-[#DCE4EE] bg-white px-3.5 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)]",
+            ? "border border-[#DCE4EE] bg-white px-3 py-2.5 shadow-[0_4px_12px_rgba(15,23,42,0.04)] md:px-3.5 md:py-3 md:shadow-[0_8px_20px_rgba(15,23,42,0.04)] dark:border-border dark:bg-card dark:shadow-[0_10px_24px_rgba(2,6,23,0.45)]"
+            : "border border-[#DCE4EE] bg-white px-3.5 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)] dark:border-border dark:bg-card dark:shadow-[0_10px_24px_rgba(2,6,23,0.45)]",
           "relative",
         ].join(" ")}
       >
@@ -1185,7 +1194,7 @@ function VideoControlCard({
             type="button"
             onClick={onRemove}
             disabled={isDeleting}
-            className={`absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50 ${removeIconResponsiveClass}`}
+            className={`absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-red-50 dark:hover:bg-red-500/20 disabled:opacity-50 ${removeIconResponsiveClass}`}
             aria-label="Remover vídeo"
           >
             <Trash2 className="h-4 w-4 text-destructive" />
@@ -1349,7 +1358,7 @@ function VideoControlCard({
                     type="button"
                     onClick={onRemove}
                     disabled={isDeleting}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-destructive/40 text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-destructive/40 text-destructive transition-colors hover:bg-red-50 dark:hover:bg-red-500/20 disabled:opacity-50"
                     aria-label="Remover vídeo"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1361,7 +1370,7 @@ function VideoControlCard({
                     type="button"
                     onClick={onRemove}
                     disabled={isDeleting}
-                    className={`rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50 ${removeTextResponsiveClass} ${
+                    className={`rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 dark:hover:bg-red-500/20 disabled:opacity-50 ${removeTextResponsiveClass} ${
                       mobileCompact
                         ? "w-full text-center lg:w-auto"
                         : ""
@@ -1431,7 +1440,7 @@ function VideoControlCard({
                 type="button"
                 onClick={onRemove}
                 disabled={isDeleting}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-destructive/40 text-destructive transition-colors hover:bg-red-50 disabled:opacity-50"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-destructive/40 text-destructive transition-colors hover:bg-red-50 dark:hover:bg-red-500/20 disabled:opacity-50"
                 aria-label="Remover vídeo"
               >
                 <Trash2 className="h-4 w-4" />
@@ -1450,7 +1459,7 @@ function VideoControlCard({
           type="button"
           onClick={onRemove}
           disabled={isDeleting}
-          className={`absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50 ${removeIconResponsiveClass}`}
+          className={`absolute right-2 top-2 z-10 rounded-lg p-1.5 transition-colors hover:bg-red-50 dark:hover:bg-red-500/20 disabled:opacity-50 ${removeIconResponsiveClass}`}
           aria-label="Remover vídeo"
         >
           <Trash2 className="h-4 w-4 text-destructive" />
@@ -1572,7 +1581,7 @@ function VideoControlCard({
             type="button"
             onClick={onRemove}
             disabled={isDeleting}
-            className={`rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 disabled:opacity-50 ${removeTextResponsiveClass}`}
+            className={`rounded-lg border border-destructive/40 px-3 py-1.5 text-[11px] font-bold text-destructive transition-colors hover:bg-red-50 dark:hover:bg-red-500/20 disabled:opacity-50 ${removeTextResponsiveClass}`}
           >
             {isDeleting ? "Removendo..." : "Remover vídeo"}
           </button>
@@ -1591,6 +1600,7 @@ function VideoControlCard({
 
 export default function ManagerForm({ item, onBack, onSaved }) {
   const { user } = useAuth();
+  const { isDark: isDarkTheme } = useTheme();
   const fileInputsRef = useRef({});
 
   const [term, setTerm] = useState(item?.term || "");
@@ -1696,7 +1706,13 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const [deletingVideoKey, setDeletingVideoKey] = useState(null);
   const [videoUploadErrors, setVideoUploadErrors] = useState({});
   const [activeVideoPreviewKey, setActiveVideoPreviewKey] = useState(null);
-  const meaningAccentIndexes = getMeaningAccentIndexes(meanings.length);
+  const activeMeaningAccentPalette = isDarkTheme
+    ? meaningAccentPaletteDark
+    : meaningAccentPalette;
+  const meaningAccentIndexes = getMeaningAccentIndexes(
+    meanings.length,
+    activeMeaningAccentPalette.length
+  );
   const currentDraftSnapshot = buildEditableDraftSnapshot({
     term,
     pronunciation,
@@ -2205,7 +2221,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
             placeholder="Ex: break down"
           />
 
-          <div className="mt-2 flex items-center gap-1.5 pl-0 text-sm italic text-[#6A7181]">
+          <div className="mt-2 flex items-center gap-1.5 pl-0 text-sm italic text-[#6A7181] dark:text-slate-300">
             <Volume2 className="h-3.5 w-3.5 shrink-0" />
             <span className="font-medium">Pronúncia:</span>
 
@@ -2213,7 +2229,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               type="text"
               value={pronunciation}
               onChange={(e) => setPronunciation(e.target.value)}
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm italic text-[#6A7181] placeholder:text-[#6A7181]/60 focus:outline-none focus:ring-0"
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm italic text-[#6A7181] placeholder:text-[#6A7181]/60 focus:outline-none focus:ring-0 dark:text-slate-300 dark:placeholder:text-slate-400/70"
               placeholder="Ex: breik daun"
             />
           </div>
@@ -2246,8 +2262,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                 meaningTitle || "adicionar aqui novo significado";
               const accentIndex =
                 meaningAccentIndexes[mIdx] ??
-                (mIdx % meaningAccentPalette.length);
-              const accent = meaningAccentPalette[accentIndex];
+                (mIdx % activeMeaningAccentPalette.length);
+              const accent = activeMeaningAccentPalette[accentIndex];
               const borderColor = shouldUseEmptyMeaningAccent
                 ? emptyMeaningAccent.border
                 : accent.border;
@@ -2276,7 +2292,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               return (
                 <div
                   key={mIdx}
-                  className="overflow-hidden rounded-2xl border bg-white shadow-[0_10px_26px_rgba(15,23,42,0.05)]"
+                  className="overflow-hidden rounded-2xl border bg-white shadow-[0_10px_26px_rgba(15,23,42,0.05)] dark:bg-card dark:shadow-[0_12px_28px_rgba(2,6,23,0.45)]"
                   style={{ borderColor }}
                 >
                   <div
@@ -2289,7 +2305,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         toggleMeaningExpanded(mIdx);
                       }
                     }}
-                    className="flex cursor-pointer items-stretch justify-between gap-4 border-b border-border/70 bg-white px-5 py-4 transition-colors hover:bg-[#F8FAFC]"
+                    className="flex cursor-pointer items-stretch justify-between gap-4 border-b border-border/70 bg-white px-5 py-4 transition-colors hover:bg-[#F8FAFC] dark:bg-card dark:hover:bg-muted/45"
                     style={{ borderColor }}
                     aria-expanded={isExpanded}
                   >
@@ -2313,16 +2329,15 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                           </span>
                         ) : (
                           <>
-                            <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                            <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-300">
                               SIG: {mIdx + 1}
                             </span>
-                            <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                            <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-300">
                               —
                             </span>
                             <span
-                              className="min-w-0 break-words text-base font-bold leading-snug"
+                              className="min-w-0 break-words text-base font-bold leading-snug text-[#14181F] dark:text-foreground"
                               style={{
-                                color: "#14181F",
                                 overflowWrap: "anywhere",
                               }}
                             >
@@ -2344,7 +2359,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             void removeMeaning(mIdx);
                           }}
                           disabled={deletingVideoKey === `meaning-${mIdx}`}
-                          className="rounded-lg p-1.5 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          className="rounded-lg p-1.5 transition-colors hover:bg-red-50 dark:hover:bg-red-500/20 disabled:opacity-50"
                           aria-label={`Remover significado ${mIdx + 1}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -2355,7 +2370,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                   {isExpanded ? (
                     <div className="space-y-4 p-4">
-                      <div className="border-b border-[#D8E1EC] pb-4">
+                      <div className="border-b border-[#D8E1EC] pb-4 dark:border-slate-600">
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
                           <div>
                             <MeaningLanguageLabel />
@@ -2372,7 +2387,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               spellCheck={false}
                               name={`meaning-field-${mIdx}`}
                               inputMode="text"
-                              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-[#181818] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-[#181818] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:bg-card dark:text-foreground"
                             />
                           </div>
 
@@ -2562,7 +2577,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             return (
                               <div
                                 key={exampleKey}
-                                className="overflow-hidden rounded-xl border border-[#DCE4EE] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.04)]"
+                                className="overflow-hidden rounded-xl border border-[#DCE4EE] bg-white shadow-[0_6px_18px_rgba(15,23,42,0.04)] dark:border-border dark:bg-card dark:shadow-[0_10px_22px_rgba(2,6,23,0.38)]"
                               >
                                 <div
                                   role="button"
@@ -2579,7 +2594,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                       toggleExampleExpanded(mIdx, eIdx);
                                     }
                                   }}
-                                  className="flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#E2E8F0] bg-white px-4 py-3"
+                                  className="flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#E2E8F0] bg-white px-4 py-3 dark:border-border dark:bg-card"
                                   aria-expanded={isExampleExpanded}
                                 >
                                   <div className="min-w-0 flex flex-1 items-center gap-2 text-left">
@@ -2593,7 +2608,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                       </span>
                                     ) : (
                                       <>
-                                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                                        <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-300">
                                           EX:
                                         </span>
                                         <span
@@ -2602,11 +2617,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                         >
                                           {eIdx + 1}
                                         </span>
-                                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                                        <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-300">
                                           —
                                         </span>
                                         <span
-                                          className="min-w-0 truncate text-sm font-bold text-[#14181F]"
+                                          className="min-w-0 truncate text-sm font-bold text-[#14181F] dark:text-foreground"
                                           title={exampleTitle}
                                         >
                                           {exampleTitle}
@@ -2625,7 +2640,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                         void removeExample(mIdx, eIdx);
                                       }}
                                       disabled={isDeletingVideo}
-                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive disabled:opacity-50"
+                                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive dark:hover:bg-red-500/20 disabled:opacity-50"
                                       aria-label={`Remover exemplo ${eIdx + 1}`}
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -2642,7 +2657,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                           : "grid gap-4"
                                       }
                                     >
-                                      <div className="border-l-2 border-[#CBD5E1] pl-4">
+                                      <div className="border-l-2 border-[#CBD5E1] pl-4 dark:border-slate-600">
                                         <div className="grid gap-3">
                                           <div>
                                             <ExampleLanguageLabel
@@ -2663,7 +2678,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                               placeholder={`Exemplo ${
                                                 eIdx + 1
                                               } em inglês`}
-                                              className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                              className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-foreground"
                                             />
                                           </div>
 
@@ -2684,7 +2699,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                                 )
                                               }
                                               placeholder="Tradução em português"
-                                              className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                              className="w-full rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-[#758195] transition-all placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-foreground"
                                             />
                                           </div>
                                         </div>
@@ -2831,7 +2846,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         </div>
                       </div>
 
-                      <div className="border-t border-[#E2E8F0] pt-4">
+                      <div className="border-t border-[#E2E8F0] pt-4 dark:border-border">
                         <label className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">
                           <Lightbulb className="h-3.5 w-3.5 text-[#ED9A0A]" />
                           Modo de uso
@@ -2844,7 +2859,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             updateMeaning(mIdx, "tip", e.target.value)
                           }
                           placeholder="Explique como esse significado é usado no contexto"
-                          className="w-full border-0 border-b border-[#D8E1EC] bg-transparent px-0 pb-1 text-xs italic text-[#6A7181] placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-0"
+                          className="w-full border-0 border-b border-[#D8E1EC] bg-transparent px-0 pb-1 text-xs italic text-[#6A7181] placeholder:text-muted-foreground/70 focus:border-primary/40 focus:outline-none focus:ring-0 dark:border-slate-600 dark:text-slate-300 dark:placeholder:text-slate-400/70"
                         />
                       </div>
                     </div>
@@ -2855,7 +2870,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </div>
         </div>
 
-        <div className="space-y-2.5 rounded-xl border border-[#DCE4EE] bg-[#F8FAFC] p-3 md:space-y-3 md:rounded-2xl md:p-3.5">
+        <div className="space-y-2.5 rounded-xl border border-[#DCE4EE] bg-[#F8FAFC] p-3 md:space-y-3 md:rounded-2xl md:p-3.5 dark:border-border dark:bg-card">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-foreground">

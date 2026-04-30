@@ -10,7 +10,7 @@ export default function ModeSelector({ mode, setMode, variant = "default" }) {
   if (isQuiz) {
     return (
       <div className="h-[34px] w-[269px] min-w-[269px] shrink-0 md:h-[42px]">
-        <div className="flex h-full items-center rounded-full border border-border bg-white p-[3px] shadow-sm md:p-1">
+        <div className="flex h-full items-center rounded-full border border-border bg-card p-[3px] shadow-sm md:p-1">
           {modes.map((item) => (
             <button
               key={item.key}

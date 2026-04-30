@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Check, Volume2, VolumeX } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ExamplesPanel from "../components/ExamplesPanel";
@@ -15,6 +16,13 @@ import {
   getSoundState,
   saveSoundState,
 } from "../lib/gameState";
+import {
+  REVIEW_FOCUS,
+  getStudyQueue,
+  loadReviewPreferences,
+  normalizeVocabularyItem,
+  updateStatsAfterReview,
+} from "../lib/learningEngine";
 
 const PAIRS_PER_ROUND = 5;
 const CHECK_SYMBOL = "\u2713";
@@ -34,23 +42,8 @@ function shuffleArray(arr) {
   return a;
 }
 
-function mapVocabularyRow(row) {
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    term: row.term || "",
-    pronunciation: row.pronunciation || "",
-    meanings: Array.isArray(row.meanings) ? row.meanings : [],
-    stats: row.stats || {
-      correct: 0,
-      incorrect: 0,
-      total_reviews: 0,
-      avg_response_time: 0,
-      status: "nova",
-    },
-    createdAt: row.created_at || null,
-    updatedAt: row.updated_at || null,
-  };
+function mapVocabularyRow(row, preferences) {
+  return normalizeVocabularyItem(row, preferences);
 }
 
 function buildPool(vocab) {
@@ -157,6 +150,7 @@ function shuffleRightItemsAvoidingAlignedPairs(leftItems, rightCandidates) {
 
 export default function Combinations() {
   const { user } = useAuth();
+  const location = useLocation();
 
   const [allVocab, setAllVocab] = useState([]);
   const [pool, setPool] = useState([]);
@@ -191,9 +185,23 @@ export default function Combinations() {
     at: 0,
   });
   const examplesPanelRef = useRef(null);
+  const latestVocabRef = useRef([]);
+  const pendingReviewUpdatesRef = useRef(new Map());
+
+  useEffect(() => {
+    latestVocabRef.current = allVocab;
+  }, [allVocab]);
+
+  useEffect(() => {
+    return () => {
+      pendingReviewUpdatesRef.current.clear();
+    };
+  }, []);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
+    const reviewPreferences = loadReviewPreferences();
+    const focus = new URLSearchParams(location.search).get("focus");
 
     const { data, error } = await supabase
       .from("vocabulary")
@@ -205,7 +213,16 @@ export default function Combinations() {
       throw error;
     }
 
-    return Array.isArray(data) ? data.map(mapVocabularyRow) : [];
+    const normalizedItems = Array.isArray(data)
+      ? data.map((row) => mapVocabularyRow(row, reviewPreferences))
+      : [];
+
+    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    if (prioritized.length >= 2 || normalizedItems.length < 2) {
+      return prioritized;
+    }
+
+    return getStudyQueue(normalizedItems, reviewPreferences, REVIEW_FOCUS.ALL).items;
   };
 
   useEffect(() => {
@@ -240,7 +257,7 @@ export default function Combinations() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id]);
+  }, [user?.id, location.search]);
 
   useEffect(() => {
     if (pool.length === 0) return;
@@ -344,6 +361,88 @@ export default function Combinations() {
     return false;
   };
 
+  const mergeUpdatedStatsLocally = (vocabId, updatedStats, now) => {
+    if (!vocabId) return;
+
+    setAllVocab((previous) => {
+      const nextItems = previous.map((item) =>
+        item.id === vocabId
+          ? {
+              ...item,
+              stats: updatedStats,
+              updatedAt: now,
+            }
+          : item
+      );
+      latestVocabRef.current = nextItems;
+      return nextItems;
+    });
+  };
+
+  const enqueueReviewUpdate = (vocabId, result) => {
+    if (!vocabId || !user?.id) return;
+
+    const runUpdate = async () => {
+      const currentItem = latestVocabRef.current.find((item) => item.id === vocabId);
+      if (!currentItem) return;
+
+      const now = new Date().toISOString();
+      const reviewPreferences = loadReviewPreferences();
+      const updatedStats = updateStatsAfterReview(currentItem, result, {
+        reviewedAt: now,
+        mode: "combinations",
+        preferences: reviewPreferences,
+      });
+
+      mergeUpdatedStatsLocally(vocabId, updatedStats, now);
+
+      const { error } = await supabase
+        .from("vocabulary")
+        .update({
+          stats: updatedStats,
+          updated_at: now,
+        })
+        .eq("id", vocabId)
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw error;
+      }
+    };
+
+    const pendingQueue = pendingReviewUpdatesRef.current;
+    const previousTask = pendingQueue.get(vocabId) || Promise.resolve();
+    const nextTask = previousTask
+      .catch(() => {})
+      .then(runUpdate)
+      .catch((error) => {
+        console.error("Erro ao salvar stats em Combinacoes:", error);
+      })
+      .finally(() => {
+        if (pendingQueue.get(vocabId) === nextTask) {
+          pendingQueue.delete(vocabId);
+        }
+      });
+
+    pendingQueue.set(vocabId, nextTask);
+  };
+
+  const persistMatchReview = (leftItem, rightItem, isCorrect) => {
+    if (!leftItem || !rightItem || !user?.id) return;
+
+    const impactedVocabIds = isCorrect
+      ? [leftItem.vocabId]
+      : Array.from(
+          new Set(
+            [leftItem.vocabId, rightItem.vocabId].filter((value) => value != null)
+          )
+        );
+
+    impactedVocabIds.forEach((vocabId) => {
+      enqueueReviewUpdate(vocabId, isCorrect);
+    });
+  };
+
   const handleLeftClick = (idx, event) => {
     if (matched.has(`l${idx}`) || roundComplete) return;
 
@@ -403,6 +502,9 @@ export default function Combinations() {
   };
 
   const tryMatch = (leftIdx, rightIdx) => {
+    const left = leftItems[leftIdx];
+    const right = rightItems[rightIdx];
+
     if (checkMatch(leftIdx, rightIdx)) {
       if (!shouldSkipRepeatedMatchResultSfx("success", leftIdx, rightIdx)) {
         playSound(SFX_EVENTS.MATCH_SUCCESS);
@@ -419,6 +521,7 @@ export default function Combinations() {
       setMatched(newMatched);
       setSelectedLeft(null);
       setSelectedRight(null);
+      persistMatchReview(left, right, true);
 
       if (newMatched.size / 2 >= roundPairs.length) {
         setRoundComplete(true);
@@ -437,9 +540,7 @@ export default function Combinations() {
       setTimeout(() => setXpFeedback(null), 1000);
       setErrors((e) => e + 1);
       setErrorPair({ left: leftIdx, right: rightIdx });
-
-      const left = leftItems[leftIdx];
-      const right = rightItems[rightIdx];
+      persistMatchReview(left, right, false);
 
       if (left) {
         const keyL = `${left.vocabId}_${left.meaningIdx}`;
@@ -642,17 +743,17 @@ export default function Combinations() {
             const isError = errorPair?.left === idx;
 
             let cls =
-              "bg-white border border-[#D6DCE4] text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30";
+              "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:hover:border-sky-500/70 dark:hover:bg-sky-500/15";
 
             if (isMatched)
               cls =
-                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)]";
+                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)] dark:bg-emerald-500/20 dark:border-emerald-400/70 dark:text-emerald-300 dark:shadow-[0_2px_0_rgba(6,78,59,0.5)]";
             else if (isError)
               cls =
-                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)]";
+                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)] dark:bg-red-500/20 dark:border-red-400/70 dark:text-red-300 dark:shadow-[0_2px_0_rgba(127,29,29,0.55)]";
             else if (isSelected)
               cls =
-                "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)]";
+                "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)] dark:bg-sky-500/20 dark:border-sky-400/70 dark:text-sky-300 dark:shadow-[0_2px_0_rgba(7,89,133,0.55)]";
 
             return (
               <button
@@ -676,17 +777,17 @@ export default function Combinations() {
             const isError = errorPair?.right === idx;
 
             let cls =
-              "bg-white border border-[#D6DCE4] text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30";
+              "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:hover:border-sky-500/70 dark:hover:bg-sky-500/15";
 
             if (isMatched)
               cls =
-                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)]";
+                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)] dark:bg-emerald-500/20 dark:border-emerald-400/70 dark:text-emerald-300 dark:shadow-[0_2px_0_rgba(6,78,59,0.5)]";
             else if (isError)
               cls =
-                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)]";
+                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)] dark:bg-red-500/20 dark:border-red-400/70 dark:text-red-300 dark:shadow-[0_2px_0_rgba(127,29,29,0.55)]";
             else if (isSelected)
               cls =
-                "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)]";
+                "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)] dark:bg-sky-500/20 dark:border-sky-400/70 dark:text-sky-300 dark:shadow-[0_2px_0_rgba(7,89,133,0.55)]";
 
             return (
               <button

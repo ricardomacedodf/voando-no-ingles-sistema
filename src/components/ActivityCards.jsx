@@ -34,7 +34,7 @@ export default function ActivityCards() {
           const Icon = item.icon;
           return (
             <Link key={item.path} to={item.path} className="group block touch-manipulation">
-              <div className="flex h-full flex-col rounded-xl border border-border bg-white p-6 shadow-sm transition-colors duration-200 md:transition-all md:hover:border-primary md:hover:shadow-md">
+              <div className="flex h-full flex-col rounded-xl border border-border bg-card p-6 shadow-sm transition-colors duration-200 md:transition-all md:hover:border-primary md:hover:shadow-md">
                 <div
                   className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl ${item.color} text-white transition-transform duration-200 md:group-hover:scale-110`}
                 >

@@ -40,7 +40,7 @@ export default function StatsGrid({ stats }) {
         return (
           <div
             key={item.label}
-            className="flex items-center gap-4 rounded-xl border border-border/50 bg-white p-5 shadow-sm"
+            className="flex items-center gap-4 rounded-xl border border-border/50 bg-card p-5 shadow-sm"
           >
             <div
               className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${item.bgColor} ${item.iconColor}`}

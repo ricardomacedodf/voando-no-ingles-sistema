@@ -18,6 +18,7 @@ import Quiz from "./pages/Quiz";
 import Combinations from "./pages/Combinations";
 import Manager from "./pages/Manager";
 import Progress from "./pages/Progress";
+import { ThemeProvider } from "./contexts/ThemeContext";
 
 const PUBLIC_HOME_PATH = "/site";
 
@@ -140,15 +141,15 @@ const LoginRequiredScreen = () => {
     : "Cadastrar";
 
   return (
-    <div className="app-mobile-safe-shell min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div className="app-mobile-safe-shell min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 dark:from-[#0C1014] dark:to-[#11171f]">
       <div className="w-full max-w-md">
-        <div className="text-card-foreground relative overflow-hidden border-0 shadow-2xl bg-white/95 backdrop-blur-sm rounded-2xl">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200"></div>
+        <div className="text-card-foreground relative overflow-hidden border border-border/70 shadow-2xl bg-white/95 backdrop-blur-sm rounded-2xl dark:bg-card/95">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-slate-200 via-slate-300 to-slate-200 dark:from-white/15 dark:via-white/25 dark:to-white/15"></div>
 
           <div className="p-8 sm:p-10 md:pt-12 md:pb-10 md:px-10">
             <div className="flex flex-col items-center text-center space-y-6 sm:space-y-8">
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 rounded-full blur-xl opacity-30 transition-opacity duration-300"></div>
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 rounded-full blur-xl opacity-30 transition-opacity duration-300 dark:from-white/15 dark:to-white/5"></div>
 
                 <span className="flex shrink-0 overflow-hidden rounded-full relative h-20 w-20 sm:h-24 sm:w-24 shadow-lg ring-4 ring-white/50 bg-[#176f57]">
                   <img
@@ -160,10 +161,10 @@ const LoginRequiredScreen = () => {
               </div>
 
               <div className="space-y-2 sm:space-y-3">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight dark:text-foreground">
                   {titleText}
                 </h1>
-                <p className="text-slate-500 text-sm sm:text-base font-medium">
+                <p className="text-slate-500 text-sm sm:text-base font-medium dark:text-muted-foreground">
                   {subtitleText}
                 </p>
               </div>
@@ -175,7 +176,7 @@ const LoginRequiredScreen = () => {
                       <button
                         type="button"
                         onClick={navigateToLogin}
-                        className="w-full flex items-center justify-center gap-3 bg-white text-slate-700 px-5 py-3.5 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm transition-all duration-200 font-medium text-[16px]"
+                        className="w-full flex items-center justify-center gap-3 bg-white text-slate-700 px-5 py-3.5 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm transition-all duration-200 font-medium text-[16px] dark:bg-card dark:border-border dark:text-foreground dark:hover:bg-muted"
                       >
                         <svg
                           className="h-5 w-5"
@@ -205,10 +206,10 @@ const LoginRequiredScreen = () => {
 
                     <div className="relative my-6">
                       <div className="absolute inset-0 flex items-center">
-                        <div className="shrink-0 h-[1px] w-full bg-slate-200"></div>
+                        <div className="shrink-0 h-[1px] w-full bg-slate-200 dark:bg-border"></div>
                       </div>
                       <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-white px-3 text-slate-400 font-medium tracking-wider">
+                        <span className="bg-white px-3 text-slate-400 font-medium tracking-wider dark:bg-card dark:text-muted-foreground">
                           ou
                         </span>
                       </div>
@@ -220,7 +221,7 @@ const LoginRequiredScreen = () => {
                   <div className="space-y-3 sm:space-y-4">
                     <div className="space-y-1.5">
                       <label
-                        className="text-sm font-medium text-slate-700"
+                        className="text-sm font-medium text-slate-700 dark:text-foreground"
                         htmlFor="email"
                       >
                         E-mail
@@ -235,7 +236,7 @@ const LoginRequiredScreen = () => {
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                          className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-muted-foreground"
                           aria-hidden="true"
                         >
                           <rect width="20" height="16" x="2" y="4" rx="2"></rect>
@@ -249,14 +250,14 @@ const LoginRequiredScreen = () => {
                           onChange={(event) => setEmail(event.target.value)}
                           placeholder="voce@exemplo.com"
                           autoComplete="email"
-                          className="flex w-full border px-3 py-2 text-base md:text-sm pl-10 h-11 sm:h-12 bg-slate-50/50 border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-400 focus:outline-none rounded-xl placeholder:text-slate-400"
+                          className="flex w-full border px-3 py-2 text-base md:text-sm pl-10 h-11 sm:h-12 bg-slate-50/50 border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-400 focus:outline-none rounded-xl placeholder:text-slate-400 dark:bg-card dark:border-border dark:text-foreground dark:focus:border-primary dark:focus:ring-primary/30 dark:placeholder:text-muted-foreground"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-1.5">
                       <label
-                        className="text-sm font-medium text-slate-700"
+                        className="text-sm font-medium text-slate-700 dark:text-foreground"
                         htmlFor="password"
                       >
                         Senha
@@ -271,7 +272,7 @@ const LoginRequiredScreen = () => {
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                          className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-muted-foreground"
                           aria-hidden="true"
                         >
                           <rect
@@ -294,7 +295,7 @@ const LoginRequiredScreen = () => {
                           autoComplete={
                             mode === "signin" ? "current-password" : "new-password"
                           }
-                          className="flex w-full border px-3 py-2 text-base md:text-sm pl-10 h-11 sm:h-12 bg-slate-50/50 border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-400 focus:outline-none rounded-xl placeholder:text-slate-400"
+                          className="flex w-full border px-3 py-2 text-base md:text-sm pl-10 h-11 sm:h-12 bg-slate-50/50 border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-400 focus:outline-none rounded-xl placeholder:text-slate-400 dark:bg-card dark:border-border dark:text-foreground dark:focus:border-primary dark:focus:ring-primary/30 dark:placeholder:text-muted-foreground"
                         />
                       </div>
                     </div>
@@ -316,7 +317,7 @@ const LoginRequiredScreen = () => {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="inline-flex items-center justify-center whitespace-nowrap w-full h-11 sm:h-12 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-sm rounded-xl transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="inline-flex items-center justify-center whitespace-nowrap w-full h-11 sm:h-12 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-sm rounded-xl transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-primary dark:hover:bg-primary/90"
                     >
                       {submitButtonText}
                     </button>
@@ -327,7 +328,7 @@ const LoginRequiredScreen = () => {
                           <button
                             type="button"
                             onClick={handleForgotPassword}
-                            className="text-xs sm:text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors"
+                            className="text-xs sm:text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors dark:text-muted-foreground dark:hover:text-foreground"
                           >
                             Esqueceu sua senha?
                           </button>
@@ -335,7 +336,7 @@ const LoginRequiredScreen = () => {
                           <button
                             type="button"
                             onClick={toggleMode}
-                            className="text-xs sm:text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors"
+                            className="text-xs sm:text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors dark:text-muted-foreground dark:hover:text-foreground"
                           >
                             Cadastre-se
                           </button>
@@ -344,7 +345,7 @@ const LoginRequiredScreen = () => {
                         <button
                           type="button"
                           onClick={toggleMode}
-                          className="w-full inline-flex items-center justify-center gap-2 text-xs sm:text-sm text-slate-500 hover:text-slate-700 transition-colors text-center"
+                          className="w-full inline-flex items-center justify-center gap-2 text-xs sm:text-sm text-slate-500 hover:text-slate-700 transition-colors text-center dark:text-muted-foreground dark:hover:text-foreground"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -361,7 +362,7 @@ const LoginRequiredScreen = () => {
                           </svg>
                           <span>
                             Já tem uma conta?{" "}
-                            <span className="font-medium text-slate-700">Entrar</span>
+                            <span className="font-medium text-slate-700 dark:text-foreground">Entrar</span>
                           </span>
                         </button>
                       )}
@@ -373,7 +374,7 @@ const LoginRequiredScreen = () => {
           </div>
         </div>
 
-        <div className="mt-8 text-center text-xs text-slate-400 sm:hidden">
+        <div className="mt-8 text-center text-xs text-slate-400 sm:hidden dark:text-muted-foreground">
           <p>&nbsp;</p>
         </div>
       </div>
@@ -542,7 +543,7 @@ const AuthenticatedApp = () => {
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin dark:border-border dark:border-t-foreground"></div>
       </div>
     );
   }
@@ -578,14 +579,16 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

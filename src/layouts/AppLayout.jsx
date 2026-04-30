@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../contexts/AuthContext";
+import ThemeToggle from "../components/ThemeToggle";
 
 const mobilePrimaryNavItems = [
   { label: "In\u00EDcio", path: "/", icon: Home },
@@ -76,7 +77,7 @@ export default function AppLayout() {
 
   return (
     <div className="app-mobile-safe-shell min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-50 hidden border-r border-border bg-white md:bottom-0 md:top-[env(safe-area-inset-top,0px)] md:flex md:w-[255px] md:min-w-[255px] md:max-w-[255px] lg:top-0">
+      <aside className="fixed inset-y-0 left-0 z-50 hidden border-r border-border bg-card md:bottom-0 md:top-[env(safe-area-inset-top,0px)] md:flex md:w-[255px] md:min-w-[255px] md:max-w-[255px] lg:top-0">
         <Sidebar />
       </aside>
 
@@ -88,7 +89,7 @@ export default function AppLayout() {
       )}
 
       <aside
-        className={`app-mobile-safe-slide-panel fixed inset-y-0 right-0 z-50 w-[86vw] max-w-[320px] transform border-l border-border bg-white transition-transform duration-300 ease-out md:hidden ${
+        className={`app-mobile-safe-slide-panel fixed inset-y-0 right-0 z-50 w-[86vw] max-w-[320px] transform border-l border-border bg-card transition-transform duration-300 ease-out md:hidden ${
           isPersonalizeOpen ? "translate-x-0" : "translate-x-full"
         }`}
         aria-hidden={!isPersonalizeOpen}
@@ -106,7 +107,7 @@ export default function AppLayout() {
 
             <div className="rounded-lg border border-border bg-muted/30 p-3 pr-12">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-muted-foreground">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-card text-muted-foreground">
                   {avatarUrl && !avatarError ? (
                     <img
                       src={avatarUrl}
@@ -131,14 +132,16 @@ export default function AppLayout() {
               </div>
             </div>
 
+            <ThemeToggle align="start" className="mt-3" />
+
             {user ? (
               <button
                 type="button"
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2.5 text-sm font-semibold text-[#334155] transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <LogOut className="h-4 w-4 text-[#334155]" />
+                <LogOut className="h-4 w-4 text-foreground" />
                 {isLoggingOut ? "Saindo..." : "Sair"}
               </button>
             ) : null}
@@ -184,7 +187,7 @@ export default function AppLayout() {
         </main>
       </div>
 
-      <nav className="app-mobile-safe-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 shadow-[0_-6px_16px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
+      <nav className="app-mobile-safe-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 shadow-[0_-6px_16px_rgba(15,23,42,0.08)] backdrop-blur md:hidden">
         <div className="grid grid-cols-5">
           {mobilePrimaryNavItems.map((item) => {
             const Icon = item.icon;

@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
+import { useTheme } from "../contexts/ThemeContext";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
 import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
@@ -62,6 +63,45 @@ const FLASHCARD_MOBILE_MEANING_PALETTE = [
     tipBackground: "#F4F0FD",
     tipBorder: "#E7DDF9",
     underline: "#7A55C3",
+  },
+];
+
+const FLASHCARD_MOBILE_MEANING_PALETTE_DARK = [
+  {
+    border: "#2B4A38",
+    background: "#16231D",
+    accent: "#52D38A",
+    bullet: "#4AC67F",
+    tipBackground: "#142920",
+    tipBorder: "#2F5945",
+    underline: "#52D38A",
+  },
+  {
+    border: "#2D4460",
+    background: "#162231",
+    accent: "#67B2FF",
+    bullet: "#5EA9F9",
+    tipBackground: "#15283A",
+    tipBorder: "#33597F",
+    underline: "#67B2FF",
+  },
+  {
+    border: "#5A4326",
+    background: "#271F16",
+    accent: "#F3B05A",
+    bullet: "#E9A34B",
+    tipBackground: "#2A231A",
+    tipBorder: "#6F5638",
+    underline: "#F3B05A",
+  },
+  {
+    border: "#4C3A67",
+    background: "#20192C",
+    accent: "#C59CFF",
+    bullet: "#B98FFF",
+    tipBackground: "#241E31",
+    tipBorder: "#5A4779",
+    underline: "#C59CFF",
   },
 ];
 
@@ -413,10 +453,8 @@ const hasMeaningOrExampleVideo = (meanings) => {
   });
 };
 
-const getMeaningPaletteByIndex = (index) =>
-  FLASHCARD_MOBILE_MEANING_PALETTE[
-    index % FLASHCARD_MOBILE_MEANING_PALETTE.length
-  ];
+const getMeaningPaletteByIndex = (index, palette) =>
+  palette[index % palette.length];
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -1040,12 +1078,14 @@ function ExampleVideoThumbnail({
         "group relative w-full touch-pan-y overflow-hidden rounded-lg border",
         shouldUseDirectEmbed ? "" : "cursor-pointer",
         className,
-        isOpen ? "border-[#ED9A0A]/80" : "border-[#D9E2EC]",
-        "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)]",
+        isOpen
+          ? "border-[#ED9A0A]/80 dark:border-[#ED9A0A]/70"
+          : "border-[#D9E2EC] dark:border-border",
+        "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)] dark:bg-muted/40 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_18px_rgba(2,6,23,0.45)]",
         "transition-all duration-200",
         shouldUseDirectEmbed
           ? ""
-          : "hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)]",
+          : "hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)] dark:hover:shadow-[0_12px_24px_rgba(2,6,23,0.55)]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
       ].join(" ")}
     >
@@ -1321,13 +1361,17 @@ export default function ExamplesPanel({
   const isFlashcard = variant === "flashcard";
   const isFlashcardMobileLayout =
     isFlashcard && isMobile && panelScope === "flashcards";
+  const { isDark: isDarkTheme } = useTheme();
+  const meaningPaletteCollection = isDarkTheme
+    ? FLASHCARD_MOBILE_MEANING_PALETTE_DARK
+    : FLASHCARD_MOBILE_MEANING_PALETTE;
   const titleValue = titleTerm ? titleTerm.trim() : "Exemplos";
   const highlightTerm = titleTerm ? titleTerm.trim() : "";
   const panelContainerClass = isFlashcard
     ? isFlashcardMobileLayout
-      ? "mt-0 bg-transparent p-0 text-[#1A1A1A]"
-      : "mt-0 rounded-xl border border-[#EDF0F3] bg-white p-6 text-[#1A1A1A]"
-    : "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] p-5 animate-in fade-in slide-in-from-top-2 duration-200";
+      ? "mt-0 bg-transparent p-0 text-foreground"
+      : "mt-0 rounded-xl border border-[#EDF0F3] bg-white p-6 text-[#1A1A1A] dark:border-border dark:bg-card dark:text-foreground"
+    : "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] p-5 animate-in fade-in slide-in-from-top-2 duration-200 dark:bg-card";
   const panelHeaderClass = isFlashcard
     ? isFlashcardMobileLayout
       ? "mb-3 flex items-center justify-between border-b border-border pb-2.5"
@@ -1442,13 +1486,13 @@ export default function ExamplesPanel({
               nextIndex: currentIndex - 1,
             });
           }}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00] dark:border-border dark:bg-card dark:text-slate-300 dark:hover:bg-[#ED9A0A]/20 dark:hover:text-[#F4BA53]"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
           Voltar
         </button>
 
-        <span className="text-[11px] font-semibold text-[#64748B]">
+        <span className="text-[11px] font-semibold text-[#64748B] dark:text-slate-300">
           {currentIndex + 1}/{videos.length}
         </span>
 
@@ -1463,7 +1507,7 @@ export default function ExamplesPanel({
               nextIndex: currentIndex + 1,
             });
           }}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00]"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00] dark:border-border dark:bg-card dark:text-slate-300 dark:hover:bg-[#ED9A0A]/20 dark:hover:text-[#F4BA53]"
         >
           {"Pr\u00f3ximo"}
           <ChevronRight className="h-3.5 w-3.5" />
@@ -1730,10 +1774,10 @@ export default function ExamplesPanel({
             />
 
             <h3 className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 leading-snug">
-              <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+              <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-400">
                 —
               </span>
-              <span className="min-w-0 break-words text-base font-bold leading-snug text-[#14181F]">
+              <span className="min-w-0 break-words text-base font-bold leading-snug text-[#14181F] dark:text-foreground">
                 {titleValue}
               </span>
             </h3>
@@ -1774,7 +1818,10 @@ export default function ExamplesPanel({
           {sorted.map((entry, index) => {
             const visibleExamples = entry.examples.slice(0, 3);
             const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
-            const meaningPalette = getMeaningPaletteByIndex(index);
+            const meaningPalette = getMeaningPaletteByIndex(
+              index,
+              meaningPaletteCollection
+            );
             const hasMeaningVideo =
               shouldShowSpecificVideosInsideMeanings &&
               Array.isArray(entry.topVideos) &&
@@ -1794,9 +1841,17 @@ export default function ExamplesPanel({
                   key={`${entry.meaning}-${index}`}
                   className={
                     isFlashcardMobileLayout
-                      ? "relative rounded-2xl border border-[var(--meaning-border)] p-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
+                      ? [
+                          "relative rounded-2xl border border-[var(--meaning-border)] p-3.5",
+                          isDarkTheme
+                            ? "shadow-[0_10px_24px_rgba(2,6,23,0.38)]"
+                            : "shadow-[0_8px_20px_rgba(15,23,42,0.035)]",
+                        ].join(" ")
                       : [
-                          "group/meaning rounded-xl border border-[var(--meaning-border)] px-4 py-3 shadow-[0_10px_26px_rgba(15,23,42,0.05)]",
+                          "group/meaning rounded-xl border border-[var(--meaning-border)] px-4 py-3",
+                          isDarkTheme
+                            ? "shadow-[0_12px_26px_rgba(2,6,23,0.4)]"
+                            : "shadow-[0_10px_26px_rgba(15,23,42,0.05)]",
                           shouldUseMeaningCollapse
                             ? [
                                 "cursor-pointer",
@@ -1851,12 +1906,12 @@ export default function ExamplesPanel({
                         <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1">
                             <BrFlagIcon className="h-[clamp(16px,4.4vw,18px)] w-[clamp(16px,4.4vw,18px)]" />
-                            <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                            <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-400">
                               —
                             </span>
                           </span>
 
-                          <span className="font-bold text-[#181818]">
+                          <span className="font-bold text-[#181818] dark:text-foreground">
                             {entry.meaning}
                           </span>
 
@@ -1911,12 +1966,12 @@ export default function ExamplesPanel({
                     >
                       <span className="inline-flex items-center gap-1">
                         <BrFlagIcon className="h-[clamp(16px,4.4vw,18px)] w-[clamp(16px,4.4vw,18px)]" />
-                        <span className="shrink-0 text-sm font-normal text-[#6A7181]">
+                        <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-400">
                           —
                         </span>
                       </span>
 
-                      <span className="font-bold text-[#181818]">
+                      <span className="font-bold text-[#181818] dark:text-foreground">
                         {entry.meaning}
                       </span>
 
@@ -1982,8 +2037,8 @@ export default function ExamplesPanel({
                                       <p
                                         className={
                                           isFlashcardMobileLayout
-                                            ? "text-sm font-medium leading-snug text-[#5D6677]"
-                                            : "text-xs font-medium leading-snug text-[#5D6677]"
+                                            ? "text-sm font-medium leading-snug text-[#5D6677] dark:text-slate-200"
+                                            : "text-xs font-medium leading-snug text-[#5D6677] dark:text-slate-200"
                                         }
                                       >
                                         {example.translation}
@@ -1994,8 +2049,8 @@ export default function ExamplesPanel({
                                       <p
                                         className={
                                           isFlashcardMobileLayout
-                                            ? "text-[15px] font-semibold leading-snug text-[#101827]"
-                                            : "text-sm font-semibold leading-snug text-[#101827]"
+                                            ? "text-[15px] font-semibold leading-snug text-[#101827] dark:text-foreground"
+                                            : "text-sm font-semibold leading-snug text-[#101827] dark:text-foreground"
                                         }
                                       >
                                         {renderHighlightedTerm(
@@ -2042,7 +2097,7 @@ export default function ExamplesPanel({
                         style={{ color: meaningPalette.accent }}
                       />
                       <span
-                        className="min-w-0 text-xs italic leading-relaxed text-[#5E6778]"
+                        className="min-w-0 text-xs italic leading-relaxed text-[#5E6778] dark:text-slate-200"
                       >
                         {entry.tip}
                       </span>
@@ -2091,7 +2146,7 @@ export default function ExamplesPanel({
                     event.stopPropagation();
                     goMobileVideoToIndex(mobileVideo.index - 1);
                   }}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm dark:border-border dark:bg-card dark:text-foreground"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   Voltar
@@ -2108,7 +2163,7 @@ export default function ExamplesPanel({
                     event.stopPropagation();
                     goMobileVideoToIndex(mobileVideo.index + 1);
                   }}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/20 bg-white px-3 py-1.5 text-xs font-bold text-[#14181F] shadow-sm dark:border-border dark:bg-card dark:text-foreground"
                 >
                   {"Pr\u00f3ximo"}
                   <ChevronRight className="h-3.5 w-3.5" />

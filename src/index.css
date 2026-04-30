@@ -61,24 +61,24 @@
   }
 
   .dark {
-    --background: 220 20% 7%;
-    --foreground: 210 20% 96%;
-    --card: 220 20% 10%;
-    --card-foreground: 210 20% 96%;
-    --popover: 220 20% 10%;
-    --popover-foreground: 210 20% 96%;
+    --background: 210 25% 6%;
+    --foreground: 210 20% 95%;
+    --card: 212 23% 11%;
+    --card-foreground: 210 20% 95%;
+    --popover: 212 23% 11%;
+    --popover-foreground: 210 20% 95%;
     --primary: 148 62% 42%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 15% 15%;
+    --secondary: 213 22% 16%;
     --secondary-foreground: 210 20% 90%;
-    --muted: 220 15% 15%;
-    --muted-foreground: 220 10% 55%;
-    --accent: 220 15% 15%;
-    --accent-foreground: 210 20% 96%;
+    --muted: 214 20% 15%;
+    --muted-foreground: 215 12% 69%;
+    --accent: 214 20% 16%;
+    --accent-foreground: 210 20% 95%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 15% 18%;
-    --input: 220 15% 18%;
+    --border: 214 20% 23%;
+    --input: 214 20% 23%;
     --ring: 148 62% 42%;
     --chart-1: 148 62% 42%;
     --chart-2: 24 95% 53%;
@@ -86,13 +86,13 @@
     --chart-4: 210 100% 52%;
     --chart-5: 340 82% 52%;
 
-    --sidebar-background: 220 20% 10%;
-    --sidebar-foreground: 210 20% 80%;
+    --sidebar-background: 212 23% 11%;
+    --sidebar-foreground: 210 20% 84%;
     --sidebar-primary: 148 62% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 148 62% 15%;
-    --sidebar-accent-foreground: 148 62% 80%;
-    --sidebar-border: 220 15% 18%;
+    --sidebar-accent: 213 22% 16%;
+    --sidebar-accent-foreground: 210 20% 93%;
+    --sidebar-border: 214 20% 23%;
     --sidebar-ring: 148 62% 42%;
 
     --success: 148 62% 42%;
@@ -101,6 +101,7 @@
     --warning-foreground: 0 0% 100%;
     --info: 210 100% 52%;
     --info-foreground: 0 0% 100%;
+    --mobile-surface-bg: #0c1014;
   }
 }
 
@@ -305,6 +306,13 @@
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
+.dark .flashcard-context-box {
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
+  box-shadow: 0 1px 4px rgba(2, 6, 23, 0.45);
+  color: hsl(var(--card-foreground));
+}
+
 @media (hover: hover) and (pointer: fine) {
   .flip-card:hover .flashcard-context-box {
     border-color: #ffffff;
@@ -314,6 +322,94 @@
 
 .flip-card:active .flashcard-context-box {
   box-shadow: none;
+}
+
+.dark .bg-white {
+  background-color: hsl(var(--card));
+}
+
+.dark .bg-white\/95 {
+  background-color: hsl(var(--card) / 0.95);
+}
+
+.dark .bg-slate-50 {
+  background-color: hsl(var(--background));
+}
+
+.dark .bg-slate-100 {
+  background-color: hsl(var(--muted));
+}
+
+.dark .bg-slate-200 {
+  background-color: hsl(var(--border));
+}
+
+.dark .bg-slate-300 {
+  background-color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: hsl(var(--border));
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  color: hsl(var(--foreground));
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-slate-300 {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .border-\[\#D9E2EC\],
+.dark .border-\[\#DCE4EE\],
+.dark .border-\[\#E2E8F0\],
+.dark .border-\[\#D8E1EC\],
+.dark .border-\[\#EDF0F3\],
+.dark .border-\[\#D6DCE4\],
+.dark .border-\[\#D6DEE8\],
+.dark .border-\[\#D9E1E8\],
+.dark .border-\[\#CBD5E1\] {
+  border-color: hsl(var(--border));
+}
+
+.dark .bg-\[\#F8FAFC\],
+.dark .bg-\[\#F9FAFB\],
+.dark .bg-\[\#F5F7FA\],
+.dark .bg-\[\#EFF4F8\],
+.dark .bg-\[\#E6EDF5\] {
+  background-color: hsl(var(--muted));
+}
+
+.dark .text-\[\#14181F\],
+.dark .text-\[\#181818\],
+.dark .text-\[\#101827\],
+.dark .text-\[\#1A1A1A\],
+.dark .text-\[\#2F3A45\],
+.dark .text-\[\#334155\] {
+  color: hsl(var(--foreground));
+}
+
+.dark .text-\[\#6A7181\],
+.dark .text-\[\#5D6677\],
+.dark .text-\[\#5E6778\],
+.dark .text-\[\#64748B\],
+.dark .text-\[\#475569\],
+.dark .text-\[\#4B5563\],
+.dark .text-\[\#758195\] {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .hover\:bg-\[\#F8FAFC\]:hover,
+.dark .hover\:bg-\[\#F5F7FA\]:hover,
+.dark .hover\:bg-\[\#FFF8ED\]:hover {
+  background-color: hsl(var(--muted));
 }
 
 .flashcard-language-label {
