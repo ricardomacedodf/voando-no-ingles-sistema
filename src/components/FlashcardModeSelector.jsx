@@ -6,8 +6,8 @@ export default function FlashcardModeSelector({ mode, setMode }) {
   ];
 
   return (
-    <div className="h-[42px] w-[269px] min-w-[269px] shrink-0">
-      <div className="flex h-full items-center rounded-full border border-border bg-white p-1 shadow-sm">
+    <div className="h-[34px] w-[269px] min-w-[269px] shrink-0 md:h-[42px]">
+      <div className="flex h-full items-center rounded-full border border-border bg-white p-[3px] shadow-sm md:p-1">
         {modes.map((item) => (
           <button
             key={item.key}
@@ -15,7 +15,7 @@ export default function FlashcardModeSelector({ mode, setMode }) {
             onClick={() => {
               if (item.key !== mode) setMode(item.key);
             }}
-            className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-full px-2 text-sm font-medium leading-5 whitespace-nowrap transition-colors duration-200 ${
+            className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-full px-2 text-xs font-medium leading-4 whitespace-nowrap transition-colors duration-200 md:text-sm md:leading-5 ${
               mode === item.key
                 ? "bg-primary text-white"
                 : "text-muted-foreground hover:bg-muted"

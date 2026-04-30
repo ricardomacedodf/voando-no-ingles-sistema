@@ -755,26 +755,27 @@ export default function Flashcards() {
         </div>
       </div>
 
-      <div className="space-y-2 sm:hidden">
-        <div className="flex items-center gap-3 text-sm font-medium">
-          <span className="text-muted-foreground">{current + 1} de {vocab.length}</span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+      <div className="sm:hidden">
+        <div className="flex items-center gap-2 text-[11px] font-medium">
+          <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+            {current + 1} de {vocab.length}
+          </span>
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full bg-[#25B15F] transition-all duration-300"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="flex items-center gap-1 text-[#25B15F]">
-            <Check className="h-3.5 w-3.5" />
-            Acertei: {card?.stats?.correct || 0}
-          </span>
-          <span className="flex items-center gap-1 text-red-500">
-            <X className="h-3.5 w-3.5" />
-            Errei: {card?.stats?.incorrect || 0}
-          </span>
+          <div className="shrink-0 flex items-center gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-[#25B15F]">
+              <Check className="h-3 w-3" />
+              Acertei: {card?.stats?.correct || 0}
+            </span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-red-500">
+              <X className="h-3 w-3" />
+              Errei: {card?.stats?.incorrect || 0}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -865,6 +866,12 @@ export default function Flashcards() {
                   {back}
                 </p>
               </div>
+              <p
+                aria-hidden="true"
+                className="flashcard-reveal-hint flashcard-reveal-hint-placeholder text-xs text-muted-foreground"
+              >
+                Clique para revelar
+              </p>
             </div>
           </div>
         </div>

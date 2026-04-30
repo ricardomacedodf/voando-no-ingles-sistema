@@ -3,7 +3,6 @@ import { Volume2, VolumeX, ArrowRight, Check } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ModeSelector from "../components/ModeSelector";
-import ProgressBar from "../components/ProgressBar";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
@@ -28,8 +27,13 @@ const CHECK_SYMBOL = "\u2713";
 const CROSS_SYMBOL = "\u2715";
 const QUIZ_POINTER_SFX_GUARD_MS = 700;
 const QUIZ_MOBILE_BREAKPOINT = 767;
-const QUIZ_TEXT_MIN_SIZE_MOBILE = 20;
-const QUIZ_TEXT_MAX_SIZE_MOBILE = 34;
+const QUIZ_TEXT_MIN_SIZE = 22;
+const QUIZ_TEXT_MIN_SIZE_MOBILE = 18;
+const QUIZ_TEXT_MAX_SIZE = 47;
+const QUIZ_TEXT_MAX_SIZE_MOBILE = 40;
+const QUIZ_TEXT_SCALE_DESKTOP = 0.9;
+const QUIZ_TEXT_SCALE_MOBILE = 0.95;
+const QUIZ_SINGLE_LINE_LARGE_REDUCTION_MOBILE = 0.9;
 const STATUS_NOVA = "nova";
 const STATUS_DOMINADA = "dominada";
 const STATUS_DIFICIL = "dificil";
@@ -65,33 +69,65 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function getAdaptiveQuizPreferredSize(content) {
+function getQuizTextScale(isMobileViewport) {
+  return isMobileViewport ? QUIZ_TEXT_SCALE_MOBILE : QUIZ_TEXT_SCALE_DESKTOP;
+}
+
+function getAdaptiveQuizTextStyle(content) {
   const text = typeof content === "string" ? content.trim() : "";
   const length = text.length;
   const words = text ? text.split(/\s+/).length : 1;
+  const isMobileViewport =
+    typeof window !== "undefined" &&
+    window.innerWidth <= QUIZ_MOBILE_BREAKPOINT;
+  const scale = getQuizTextScale(isMobileViewport);
+  const baseMinFontSize = isMobileViewport
+    ? QUIZ_TEXT_MIN_SIZE_MOBILE
+    : QUIZ_TEXT_MIN_SIZE;
+  const baseMaxFontSize = isMobileViewport
+    ? QUIZ_TEXT_MAX_SIZE_MOBILE
+    : QUIZ_TEXT_MAX_SIZE;
+  const minFontSize = Math.round(baseMinFontSize * scale);
+  const maxFontSize = Math.round(baseMaxFontSize * scale);
   const longestWord = text
     ? text.split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0)
     : 0;
 
-  let size = QUIZ_TEXT_MAX_SIZE_MOBILE;
+  let size = maxFontSize;
 
-  if (length > 12) size -= 1;
-  if (length > 20) size -= 2;
-  if (length > 30) size -= 2;
-  if (length > 42) size -= 2;
-  if (length > 56) size -= 3;
+  if (length > 10) size -= 2;
+  if (length > 18) size -= 2;
+  if (length > 28) size -= 4;
+  if (length > 38) size -= 4;
+  if (length > 52) size -= 4;
+  if (length > 68) size -= 4;
 
-  if (words >= 5) size -= 1;
+  if (words >= 5) size -= 2;
   if (words >= 8) size -= 2;
-  if (longestWord >= 14) size -= 1;
+  if (longestWord >= 14) size -= 2;
   if (longestWord >= 20) size -= 2;
 
-  return clamp(size, QUIZ_TEXT_MIN_SIZE_MOBILE, QUIZ_TEXT_MAX_SIZE_MOBILE);
+  const fontSize = clamp(size, minFontSize, maxFontSize);
+  const lineHeightMultiplier = getAdaptiveQuizLineHeight(fontSize);
+
+  let maxWidth = isMobileViewport ? "92%" : "95%";
+  if (length > 35) maxWidth = isMobileViewport ? "89%" : "92%";
+  if (length > 55) maxWidth = isMobileViewport ? "86%" : "90%";
+
+  return {
+    fontSize,
+    lineHeight: Math.round(fontSize * lineHeightMultiplier),
+    maxWidth,
+    overflowWrap: longestWord >= 16 ? "anywhere" : "break-word",
+    wordBreak: longestWord >= 16 ? "break-word" : "normal",
+    hyphens: "auto",
+  };
 }
 
 function getAdaptiveQuizLineHeight(fontSize) {
-  if (fontSize >= 32) return 1.14;
-  if (fontSize >= 27) return 1.18;
+  if (fontSize >= 42) return 1.12;
+  if (fontSize >= 34) return 1.16;
+  if (fontSize >= 28) return 1.2;
   return 1.24;
 }
 
@@ -101,17 +137,15 @@ function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
   const isMobile =
     typeof window !== "undefined" &&
     window.innerWidth <= QUIZ_MOBILE_BREAKPOINT;
-
-  if (!isMobile) {
-    textElement.style.removeProperty("font-size");
-    textElement.style.removeProperty("line-height");
-    textElement.style.removeProperty("max-width");
-    textElement.style.removeProperty("transform");
-    textElement.style.removeProperty("overflow-wrap");
-    textElement.style.removeProperty("word-break");
-    textElement.style.removeProperty("hyphens");
-    return;
-  }
+  const scale = getQuizTextScale(isMobile);
+  const baseMinFontSize = isMobile
+    ? QUIZ_TEXT_MIN_SIZE_MOBILE
+    : QUIZ_TEXT_MIN_SIZE;
+  const baseMaxFontSize = isMobile
+    ? QUIZ_TEXT_MAX_SIZE_MOBILE
+    : QUIZ_TEXT_MAX_SIZE;
+  const minFontSize = Math.round(baseMinFontSize * scale);
+  const maxFontSize = Math.round(baseMaxFontSize * scale);
 
   const applySize = (size) => {
     textElement.style.fontSize = `${size}px`;
@@ -120,23 +154,45 @@ function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
     )}px`;
   };
 
-  const minFontSize = QUIZ_TEXT_MIN_SIZE_MOBILE;
   let currentSize = clamp(
     Math.round(preferredFontSize),
-    QUIZ_TEXT_MIN_SIZE_MOBILE,
-    QUIZ_TEXT_MAX_SIZE_MOBILE
+    minFontSize,
+    maxFontSize
   );
-
-  textElement.style.maxWidth = "90%";
-  textElement.style.overflowWrap = "anywhere";
-  textElement.style.wordBreak = "break-word";
-  textElement.style.hyphens = "auto";
   applySize(currentSize);
+
+  const getEstimatedLineCount = () => {
+    if (typeof window === "undefined") return 1;
+    const computedLineHeight = Number.parseFloat(
+      window.getComputedStyle(textElement).lineHeight
+    );
+    if (!computedLineHeight) return 1;
+    return Math.max(1, Math.round(textElement.scrollHeight / computedLineHeight));
+  };
+
+  if (isMobile && currentSize >= Math.round(maxFontSize * 0.82)) {
+    const estimatedLineCount = getEstimatedLineCount();
+    if (estimatedLineCount <= 1) {
+      const reducedSingleLineSize = clamp(
+        Math.round(currentSize * QUIZ_SINGLE_LINE_LARGE_REDUCTION_MOBILE),
+        minFontSize,
+        maxFontSize
+      );
+      if (reducedSingleLineSize < currentSize) {
+        currentSize = reducedSingleLineSize;
+        applySize(currentSize);
+      }
+    }
+  }
 
   let safetyCounter = 0;
   while (safetyCounter < 64 && currentSize > minFontSize) {
-    const targetHeight = Math.floor(slotElement.clientHeight * 0.84);
-    const targetWidth = Math.floor(slotElement.clientWidth * 0.9);
+    const targetHeight = isMobile
+      ? Math.floor(slotElement.clientHeight * 0.82)
+      : slotElement.clientHeight;
+    const targetWidth = isMobile
+      ? Math.floor(slotElement.clientWidth * 0.9)
+      : slotElement.clientWidth;
     const overflowHeight = textElement.scrollHeight > targetHeight;
     const overflowWidth = textElement.scrollWidth > targetWidth;
 
@@ -226,6 +282,29 @@ export default function Quiz() {
   const examplesPanelRef = useRef(null);
   const questionTextRef = useRef(null);
   const questionTextSlotRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return undefined;
+
+    const bodyClass = "quiz-mobile-stable-gutter";
+
+    const syncBodyClass = () => {
+      if (window.innerWidth <= QUIZ_MOBILE_BREAKPOINT) {
+        document.body.classList.add(bodyClass);
+        return;
+      }
+
+      document.body.classList.remove(bodyClass);
+    };
+
+    syncBodyClass();
+    window.addEventListener("resize", syncBodyClass);
+
+    return () => {
+      window.removeEventListener("resize", syncBodyClass);
+      document.body.classList.remove(bodyClass);
+    };
+  }, []);
 
   const fetchVocabulary = async () => {
     if (!user?.id) return [];
@@ -511,7 +590,10 @@ export default function Quiz() {
 
   const card = queue[current];
   const questionText = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
-  const questionTextPreferredSize = getAdaptiveQuizPreferredSize(questionText);
+  const questionTextStyle = getAdaptiveQuizTextStyle(questionText);
+  const questionTextPreferredSize = questionTextStyle.fontSize;
+  const progressCurrent = Math.min(current + 1, QUESTIONS_PER_ROUND);
+  const progressPct = QUESTIONS_PER_ROUND > 0 ? (progressCurrent / QUESTIONS_PER_ROUND) * 100 : 0;
   const letters = ["A", "B", "C", "D", "E"];
 
   useLayoutEffect(() => {
@@ -632,51 +714,80 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <ProgressBar
-          current={Math.min(current + 1, QUESTIONS_PER_ROUND)}
-          total={QUESTIONS_PER_ROUND}
-          variant="quiz"
-        />
-
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex flex-wrap items-center gap-4 text-foreground">
-            <span className="inline-flex items-center gap-1.5">
+      <div className="sm:hidden">
+        <div className="flex items-center gap-2 text-[11px] font-medium">
+          <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+            {progressCurrent} de {QUESTIONS_PER_ROUND}
+          </span>
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="shrink-0 flex items-center gap-2 text-[11px] text-foreground">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
               <span className="text-primary">{CHECK_SYMBOL}</span>
               <span>
                 Acertei: <span className="font-semibold">{roundCorrectCount}</span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
               <span className="text-destructive">{CROSS_SYMBOL}</span>
               <span>
                 Errei: <span className="font-semibold">{roundIncorrectCount}</span>
-                {xpFeedback ? (
-                  <>
-                    {"\u00A0\u00A0"}
-                    <span
-                      className={`font-bold transition-opacity duration-200 ${
-                        xpFeedback?.startsWith("+") ? "text-primary" : "text-destructive"
-                      }`}
-                    >
-                      {xpFeedback}
-                    </span>
-                  </>
-                ) : null}
               </span>
             </span>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto w-full rounded-xl border bg-white p-5 text-center shadow-sm sm:w-full sm:rounded-2xl sm:p-8">
+      <div className="hidden sm:block">
+        <div className="flex items-center gap-3 text-sm font-medium">
+          <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+            {progressCurrent} de {QUESTIONS_PER_ROUND}
+          </span>
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="shrink-0 flex items-center gap-3 text-xs text-foreground">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-primary">{CHECK_SYMBOL}</span>
+              <span>
+                Acertei: <span className="font-semibold">{roundCorrectCount}</span>
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-destructive">{CROSS_SYMBOL}</span>
+              <span>
+                Errei: <span className="font-semibold">{roundIncorrectCount}</span>
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto w-full max-w-[671.2px] rounded-xl border bg-white p-5 text-center shadow-sm sm:rounded-2xl sm:p-8">
         <div
           ref={questionTextSlotRef}
-          className="mx-auto flex min-h-[120px] w-full items-center justify-center md:min-h-[170px]"
+          className="mx-auto flex h-[148px] min-h-[148px] w-full items-center justify-center overflow-hidden px-2 md:h-[132px] md:min-h-[132px]"
         >
           <p
             ref={questionTextRef}
-            className="mx-auto w-full break-words text-center text-[30px] font-bold leading-tight text-foreground [text-wrap:balance] md:text-4xl"
+            className="m-0 mx-auto w-full break-words text-center font-bold leading-tight text-foreground [text-wrap:balance]"
+            style={{
+              fontSize: `${questionTextStyle.fontSize}px`,
+              lineHeight: `${questionTextStyle.lineHeight}px`,
+              maxWidth: questionTextStyle.maxWidth,
+              marginInline: "auto",
+              textWrap: "balance",
+              overflowWrap: questionTextStyle.overflowWrap,
+              wordBreak: questionTextStyle.wordBreak,
+              hyphens: questionTextStyle.hyphens,
+            }}
           >
             {questionText}
           </p>
@@ -685,7 +796,7 @@ export default function Quiz() {
 
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-4">
         {options.map((opt, idx) => {
-          let classes = "border-border text-foreground hover:border-primary";
+          let classes = "border-border text-foreground hover:border-[#93C5FD]";
           const isWrongSelection = answered && idx === selected && !opt.correct;
 
           if (answered) {
@@ -701,7 +812,7 @@ export default function Quiz() {
               onPointerDown={() => handleOptionPointerDown(idx)}
               onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
-              className={`flex h-[62px] w-full items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+              className={`flex h-[clamp(62px,8.8svh,76px)] w-full items-center gap-3 rounded-[13px] border bg-white px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >

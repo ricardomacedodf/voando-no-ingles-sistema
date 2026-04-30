@@ -5,7 +5,6 @@ import { useAuth } from "../contexts/AuthContext";
 import ExamplesPanel from "../components/ExamplesPanel";
 import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import ModeSelector from "../components/ModeSelector";
-import ProgressBar from "../components/ProgressBar";
 import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
 import { SFX_EVENTS } from "../lib/sfx";
 import {
@@ -467,6 +466,7 @@ export default function Combinations() {
 
   const correctMatches = Math.floor(matched.size / 2);
   const progressCurrent = Math.min(correctMatches, PAIRS_PER_ROUND);
+  const progressPct = PAIRS_PER_ROUND > 0 ? (progressCurrent / PAIRS_PER_ROUND) * 100 : 0;
   const roundBalanceText = `${roundXpBalance > 0 ? "+" : ""}${roundXpBalance}XP`;
 
   const focusedCard = allVocab.find((item) => item.id === focusedPair?.vocabId);
@@ -547,54 +547,81 @@ export default function Combinations() {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <ProgressBar current={progressCurrent} total={PAIRS_PER_ROUND} variant="quiz" />
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex flex-wrap items-center gap-4 text-foreground">
-            <span className="inline-flex items-center gap-1.5">
+      <div className="sm:hidden">
+        <div className="flex items-center gap-2 text-[11px] font-medium">
+          <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+            {progressCurrent} de {PAIRS_PER_ROUND}
+          </span>
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="shrink-0 flex items-center gap-2 text-[11px] text-foreground">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
               <span className="text-primary">{CHECK_SYMBOL}</span>
               <span>
                 Acertei: <span className="font-semibold">{correctMatches}</span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
               <span className="text-destructive">{CROSS_SYMBOL}</span>
               <span>
                 Errei: <span className="font-semibold">{errors}</span>
-                {xpFeedback ? (
-                  <>
-                    {"\u00A0\u00A0"}
-                    <span
-                      className={`font-bold transition-opacity duration-200 ${
-                        xpFeedback?.startsWith("+") ? "text-primary" : "text-destructive"
-                      }`}
-                    >
-                      {xpFeedback}
-                    </span>
-                  </>
-                ) : null}
               </span>
             </span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-        <div className="space-y-2">
+      <div className="hidden sm:block">
+        <div className="flex items-center gap-3 text-sm font-medium">
+          <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+            {progressCurrent} de {PAIRS_PER_ROUND}
+          </span>
+          <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="shrink-0 flex items-center gap-3 text-xs text-foreground">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-primary">{CHECK_SYMBOL}</span>
+              <span>
+                Acertei: <span className="font-semibold">{correctMatches}</span>
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-destructive">{CROSS_SYMBOL}</span>
+              <span>
+                Errei: <span className="font-semibold">{errors}</span>
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-[11px] sm:gap-[11px]">
+        <div className="space-y-[9px] sm:space-y-[10px]">
           {leftItems.map((item, idx) => {
             const isMatched = matched.has(`l${idx}`);
             const isSelected = selectedLeft === idx;
             const isError = errorPair?.left === idx;
 
-            let cls = "bg-card border border-border/60 text-foreground hover:border-[#0000FF] hover:bg-blue-50/30";
+            let cls =
+              "bg-white border border-[#D6DCE4] text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30";
 
             if (isMatched)
-              cls = "bg-emerald-50 border border-primary text-primary ring-0 md:ring-1 md:ring-primary/50";
+              cls =
+                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)]";
             else if (isError)
               cls =
-                "bg-red-50 border border-destructive text-destructive ring-0 md:ring-1 md:ring-destructive/50";
+                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)]";
             else if (isSelected)
-              cls = "bg-blue-50 border border-[#0000FF] text-foreground";
+              cls =
+                "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)]";
 
             return (
               <button
@@ -602,32 +629,33 @@ export default function Combinations() {
                 onPointerDown={() => handleLeftPointerDown(idx)}
                 onClick={(event) => handleLeftClick(idx, event)}
                 disabled={isMatched}
-                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] md:text-center ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:h-[65px] md:rounded-[10px] ${cls}`}
               >
-                <span className="hidden break-words md:mx-auto md:block md:max-w-[90%]">{item.text}</span>
-
-                <span className="mx-auto max-w-[92%] break-words leading-snug md:hidden">{item.text}</span>
+                <span className="mx-auto max-w-[92%] break-words leading-snug">{item.text}</span>
                 {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
               </button>
             );
           })}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-[9px] sm:space-y-[10px]">
           {rightItems.map((item, idx) => {
             const isMatched = matched.has(`r${idx}`);
             const isSelected = selectedRight === idx;
             const isError = errorPair?.right === idx;
 
-            let cls = "bg-card border border-border/60 text-foreground hover:border-[#0000FF] hover:bg-blue-50/30";
+            let cls =
+              "bg-white border border-[#D6DCE4] text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30";
 
             if (isMatched)
-              cls = "bg-emerald-50 border border-primary text-primary ring-0 md:ring-1 md:ring-primary/50";
+              cls =
+                "bg-emerald-50 border border-primary text-primary shadow-[0_2px_0_rgba(37,177,95,0.26)]";
             else if (isError)
               cls =
-                "bg-red-50 border border-destructive text-destructive ring-0 md:ring-1 md:ring-destructive/50";
+                "bg-[#FDECEE] border border-[#F2A4AC] text-[#E54858] shadow-[0_2px_0_rgba(242,164,172,0.28)]";
             else if (isSelected)
-              cls = "bg-blue-50 border border-[#0000FF] text-foreground";
+              cls =
+                "bg-[#DFF1FF] border border-[#7CC8F8] text-[#2D8FC2] shadow-[0_2px_0_rgba(124,200,248,0.38)]";
 
             return (
               <button
@@ -635,11 +663,9 @@ export default function Combinations() {
                 onPointerDown={() => handleRightPointerDown(idx)}
                 onClick={(event) => handleRightClick(idx, event)}
                 disabled={isMatched}
-                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:block md:h-[65px] md:max-w-[330px] md:rounded-[10px] md:text-center ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:h-[65px] md:rounded-[10px] ${cls}`}
               >
-                <span className="hidden break-words md:mx-auto md:block md:max-w-[90%]">{item.text}</span>
-
-                <span className="mx-auto max-w-[92%] break-words leading-snug md:hidden">{item.text}</span>
+                <span className="mx-auto max-w-[92%] break-words leading-snug">{item.text}</span>
                 {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
               </button>
             );

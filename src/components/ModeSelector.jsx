@@ -7,14 +7,33 @@ export default function ModeSelector({ mode, setMode, variant = "default" }) {
 
   const isQuiz = variant === "quiz";
 
+  if (isQuiz) {
+    return (
+      <div className="h-[34px] w-[269px] min-w-[269px] shrink-0 md:h-[42px]">
+        <div className="flex h-full items-center rounded-full border border-border bg-white p-[3px] shadow-sm md:p-1">
+          {modes.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                if (item.key !== mode) setMode(item.key);
+              }}
+              className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-full px-2 text-xs font-medium leading-4 whitespace-nowrap transition-colors duration-200 md:px-4 md:text-sm md:leading-5 ${
+                mode === item.key
+                  ? "bg-primary text-white"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {item.quizLabel}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={
-        isQuiz
-          ? "flex items-center rounded-full border border-border bg-white p-1 shadow-sm"
-          : "inline-flex items-center rounded-full border border-border/80 bg-card p-1 shadow-sm"
-      }
-    >
+    <div className="inline-flex items-center rounded-full border border-border/80 bg-card p-1 shadow-sm">
       {modes.map((item) => (
         <button
           key={item.key}
@@ -22,17 +41,13 @@ export default function ModeSelector({ mode, setMode, variant = "default" }) {
           onClick={() => {
             if (item.key !== mode) setMode(item.key);
           }}
-          className={`rounded-full px-4 py-1.5 transition-colors duration-200 ${
-            isQuiz ? "text-sm font-medium" : "text-xs font-semibold"
-          } ${
+          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors duration-200 ${
             mode === item.key
               ? "bg-primary text-white"
-              : isQuiz
-                ? "text-muted-foreground hover:bg-muted"
-                : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          {isQuiz ? item.quizLabel : item.defaultLabel}
+          {item.defaultLabel}
         </button>
       ))}
     </div>

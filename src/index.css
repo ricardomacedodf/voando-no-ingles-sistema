@@ -170,6 +170,10 @@
       var(--mobile-bottom-nav-height) + var(--mobile-safe-area-bottom) + 1rem
     );
   }
+
+  body.quiz-mobile-stable-gutter {
+    scrollbar-gutter: stable both-edges;
+  }
 }
 
 /* Custom scrollbar */
@@ -343,6 +347,10 @@
   opacity: 0.8;
 }
 
+.flashcard-reveal-hint-placeholder {
+  display: none;
+}
+
 .flashcard-pronunciation {
   margin-top: 16px;
 }
@@ -392,5 +400,15 @@
     margin-top: 10px;
     margin-bottom: 4px;
     padding-inline: 2px;
+  }
+
+  .flashcard-reveal-hint {
+    margin-top: 8px;
+  }
+
+  .flashcard-reveal-hint-placeholder {
+    display: block;
+    visibility: hidden;
+    pointer-events: none;
   }
 }
