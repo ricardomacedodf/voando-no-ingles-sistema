@@ -24,6 +24,7 @@ const VIDEO_FRAME_CLASS =
   "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-contain";
 
 const videoThumbnailCache = new Map();
+const thirdPartyThumbnailCache = new Map();
 
 const DESCENDER_CHAR_REGEX = /[gjpqy]/;
 
@@ -519,16 +520,6 @@ const renderHighlightedTerm = (
   });
 };
 
-const extractIframeSrc = (value) => {
-  const cleanValue = normalizeText(value);
-
-  if (!cleanValue) return "";
-
-  const match = cleanValue.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-
-  return normalizeText(match?.[1] || "");
-};
-
 const getYouTubeVideoId = (value) => {
   const cleanValue = normalizeText(value);
 
@@ -598,107 +589,40 @@ const isThirdPartyEmbeddedVideo = (value) => {
   return (
     /<iframe/i.test(cleanValue) ||
     /\[iframe/i.test(cleanValue) ||
-    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv/i.test(
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co/i.test(
       cleanValue
     )
   );
 };
 
-const getPlatformThumbnailUrl = (value) => {
+const getPlatformThumbnailCandidates = (value) => {
+  const candidates = [];
   const youtubeId = getYouTubeVideoId(value);
 
   if (youtubeId) {
-    return `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`;
+    candidates.push(`https://i.ytimg.com/vi_webp/${youtubeId}/maxresdefault.webp`);
+    candidates.push(`https://i.ytimg.com/vi_webp/${youtubeId}/hqdefault.webp`);
+    candidates.push(`https://i.ytimg.com/vi/${youtubeId}/maxresdefault.jpg`);
+    candidates.push(`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`);
+    candidates.push(`https://i.ytimg.com/vi/${youtubeId}/mqdefault.jpg`);
+  }
+
+  const vimeoId = getVimeoVideoId(value);
+
+  if (vimeoId) {
+    candidates.push(`https://vumbnail.com/${vimeoId}.jpg`);
   }
 
   const dailymotionId = getDailymotionVideoId(value);
 
   if (dailymotionId) {
-    return `https://www.dailymotion.com/thumbnail/video/${dailymotionId}`;
+    candidates.push(`https://www.dailymotion.com/thumbnail/video/${dailymotionId}`);
   }
 
-  return "";
-};
-
-const cleanEmbedPreviewSrc = (src) => {
-  const cleanSrc = normalizeText(src);
-
-  if (!cleanSrc) return "";
-
-  try {
-    const url = new URL(cleanSrc, window.location.origin);
-
-    url.searchParams.delete("autoplay");
-    url.searchParams.delete("autoPlay");
-    url.searchParams.delete("mute");
-    url.searchParams.delete("muted");
-
-    return url.toString();
-  } catch {
-    return cleanSrc;
-  }
-};
-
-const getEmbedPreviewSrc = (value, playback) => {
-  const cleanValue = normalizeText(value);
-
-  const playbackSrc =
-    playback?.embedUrl ||
-    playback?.embed_url ||
-    playback?.src ||
-    playback?.url ||
-    "";
-
-  const iframeSrc =
-    extractIframeSrc(cleanValue) ||
-    extractIframeSrc(playback?.html || "") ||
-    extractIframeSrc(playback?.embed || "");
-
-  if (iframeSrc) return cleanEmbedPreviewSrc(iframeSrc);
-
-  if (playbackSrc && playback?.type !== "video") {
-    return cleanEmbedPreviewSrc(playbackSrc);
-  }
-
-  const youtubeId = getYouTubeVideoId(cleanValue);
-
-  if (youtubeId) {
-    return `https://www.youtube.com/embed/${youtubeId}`;
-  }
-
-  const vimeoId = getVimeoVideoId(cleanValue);
-
-  if (vimeoId) {
-    return `https://player.vimeo.com/video/${vimeoId}`;
-  }
-
-  const dailymotionId = getDailymotionVideoId(cleanValue);
-
-  if (dailymotionId) {
-    return `https://www.dailymotion.com/embed/video/${dailymotionId}`;
-  }
-
-  return "";
-};
-
-const getWebEmbedPreviewFrameStyle = (embedSrc, isMobile) => {
-  if (isMobile) return undefined;
-
-  const safeSrc = normalizeText(embedSrc).toLowerCase();
-
-  if (safeSrc.includes("clip.cafe")) {
-    return {
-      left: "51%",
-      top: "50%",
-      width: "107%",
-      height: "107%",
-      transform: "translate(-50%, -50%) scale(0.95)",
-      transformOrigin: "center center",
-      clipPath: "inset(0.5px)",
-    };
-  }
-
-  return undefined;
+  return candidates
+    .map((candidate) => normalizeText(candidate))
+    .filter(Boolean)
+    .filter((candidate, index, list) => list.indexOf(candidate) === index);
 };
 
 function ExampleVideoThumbnail({
@@ -713,7 +637,6 @@ function ExampleVideoThumbnail({
   className = "h-[84px]",
 }) {
   const [thumbnailSrc, setThumbnailSrc] = useState("");
-  const [embedPreviewSrc, setEmbedPreviewSrc] = useState("");
   const swipePointerRef = useRef({
     active: false,
     pointerId: null,
@@ -721,17 +644,10 @@ function ExampleVideoThumbnail({
     startY: 0,
   });
   const suppressClickRef = useRef(false);
+  const thirdPartyFallbackSourcesRef = useRef([]);
 
   const isThirdPartyVideo = isThirdPartyEmbeddedVideo(video);
-  const shouldRenderEmbedPreview =
-    isThirdPartyVideo && Boolean(embedPreviewSrc);
-  const shouldUseDirectEmbed =
-    shouldRenderEmbedPreview && !isMobile;
   const shouldUseOwnedPlayVisual = !isThirdPartyVideo;
-  const webEmbedPreviewFrameStyle = getWebEmbedPreviewFrameStyle(
-    embedPreviewSrc,
-    isMobile
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -751,8 +667,18 @@ function ExampleVideoThumbnail({
 
     const applyFallback = () => {
       if (cancelled || captured) return;
+      thirdPartyFallbackSourcesRef.current = [];
       setThumbnailSrc("");
-      setEmbedPreviewSrc("");
+    };
+
+    const applyThumbnailSource = (source, fallbackSources = []) => {
+      if (cancelled) return;
+      setThumbnailSrc(normalizeText(source));
+      thirdPartyFallbackSourcesRef.current = Array.isArray(fallbackSources)
+        ? fallbackSources
+            .map((fallbackSource) => normalizeText(fallbackSource))
+            .filter(Boolean)
+        : [];
     };
 
     const cleanupVideo = () => {
@@ -780,8 +706,7 @@ function ExampleVideoThumbnail({
 
       captured = true;
       clearFallbackTimer();
-      setThumbnailSrc(dataUrl);
-      setEmbedPreviewSrc("");
+      applyThumbnailSource(dataUrl);
 
       if (rawVideo) {
         videoThumbnailCache.set(rawVideo, dataUrl);
@@ -847,26 +772,33 @@ function ExampleVideoThumbnail({
 
     const generateThumbnail = async () => {
       setThumbnailSrc("");
-      setEmbedPreviewSrc("");
+      thirdPartyFallbackSourcesRef.current = [];
 
       if (!rawVideo || typeof window === "undefined") {
         return;
       }
 
       if (isThirdPartyEmbeddedVideo(rawVideo)) {
-        const embedSrc = getEmbedPreviewSrc(rawVideo, null);
+        const cachedThirdPartyThumbnail = thirdPartyThumbnailCache.get(rawVideo);
 
-        if (embedSrc) {
-          setEmbedPreviewSrc(embedSrc);
-          setThumbnailSrc("");
+        if (cachedThirdPartyThumbnail) {
+          applyThumbnailSource(cachedThirdPartyThumbnail);
           return;
         }
 
-        const platformThumbnail = getPlatformThumbnailUrl(rawVideo);
+        const thirdPartyThumbnailCandidates = [
+          rawThumbnail,
+          ...getPlatformThumbnailCandidates(rawVideo),
+        ]
+          .map((candidate) => normalizeText(candidate))
+          .filter(Boolean)
+          .filter((candidate, index, list) => list.indexOf(candidate) === index);
 
-        if (platformThumbnail) {
-          setThumbnailSrc(platformThumbnail);
-          setEmbedPreviewSrc("");
+        if (thirdPartyThumbnailCandidates.length > 0) {
+          const [firstThumbnail, ...fallbackThumbnails] =
+            thirdPartyThumbnailCandidates;
+          thirdPartyThumbnailCache.set(rawVideo, firstThumbnail);
+          applyThumbnailSource(firstThumbnail, fallbackThumbnails);
           return;
         }
 
@@ -875,16 +807,14 @@ function ExampleVideoThumbnail({
       }
 
       if (rawThumbnail) {
-        setThumbnailSrc(rawThumbnail);
-        setEmbedPreviewSrc("");
+        applyThumbnailSource(rawThumbnail);
         return;
       }
 
       const cachedThumbnail = videoThumbnailCache.get(rawVideo);
 
       if (cachedThumbnail) {
-        setThumbnailSrc(cachedThumbnail);
-        setEmbedPreviewSrc("");
+        applyThumbnailSource(cachedThumbnail);
         return;
       }
 
@@ -894,14 +824,6 @@ function ExampleVideoThumbnail({
         if (cancelled) return;
 
         if (!playback || playback.type !== "video" || !playback.src) {
-          const embedSrc = getEmbedPreviewSrc(rawVideo, playback);
-
-          if (embedSrc) {
-            setEmbedPreviewSrc(embedSrc);
-            setThumbnailSrc("");
-            return;
-          }
-
           applyFallback();
           return;
         }
@@ -989,7 +911,7 @@ function ExampleVideoThumbnail({
       cancelled = true;
       cleanupVideo();
     };
-  }, [video, thumbnail, isMobile]);
+  }, [video, thumbnail]);
 
   const resetSwipePointer = () => {
     swipePointerRef.current = {
@@ -1001,7 +923,6 @@ function ExampleVideoThumbnail({
   };
 
   const handlePointerDown = (event) => {
-    if (shouldUseDirectEmbed) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
     swipePointerRef.current = {
@@ -1048,10 +969,9 @@ function ExampleVideoThumbnail({
 
   return (
     <div
-      role={shouldUseDirectEmbed ? undefined : "button"}
-      tabIndex={shouldUseDirectEmbed ? undefined : 0}
+      role="button"
+      tabIndex={0}
       onClick={(event) => {
-        if (shouldUseDirectEmbed) return;
         if (suppressClickRef.current) {
           suppressClickRef.current = false;
           event.preventDefault();
@@ -1061,8 +981,6 @@ function ExampleVideoThumbnail({
         onClick?.(event);
       }}
       onKeyDown={(event) => {
-        if (shouldUseDirectEmbed) return;
-
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onClick?.(event);
@@ -1076,106 +994,93 @@ function ExampleVideoThumbnail({
       onPointerLeave={handlePointerCancel}
       className={[
         "group relative w-full touch-pan-y overflow-hidden rounded-lg border",
-        shouldUseDirectEmbed ? "" : "cursor-pointer",
+        "cursor-pointer",
         className,
         isOpen
           ? "border-[#ED9A0A]/80 dark:border-[#ED9A0A]/70"
           : "border-[#D9E2EC] dark:border-border",
         "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)] dark:bg-muted/40 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_18px_rgba(2,6,23,0.45)]",
         "transition-all duration-200",
-        shouldUseDirectEmbed
-          ? ""
-          : "hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)] dark:hover:shadow-[0_12px_24px_rgba(2,6,23,0.55)]",
+        "hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)] dark:hover:shadow-[0_12px_24px_rgba(2,6,23,0.55)]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
       ].join(" ")}
     >
-      {shouldRenderEmbedPreview ? (
-        <iframe
-          src={embedPreviewSrc}
-          title={title}
-          loading="lazy"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          allowFullScreen
-          className={[
-            "absolute inset-0 h-full w-full border-0",
-            isMobile ? "pointer-events-none" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          style={webEmbedPreviewFrameStyle}
-        />
-      ) : thumbnailSrc ? (
+      {thumbnailSrc ? (
         <img
           src={thumbnailSrc}
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
           draggable={false}
+          onLoad={() => {
+            const safeVideo = normalizeText(video);
+            const safeThumbnail = normalizeText(thumbnailSrc);
+
+            if (!isThirdPartyVideo || !safeVideo || !safeThumbnail) return;
+            thirdPartyThumbnailCache.set(safeVideo, safeThumbnail);
+          }}
+          onError={() => {
+            const [nextFallbackThumbnail, ...remainingFallbacks] =
+              thirdPartyFallbackSourcesRef.current;
+            const safeVideo = normalizeText(video);
+
+            if (nextFallbackThumbnail) {
+              thirdPartyFallbackSourcesRef.current = remainingFallbacks;
+              if (isThirdPartyVideo && safeVideo) {
+                thirdPartyThumbnailCache.set(safeVideo, nextFallbackThumbnail);
+              }
+              setThumbnailSrc(nextFallbackThumbnail);
+              return;
+            }
+
+            if (isThirdPartyVideo && safeVideo) {
+              thirdPartyThumbnailCache.delete(safeVideo);
+            }
+            setThumbnailSrc("");
+          }}
         />
       ) : (
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(237,154,10,0.18),transparent_32%),linear-gradient(135deg,#F8FAFC_0%,#EFF4F8_55%,#E6EDF5_100%)]" />
       )}
 
-      {!shouldUseDirectEmbed ? (
-        <>
-          {shouldRenderEmbedPreview && isMobile ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                if (suppressClickRef.current) {
-                  suppressClickRef.current = false;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  return;
-                }
-                event.stopPropagation();
-                onClick?.(event);
-              }}
-              className="absolute inset-0 z-20 bg-transparent"
-              aria-label={title}
-              title={title}
+      <>
+        <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
+        <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
+
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div
+            className={
+              shouldUseOwnedPlayVisual
+                ? [
+                    "flex h-11 w-11 items-center justify-center rounded-full",
+                    "border border-white/55 bg-white/10",
+                    "shadow-[0_4px_10px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.22)]",
+                    "backdrop-blur-[2px] transition-[transform,background-color,border-color] duration-200 ease-out",
+                    isMobile
+                      ? ""
+                      : "group-hover:scale-[1.15] group-hover:border-white/75 group-hover:bg-white/16",
+                  ].join(" ")
+                : [
+                    "flex h-11 w-11 items-center justify-center rounded-full",
+                    "border border-white/70 bg-white/55",
+                    "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
+                    "backdrop-blur-md transition-all duration-200",
+                    "group-hover:scale-105 group-hover:bg-white/72",
+                  ].join(" ")
+            }
+          >
+            <Play
+              className={
+                shouldUseOwnedPlayVisual
+                  ? "ml-[2px] h-[18px] w-[18px] fill-white text-white stroke-[2]"
+                  : "ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]"
+              }
             />
-          ) : null}
-
-          {!shouldRenderEmbedPreview ? (
-            <>
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
-              <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
-
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div
-                  className={
-                    shouldUseOwnedPlayVisual
-                      ? [
-                          "flex h-11 w-11 items-center justify-center rounded-full",
-                          "border border-white/55 bg-white/10",
-                          "shadow-[0_4px_10px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.22)]",
-                          "backdrop-blur-[2px] transition-[transform,background-color,border-color] duration-200 ease-out",
-                          isMobile
-                            ? ""
-                            : "group-hover:scale-[1.15] group-hover:border-white/75 group-hover:bg-white/16",
-                        ].join(" ")
-                      : [
-                          "flex h-11 w-11 items-center justify-center rounded-full",
-                          "border border-white/70 bg-white/55",
-                          "shadow-[0_12px_24px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)]",
-                          "backdrop-blur-md transition-all duration-200",
-                          "group-hover:scale-105 group-hover:bg-white/72",
-                        ].join(" ")
-                  }
-                >
-                  <Play
-                    className={
-                      shouldUseOwnedPlayVisual
-                        ? "ml-[2px] h-[18px] w-[18px] fill-white text-white stroke-[2]"
-                        : "ml-[2px] h-[18px] w-[18px] fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]"
-                    }
-                  />
-                </div>
-              </div>
-            </>
-          ) : null}
-        </>
-      ) : null}
+          </div>
+        </div>
+      </>
     </div>
   );
 }
@@ -1530,17 +1435,25 @@ export default function ExamplesPanel({
 
     if (!currentVideo?.video) return null;
 
+    const isCurrentVideoThirdParty = isThirdPartyEmbeddedVideo(
+      currentVideo.video
+    );
+    const shouldRenderThirdPartyInline = !isMobile && isCurrentVideoThirdParty;
+    const shouldRenderMobileThirdPartyPreview =
+      isMobile && isCurrentVideoThirdParty;
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
     const shouldAutoPlayDesktopVideo =
       isVideoOpen &&
       Boolean(desktopAutoplayByGroup[groupKey]) &&
-      !isThirdPartyEmbeddedVideo(currentVideo.video);
-    const isDesktopDirectEmbedPreview =
-      !isMobile && isThirdPartyEmbeddedVideo(currentVideo.video);
+      !isCurrentVideoThirdParty;
+    const shouldRenderPlayerDirectly =
+      shouldRenderThirdPartyInline ||
+      shouldRenderMobileThirdPartyPreview ||
+      (isVideoOpen && !isMobile);
     const shouldShowAttachedChip =
       !isMobile &&
+      !shouldRenderThirdPartyInline &&
       !isVideoOpen &&
-      !isDesktopDirectEmbedPreview &&
       groupKey !== "global-word-video-group";
     const attachedChipPalette = meaningPalette
       ? {
@@ -1578,24 +1491,59 @@ export default function ExamplesPanel({
             </span>
           </div>
         ) : null}
-        {isVideoOpen && !isMobile ? (
-          <div>
+        {shouldRenderPlayerDirectly ? (
+          <div
+            className={
+              shouldRenderMobileThirdPartyPreview && shouldHideSourceThumbnailOnMobile
+                ? "hidden"
+                : ""
+            }
+          >
             <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
               <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
                 <ExampleVideoPlayer
                   key={`${currentVideo.key}-${currentVideo.video}`}
                   video={currentVideo.video}
                   title={currentVideo.title}
-                  autoPlay={shouldAutoPlayDesktopVideo}
+                  autoPlay={
+                    shouldRenderThirdPartyInline
+                      ? false
+                      : shouldAutoPlayDesktopVideo
+                  }
                 />
               </AspectRatio>
+
+              {shouldRenderMobileThirdPartyPreview ? (
+                <button
+                  type="button"
+                  className="absolute inset-0 z-20 bg-transparent"
+                  aria-label={currentVideo.title || "Abrir vídeo"}
+                  title={currentVideo.title || "Abrir vídeo"}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openVideo({
+                      video: currentVideo.video,
+                      videoKey: currentVideo.key,
+                      videoTitle: currentVideo.title,
+                      groupKey,
+                      videos: safeVideos,
+                      index: currentIndex,
+                      autoPlayOnOpen: true,
+                      desktopAutoPlayOnOpen: false,
+                    });
+                  }}
+                />
+              ) : null}
             </div>
 
-            {renderVideoControls({
-              groupKey,
-              videos: safeVideos,
-              currentIndex,
-            })}
+            {!shouldHideSourceThumbnailOnMobile
+              ? renderVideoControls({
+                  groupKey,
+                  videos: safeVideos,
+                  currentIndex,
+                })
+              : null}
           </div>
         ) : (
           <div>
@@ -1646,9 +1594,7 @@ export default function ExamplesPanel({
                   videos: safeVideos,
                   index: currentIndex,
                   autoPlayOnOpen: true,
-                  desktopAutoPlayOnOpen: !isThirdPartyEmbeddedVideo(
-                    currentVideo.video
-                  ),
+                  desktopAutoPlayOnOpen: !isCurrentVideoThirdParty,
                 })
               }
             />

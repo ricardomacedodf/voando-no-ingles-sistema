@@ -31,9 +31,9 @@ import {
 const FLASHCARD_CARD_WIDTH = 671.2;
 const FLASHCARD_CARD_HEIGHT = 335.3;
 const FLASHCARD_MAIN_TEXT_MIN_SIZE = 22;
-const FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE = 18;
+const FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE = 12.672;
 const FLASHCARD_MAIN_TEXT_MAX_SIZE = 47;
-const FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE = 40;
+const FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE = 28.16;
 const FLASHCARD_MOBILE_BREAKPOINT = 767;
 const FLASHCARD_DISCARD_TRANSITION_MS = 940;
 const FLASHCARD_DISCARD_CLEANUP_MS = 1040;
@@ -105,9 +105,9 @@ function getAdaptiveMainTextStyle(content) {
   const fontSize = clamp(size, minFontSize, maxFontSize);
   const lineHeightMultiplier = getAdaptiveLineHeightMultiplier(fontSize);
 
-  let maxWidth = isMobileViewport ? "92%" : "95%";
-  if (length > 35) maxWidth = isMobileViewport ? "89%" : "92%";
-  if (length > 55) maxWidth = isMobileViewport ? "86%" : "90%";
+  let maxWidth = isMobileViewport ? "98%" : "95%";
+  if (length > 35) maxWidth = isMobileViewport ? "96%" : "92%";
+  if (length > 55) maxWidth = isMobileViewport ? "94%" : "90%";
 
   return {
     fontSize,
@@ -154,7 +154,7 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
       ? Math.floor(slotElement.clientHeight * 0.82)
       : slotElement.clientHeight;
     const targetWidth = isMobile
-      ? Math.floor(slotElement.clientWidth * 0.9)
+      ? Math.floor(slotElement.clientWidth * 0.98)
       : slotElement.clientWidth;
     const overflowHeight = textElement.scrollHeight > targetHeight;
     const overflowWidth = textElement.scrollWidth > targetWidth;
@@ -775,7 +775,16 @@ export default function Flashcards() {
             }`}
           >
             <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-card text-center">
-              <div ref={frontTextSlotRef} className="flashcard-main-text-slot">
+              <div
+                ref={frontTextSlotRef}
+                className="flashcard-main-text-slot"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
+                }}
+              >
                 <p
                   ref={frontTextRef}
                   className="flashcard-main-text select-text text-center font-bold text-foreground"
@@ -784,7 +793,7 @@ export default function Flashcards() {
                     lineHeight: `${frontTextStyle.lineHeight}px`,
                     maxWidth: frontTextStyle.maxWidth,
                     marginInline: "auto",
-                    textWrap: "balance",
+                    textWrap: "normal",
                     overflowWrap: frontTextStyle.overflowWrap,
                     wordBreak: frontTextStyle.wordBreak,
                     hyphens: frontTextStyle.hyphens,
@@ -799,7 +808,16 @@ export default function Flashcards() {
             </div>
 
             <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-card text-center">
-              <div ref={backTextSlotRef} className="flashcard-main-text-slot">
+              <div
+                ref={backTextSlotRef}
+                className="flashcard-main-text-slot"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
+                }}
+              >
                 <p
                   ref={backTextRef}
                   className="flashcard-main-text select-text text-center font-bold text-foreground"
@@ -808,7 +826,7 @@ export default function Flashcards() {
                     lineHeight: `${backTextStyle.lineHeight}px`,
                     maxWidth: backTextStyle.maxWidth,
                     marginInline: "auto",
-                    textWrap: "balance",
+                    textWrap: "normal",
                     overflowWrap: backTextStyle.overflowWrap,
                     wordBreak: backTextStyle.wordBreak,
                     hyphens: backTextStyle.hyphens,
