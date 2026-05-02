@@ -12,7 +12,10 @@ import { useIsMobile } from "../hooks/use-mobile";
 import { useTheme } from "../contexts/ThemeContext";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
-import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
+import {
+  resolveExampleVideoPlayback,
+  resolveExampleVideoThumbnail,
+} from "@/lib/exampleVideoStorage";
 import { playSound } from "../lib/gameState";
 import { SFX_EVENTS } from "../lib/sfx";
 
@@ -636,7 +639,17 @@ function ExampleVideoThumbnail({
   isMobile = false,
   className = "h-[84px]",
 }) {
-  const [thumbnailSrc, setThumbnailSrc] = useState("");
+  const [thumbnailSrc, setThumbnailSrc] = useState(() => {
+    const rawVideo = normalizeText(video);
+    const rawThumbnail = normalizeText(thumbnail);
+
+    if (rawThumbnail) return rawThumbnail;
+    if (isThirdPartyEmbeddedVideo(rawVideo)) {
+      return thirdPartyThumbnailCache.get(rawVideo) || getPlatformThumbnailCandidates(rawVideo)[0] || "";
+    }
+
+    return videoThumbnailCache.get(rawVideo) || "";
+  });
   const swipePointerRef = useRef({
     active: false,
     pointerId: null,
@@ -771,7 +784,11 @@ function ExampleVideoThumbnail({
     };
 
     const generateThumbnail = async () => {
-      setThumbnailSrc("");
+      const initialThumbnailSrc = rawThumbnail ||
+        (isThirdPartyEmbeddedVideo(rawVideo)
+          ? thirdPartyThumbnailCache.get(rawVideo) || getPlatformThumbnailCandidates(rawVideo)[0] || ""
+          : videoThumbnailCache.get(rawVideo) || "");
+      setThumbnailSrc(initialThumbnailSrc);
       thirdPartyFallbackSourcesRef.current = [];
 
       if (!rawVideo || typeof window === "undefined") {
@@ -799,6 +816,16 @@ function ExampleVideoThumbnail({
             thirdPartyThumbnailCandidates;
           thirdPartyThumbnailCache.set(rawVideo, firstThumbnail);
           applyThumbnailSource(firstThumbnail, fallbackThumbnails);
+          return;
+        }
+
+        const resolvedThirdPartyThumbnail = await resolveExampleVideoThumbnail(rawVideo);
+
+        if (cancelled) return;
+
+        if (resolvedThirdPartyThumbnail) {
+          thirdPartyThumbnailCache.set(rawVideo, resolvedThirdPartyThumbnail);
+          applyThumbnailSource(resolvedThirdPartyThumbnail);
           return;
         }
 
@@ -1439,8 +1466,10 @@ export default function ExamplesPanel({
       currentVideo.video
     );
     const shouldRenderThirdPartyInline = !isMobile && isCurrentVideoThirdParty;
-    const shouldRenderMobileThirdPartyPreview =
-      isMobile && isCurrentVideoThirdParty;
+    // No mobile, vídeos embedados NÃO devem montar iframe/player como preview.
+    // Eles precisam passar pelo ExampleVideoThumbnail para buscar a imagem real
+    // via resolveExampleVideoThumbnail/api/embed-thumbnail. O player só abre no toque.
+    const shouldRenderMobileThirdPartyPreview = false;
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
     const shouldAutoPlayDesktopVideo =
       isVideoOpen &&
@@ -1448,7 +1477,6 @@ export default function ExamplesPanel({
       !isCurrentVideoThirdParty;
     const shouldRenderPlayerDirectly =
       shouldRenderThirdPartyInline ||
-      shouldRenderMobileThirdPartyPreview ||
       (isVideoOpen && !isMobile);
     const shouldShowAttachedChip =
       !isMobile &&
@@ -1494,9 +1522,19 @@ export default function ExamplesPanel({
         {shouldRenderPlayerDirectly ? (
           <div
             className={
-              shouldRenderMobileThirdPartyPreview && shouldHideSourceThumbnailOnMobile
-                ? "hidden"
-                : ""
+              [
+                shouldRenderMobileThirdPartyPreview && shouldHideSourceThumbnailOnMobile
+                  ? "hidden"
+                  : "",
+                // Mobile embed preview is only a visual source. The first tap must be
+                // captured by our overlay and open the expanded player immediately,
+                // instead of being intercepted by the provider iframe/player.
+                shouldRenderMobileThirdPartyPreview
+                  ? "[&_iframe]:pointer-events-none [&_video]:pointer-events-none"
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" ")
             }
           >
             <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
@@ -1516,10 +1554,11 @@ export default function ExamplesPanel({
               {shouldRenderMobileThirdPartyPreview ? (
                 <button
                   type="button"
-                  className="absolute inset-0 z-20 bg-transparent"
+                  className="absolute inset-0 z-30 touch-manipulation bg-transparent"
                   aria-label={currentVideo.title || "Abrir vídeo"}
                   title={currentVideo.title || "Abrir vídeo"}
-                  onClick={(event) => {
+                  onPointerDown={(event) => {
+                    if (event.pointerType === "mouse" && event.button !== 0) return;
                     event.preventDefault();
                     event.stopPropagation();
                     openVideo({
@@ -1532,6 +1571,10 @@ export default function ExamplesPanel({
                       autoPlayOnOpen: true,
                       desktopAutoPlayOnOpen: false,
                     });
+                  }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
                   }}
                 />
               ) : null}

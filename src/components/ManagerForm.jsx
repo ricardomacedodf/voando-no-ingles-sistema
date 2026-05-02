@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
-import { getExampleVideoDisplayLabel } from "@/lib/exampleVideoStorage";
+import {
+  getExampleVideoDisplayLabel,
+  resolveExampleVideoThumbnail,
+} from "@/lib/exampleVideoStorage";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { createInitialStats } from "../lib/learningEngine";
@@ -472,7 +475,7 @@ const isThirdPartyEmbeddedVideo = (value) => {
   return (
     /<iframe/i.test(cleanValue) ||
     /\[iframe/i.test(cleanValue) ||
-    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv/i.test(
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co|y\.yarn\.co/i.test(
       cleanValue
     )
   );
@@ -503,6 +506,11 @@ const getThirdPartyEmbedSrc = (value) => {
 
   if (dailymotionId) {
     return `https://www.dailymotion.com/embed/video/${dailymotionId}`;
+  }
+
+  if (/clip\.cafe|playphrase\.me|yarn\.co|y\.yarn\.co/i.test(cleanValue)) {
+    const firstUrl = cleanValue.match(/https?:\/\/[^\s"'<>[\]]+/i)?.[0] || "";
+    return normalizeText(firstUrl);
   }
 
   return "";
@@ -1965,7 +1973,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         await deleteVideoFromR2(oldVideo);
       }
 
-      onSuccess({ video: nextVideo, thumbnail: "" });
+      const nextThumbnail = await resolveExampleVideoThumbnail(nextVideo);
+
+      onSuccess({ video: nextVideo, thumbnail: nextThumbnail });
       closeVideoEditor();
     } catch (error) {
       console.error("Erro ao trocar vídeo:", error);

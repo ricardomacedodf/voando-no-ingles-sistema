@@ -565,6 +565,133 @@ export const resolveExampleVideoPlayback = async (value) => {
   }
 };
 
+
+const getKnownThumbnailCandidates = (value) => {
+  const rawValue = typeof value === "string" ? value.trim() : "";
+  const normalizedValue = normalizeExampleVideoInput(rawValue);
+  const candidates = [];
+  const candidatePool = [rawValue, normalizedValue, extractFirstUrl(rawValue)]
+    .map((item) => String(item || ""))
+    .filter(Boolean);
+
+  for (const candidate of candidatePool) {
+    const explicitImages = candidate.match(
+      /https?:\/\/[^\s"'<>[\]]+\.(?:jpe?g|png|webp)(?:\?[^\s"'<>[\]]*)?/gi
+    );
+
+    if (Array.isArray(explicitImages)) candidates.push(...explicitImages);
+  }
+
+  for (const candidate of candidatePool) {
+    const parsedUrl = parseUrl(candidate);
+    if (!parsedUrl) continue;
+
+    const host = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+
+    if (host === "youtu.be" || host === "youtube.com" || host === "m.youtube.com") {
+      const youtubeEmbed = getYouTubeEmbedUrl(parsedUrl);
+      const youtubeId = youtubeEmbed.match(/\/embed\/([a-zA-Z0-9_-]{6,})/)?.[1] || "";
+
+      if (youtubeId) {
+        candidates.push(`https://i.ytimg.com/vi_webp/${youtubeId}/maxresdefault.webp`);
+        candidates.push(`https://i.ytimg.com/vi_webp/${youtubeId}/hqdefault.webp`);
+        candidates.push(`https://i.ytimg.com/vi/${youtubeId}/maxresdefault.jpg`);
+        candidates.push(`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`);
+      }
+    }
+
+    if (host === "vimeo.com" || host === "player.vimeo.com") {
+      const vimeoEmbed = getVimeoEmbedUrl(parsedUrl);
+      const vimeoId = vimeoEmbed.match(/\/video\/(\d+)/)?.[1] || "";
+      if (vimeoId) candidates.push(`https://vumbnail.com/${vimeoId}.jpg`);
+    }
+
+    if (host === "dailymotion.com" || host === "dai.ly") {
+      const dailymotionId =
+        pathParts[pathParts.indexOf("video") + 1] ||
+        (host === "dai.ly" ? pathParts[0] : "") ||
+        "";
+
+      if (dailymotionId) {
+        candidates.push(`https://www.dailymotion.com/thumbnail/video/${dailymotionId}`);
+      }
+    }
+
+    if (host === "yarn.co") {
+      const clipIndex = pathParts.indexOf("yarn-clip");
+      const yarnClipId = clipIndex >= 0 ? pathParts[clipIndex + 1] : "";
+
+      if (yarnClipId) {
+        candidates.push(`https://y.yarn.co/${yarnClipId}_thumb.jpg`);
+        candidates.push(`https://y.yarn.co/${yarnClipId}_screenshot.jpg`);
+        candidates.push(`https://y.yarn.co/${yarnClipId}.jpg`);
+        candidates.push(`https://y.yarn.co/${yarnClipId}.webp`);
+      }
+    }
+
+    if (host === "y.yarn.co") {
+      const yarnClipId = parsedUrl.pathname.match(/\/([0-9a-f]{8}-[0-9a-f-]{27})(?:_[a-z]+)?\.(?:mp4|jpe?g|png|webp)/i)?.[1] || "";
+
+      if (yarnClipId) {
+        candidates.push(`https://y.yarn.co/${yarnClipId}_thumb.jpg`);
+        candidates.push(`https://y.yarn.co/${yarnClipId}_screenshot.jpg`);
+        candidates.push(`https://y.yarn.co/${yarnClipId}.jpg`);
+        candidates.push(`https://y.yarn.co/${yarnClipId}.webp`);
+      }
+    }
+  }
+
+  return candidates
+    .map((candidate) => String(candidate || "").trim())
+    .filter(Boolean)
+    .filter((candidate, index, list) => list.indexOf(candidate) === index);
+};
+
+const getEmbedThumbnailApiUrl = () => {
+  const customUrl = import.meta.env.VITE_EMBED_THUMBNAIL_API_URL;
+
+  if (customUrl) return customUrl;
+
+  const isLocalVite =
+    typeof window !== "undefined" &&
+    window.location.hostname === "localhost" &&
+    window.location.port === "5173";
+
+  if (isLocalVite) {
+    return "http://localhost:3000/api/embed-thumbnail";
+  }
+
+  return "/api/embed-thumbnail";
+};
+
+export const resolveExampleVideoThumbnail = async (value) => {
+  const rawValue = typeof value === "string" ? value.trim() : "";
+  if (!rawValue) return "";
+
+  const localCandidate = getKnownThumbnailCandidates(rawValue)[0] || "";
+  if (localCandidate) return localCandidate;
+
+  if (typeof fetch !== "function") return "";
+
+  try {
+    const response = await fetch(getEmbedThumbnailApiUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ video: rawValue }),
+    });
+
+    if (!response.ok) return "";
+
+    const data = await response.json().catch(() => null);
+    return typeof data?.thumbnail === "string" ? data.thumbnail.trim() : "";
+  } catch {
+    return "";
+  }
+};
+
 export const getExampleVideoDisplayLabel = (value) => {
   const rawValue = typeof value === "string" ? value.trim() : "";
   const storageRef = parseExampleVideoStorageRef(rawValue);
