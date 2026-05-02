@@ -31,6 +31,22 @@ const thirdPartyThumbnailCache = new Map();
 
 const DESCENDER_CHAR_REGEX = /[gjpqy]/;
 
+const normalizeVideoValue = (value) =>
+  typeof value === "string" ? value.trim() : "";
+
+const isLikelyThirdPartyEmbedValue = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+  if (!cleanValue) return false;
+
+  return (
+    /<iframe/i.test(cleanValue) ||
+    /\[iframe/i.test(cleanValue) ||
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co/i.test(
+      cleanValue
+    )
+  );
+};
+
 const FLASHCARD_MOBILE_MEANING_PALETTE = [
   {
     border: "#CEEBD8",
@@ -1132,6 +1148,7 @@ export default function ExamplesPanel({
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
+  const [isMobileLandscapeVideoLayout, setIsMobileLandscapeVideoLayout] = useState(false);
   const [videoIndexes, setVideoIndexes] = useState({});
   const [expandedMeaningVideoKey, setExpandedMeaningVideoKey] = useState(null);
   const expandedVideoSwipeRef = useRef({
@@ -1140,6 +1157,40 @@ export default function ExamplesPanel({
     startX: 0,
     startY: 0,
   });
+
+  useEffect(() => {
+    if (!isMobile) {
+      setIsMobileLandscapeVideoLayout(false);
+      return;
+    }
+
+    const checkMobileLandscapeVideoLayout = () => {
+      if (typeof window === "undefined") return;
+
+      const viewportWidth = window.innerWidth || 0;
+      const viewportHeight = window.innerHeight || 0;
+      const isCoarsePointer =
+        window.matchMedia?.("(hover: none), (pointer: coarse)")?.matches ||
+        "ontouchstart" in window ||
+        navigator.maxTouchPoints > 0;
+
+      setIsMobileLandscapeVideoLayout(
+        Boolean(isCoarsePointer && viewportWidth > viewportHeight)
+      );
+    };
+
+    checkMobileLandscapeVideoLayout();
+    window.addEventListener("resize", checkMobileLandscapeVideoLayout);
+    window.addEventListener("orientationchange", checkMobileLandscapeVideoLayout);
+
+    return () => {
+      window.removeEventListener("resize", checkMobileLandscapeVideoLayout);
+      window.removeEventListener(
+        "orientationchange",
+        checkMobileLandscapeVideoLayout
+      );
+    };
+  }, [isMobile]);
 
   const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
 
@@ -1311,6 +1362,11 @@ export default function ExamplesPanel({
     : "mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3";
   const isExpandedGlobalWordVideo =
     mobileVideo?.groupKey === "global-word-video-group";
+  const isCurrentMobileVideoThirdPartyEmbed = isLikelyThirdPartyEmbedValue(
+    mobileVideo?.video
+  );
+  const shouldUseCenteredEmbeddedMobileLayout =
+    isCurrentMobileVideoThirdPartyEmbed && isMobileLandscapeVideoLayout;
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -2101,18 +2157,47 @@ export default function ExamplesPanel({
 
       {mobileVideo?.video ? (
         <div
-          className="fixed inset-0 z-[9999] bg-black/80"
+          className={
+            isMobileLandscapeVideoLayout && !shouldUseCenteredEmbeddedMobileLayout
+              ? "fixed inset-0 z-[9999] bg-black"
+              : "fixed inset-0 z-[9999] bg-black/80"
+          }
           role="dialog"
           aria-modal="true"
           aria-label="VÃ­deo do exemplo"
           onClick={closeMobileVideo}
         >
           <div
-            className="absolute left-0 right-0 top-[calc(env(safe-area-inset-top,0px)+7.55vh)] w-screen max-w-none"
-            onClick={(event) => event.stopPropagation()}
+            className={
+              shouldUseCenteredEmbeddedMobileLayout
+                ? "absolute inset-0 flex h-[100dvh] w-[100dvw] items-center justify-center overflow-hidden px-0"
+                : isMobileLandscapeVideoLayout
+                ? "absolute inset-0 flex h-[100dvh] w-[100dvw] items-center justify-center"
+                : "absolute left-0 right-0 top-[calc(env(safe-area-inset-top,0px)+7.55vh)] w-screen max-w-none"
+            }
+            onClick={(event) => {
+              if (!shouldUseCenteredEmbeddedMobileLayout) {
+                event.stopPropagation();
+              }
+            }}
           >
             <div
-              className="aspect-[5/4] w-full touch-pan-y overflow-hidden bg-black"
+              className={
+                shouldUseCenteredEmbeddedMobileLayout
+                  ? "touch-pan-y overflow-hidden bg-black"
+                  : isMobileLandscapeVideoLayout
+                  ? "h-[100dvh] w-[100dvw] touch-pan-y overflow-hidden bg-black"
+                  : "aspect-[5/4] w-full touch-pan-y overflow-hidden bg-black"
+              }
+              style={
+                shouldUseCenteredEmbeddedMobileLayout
+                  ? {
+                      width: "min(100dvw, calc(100dvh * 16 / 9))",
+                      height: "min(100dvh, calc(100dvw * 9 / 16))",
+                    }
+                  : undefined
+              }
+              onClick={(event) => event.stopPropagation()}
               onPointerDown={handleExpandedVideoPointerDown}
               onPointerUp={handleExpandedVideoPointerUp}
               onPointerCancel={handleExpandedVideoPointerCancel}
@@ -2122,7 +2207,13 @@ export default function ExamplesPanel({
                 video={mobileVideo?.video || ""}
                 title={mobileVideo?.title || ""}
                 autoPlay={Boolean(mobileVideo?.autoPlay)}
-                layout="mobileMockup"
+                layout={
+                  shouldUseCenteredEmbeddedMobileLayout
+                    ? "mobileMockup"
+                    : isMobileLandscapeVideoLayout
+                    ? "mobileFullscreen"
+                    : "mobileMockup"
+                }
               />
             </div>
 

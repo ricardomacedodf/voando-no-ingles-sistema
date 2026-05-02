@@ -64,7 +64,7 @@ function GlassControlButton({
 }
 
 function VideoFallback({ layout = "fill" }) {
-  const isMobileMockupLayout = layout === "mobileMockup";
+  const isMobileMockupLayout = layout === "mobileMockup" || layout === "mobileFullscreen";
 
   return (
     <div
@@ -262,21 +262,50 @@ const getImmediateEmbedPlayback = (value) => {
   return null;
 };
 
-const getWebEmbedFrameStyle = (embedSrc, isMobileLayout) => {
-  if (isMobileLayout) return undefined;
+const isClipCafeEmbed = (value) =>
+  normalizeVideoValue(value).toLowerCase().includes("clip.cafe");
 
-  const safeSrc = normalizeVideoValue(embedSrc).toLowerCase();
+const getClipCafeFrameStyle = ({ isMobileLayout, isMobileLandscape }) => {
+  if (isMobileLayout) {
+    if (isMobileLandscape) {
+      return {
+        left: "50%",
+        top: "50%",
+        width: "100%",
+        height: "100%",
+        minWidth: "100%",
+        minHeight: "100%",
+        maxWidth: "100%",
+        maxHeight: "100%",
+        transform: "translate(-50%, -50%)",
+        transformOrigin: "center center",
+      };
+    }
 
-  if (safeSrc.includes("clip.cafe")) {
     return {
-      left: "51%",
+      left: "50%",
       top: "50%",
-      width: "107%",
-      height: "107%",
-      transform: "translate(-50%, -50%) scale(0.95)",
+      width: "100%",
+      height: "100%",
+      transform: "translate(-50%, -50%)",
       transformOrigin: "center center",
-      clipPath: "inset(0.5px)",
     };
+  }
+
+  return {
+    left: "51%",
+    top: "50%",
+    width: "107%",
+    height: "107%",
+    transform: "translate(-50%, -50%) scale(0.95)",
+    transformOrigin: "center center",
+    clipPath: "inset(0.5px)",
+  };
+};
+
+const getEmbedFrameStyle = ({ embedSrc, isMobileLayout, isMobileLandscape }) => {
+  if (isClipCafeEmbed(embedSrc)) {
+    return getClipCafeFrameStyle({ isMobileLayout, isMobileLandscape });
   }
 
   return undefined;
@@ -290,6 +319,7 @@ export default function ExampleVideoPlayer({
   controlsMode = "full",
 }) {
   const isMobileMockupLayout = layout === "mobileMockup";
+  const isMobileFullscreenLayout = layout === "mobileFullscreen";
   const isCompactControlsMode = controlsMode === "compact";
   const isCompactLayout = layout === "compact";
 
@@ -297,6 +327,7 @@ export default function ExampleVideoPlayer({
   const wrapperRef = useRef(null);
   const hideFullscreenControlsTimerRef = useRef(null);
   const hasConsumedAutoPlayRef = useRef(false);
+  const orientationLockRequestedRef = useRef(false);
 
   const [playback, setPlayback] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -311,6 +342,33 @@ export default function ExampleVideoPlayer({
   const [isLooping, setIsLooping] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mediaSize, setMediaSize] = useState(null);
+  const [isMobileLandscape, setIsMobileLandscape] = useState(false);
+
+  useEffect(() => {
+    const checkMobileLandscape = () => {
+      if (typeof window === "undefined") return;
+
+      const viewportWidth = window.innerWidth || 0;
+      const viewportHeight = window.innerHeight || 0;
+      const isCoarsePointer =
+        window.matchMedia?.("(hover: none), (pointer: coarse)")?.matches ||
+        "ontouchstart" in window ||
+        navigator.maxTouchPoints > 0;
+
+      setIsMobileLandscape(
+        Boolean(isCoarsePointer && viewportWidth > viewportHeight)
+      );
+    };
+
+    checkMobileLandscape();
+    window.addEventListener("resize", checkMobileLandscape);
+    window.addEventListener("orientationchange", checkMobileLandscape);
+
+    return () => {
+      window.removeEventListener("resize", checkMobileLandscape);
+      window.removeEventListener("orientationchange", checkMobileLandscape);
+    };
+  }, []);
 
   useEffect(() => {
     const checkTouchLike = () => {
@@ -452,6 +510,7 @@ export default function ExampleVideoPlayer({
       }
 
       if (!nextIsFullscreen) {
+        unlockMobileFullscreenLandscape();
         clearFullscreenControlsTimer();
         setControlsVisible(false);
       }
@@ -498,6 +557,7 @@ export default function ExampleVideoPlayer({
     };
 
     const handleVideoFullscreenEnd = () => {
+      unlockMobileFullscreenLandscape();
       setIsFullscreen(false);
       clearFullscreenControlsTimer();
       setControlsVisible(false);
@@ -609,6 +669,38 @@ export default function ExampleVideoPlayer({
     } catch {
       // Alguns navegadores iOS ignoram parte da Media Session API.
     }
+  }
+
+  function lockMobileFullscreenLandscape() {
+    if (!isMobileMockupLayout) return;
+    if (typeof window === "undefined") return;
+
+    const orientation = window.screen?.orientation;
+
+    if (!orientation?.lock) return;
+
+    orientation
+      .lock("landscape")
+      .then(() => {
+        orientationLockRequestedRef.current = true;
+      })
+      .catch(() => {
+        // Nem todo navegador permite travar a orientaÃ§Ã£o.
+        // Quando nÃ£o permitir, o player continua proporcional sem cortar.
+      });
+  }
+
+  function unlockMobileFullscreenLandscape() {
+    if (!orientationLockRequestedRef.current) return;
+    if (typeof window === "undefined") return;
+
+    try {
+      window.screen?.orientation?.unlock?.();
+    } catch {
+      // noop
+    }
+
+    orientationLockRequestedRef.current = false;
   }
 
   function showControls() {
@@ -800,17 +892,32 @@ export default function ExampleVideoPlayer({
     }
 
     if (wrapper.requestFullscreen) {
-      wrapper.requestFullscreen();
+      const fullscreenRequest = wrapper.requestFullscreen();
+      Promise.resolve(fullscreenRequest)
+        .then(lockMobileFullscreenLandscape)
+        .catch(() => {
+          // Se o navegador bloquear a tela cheia, mantÃ©m o player normal.
+        });
       return;
     }
 
     if (wrapper.webkitRequestFullscreen) {
-      wrapper.webkitRequestFullscreen();
+      const fullscreenRequest = wrapper.webkitRequestFullscreen();
+      Promise.resolve(fullscreenRequest)
+        .then(lockMobileFullscreenLandscape)
+        .catch(() => {
+          // Se o navegador bloquear a tela cheia, mantÃ©m o player normal.
+        });
       return;
     }
 
     if (player?.webkitEnterFullscreen) {
-      player.webkitEnterFullscreen();
+      try {
+        player.webkitEnterFullscreen();
+        lockMobileFullscreenLandscape();
+      } catch {
+        // noop
+      }
     }
   }
 
@@ -818,7 +925,7 @@ export default function ExampleVideoPlayer({
     return (
       <div
         className={
-          isMobileMockupLayout
+          isMobileMockupLayout || isMobileFullscreenLayout
             ? "flex h-full w-full items-center justify-center bg-black text-xs font-medium text-white"
             : layout === "natural"
             ? "flex min-h-[180px] w-full items-center justify-center rounded-xl bg-black text-xs font-medium text-white"
@@ -835,15 +942,16 @@ export default function ExampleVideoPlayer({
   }
 
   if (playback.type === "iframe") {
-    const webEmbedFrameStyle = getWebEmbedFrameStyle(
-      iframeSrc,
-      isMobileMockupLayout
-    );
-
+    const isMobilePlayerLayout = isMobileMockupLayout || isMobileFullscreenLayout;
+    const embedFrameStyle = getEmbedFrameStyle({
+      embedSrc: iframeSrc,
+      isMobileLayout: isMobilePlayerLayout,
+      isMobileLandscape,
+    });
     return (
       <div
         className={
-          isMobileMockupLayout
+          isMobilePlayerLayout
             ? "relative h-full w-full overflow-hidden bg-black"
             : layout === "natural"
             ? "relative aspect-video w-full overflow-hidden rounded-xl bg-black"
@@ -853,8 +961,11 @@ export default function ExampleVideoPlayer({
         <iframe
           src={iframeSrc}
           title={title}
-          className="absolute inset-0 h-full w-full border-0 bg-black"
-          style={webEmbedFrameStyle}
+          className={[
+            "absolute border-0 bg-black",
+            "inset-0 h-full w-full",
+          ].join(" ")}
+          style={embedFrameStyle}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowFullScreen
           loading="eager"
@@ -868,10 +979,10 @@ export default function ExampleVideoPlayer({
   return (
     <div
       ref={wrapperRef}
-      style={isMobileMockupLayout ? undefined : naturalFrameStyle}
+      style={isMobileMockupLayout || isMobileFullscreenLayout ? undefined : naturalFrameStyle}
       className={
         isMobileMockupLayout
-          ? "relative h-full w-full overflow-hidden bg-black"
+          ? "relative flex h-full w-full items-center justify-center overflow-hidden bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none"
           : layout === "natural"
           ? "relative overflow-hidden rounded-xl bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none"
           : isCompactLayout
@@ -896,9 +1007,11 @@ export default function ExampleVideoPlayer({
         preload="metadata"
         src={playback.src}
         className={
-          isMobileMockupLayout || isCompactLayout
+          isMobileFullscreenLayout || isFullscreen
+            ? "absolute inset-0 h-full w-full bg-black object-contain object-center"
+            : isMobileMockupLayout || isCompactLayout
             ? "absolute inset-0 h-full w-full bg-black object-cover object-center"
-            : "absolute inset-0 h-full w-full bg-black object-contain"
+            : "absolute inset-0 h-full w-full bg-black object-contain object-center"
         }
         onClick={handleVideoClick}
         onLoadedMetadata={(event) => {
@@ -1135,4 +1248,3 @@ export default function ExampleVideoPlayer({
     </div>
   );
 }
-
