@@ -33,6 +33,34 @@ const COMBINATIONS_POINTER_SFX_GUARD_MS = 700;
 const COMBINATIONS_MATCH_RESULT_GUARD_MS = 250;
 const COMBINATIONS_MOBILE_BREAKPOINT = 767;
 
+function isMobileCombinationsViewport() {
+  return (
+    typeof window !== "undefined" &&
+    window.innerWidth <= COMBINATIONS_MOBILE_BREAKPOINT
+  );
+}
+
+function clearMobileActiveFocus() {
+  if (!isMobileCombinationsViewport() || typeof document === "undefined") return;
+
+  const activeElement = document.activeElement;
+
+  if (activeElement && typeof activeElement.blur === "function") {
+    activeElement.blur();
+  }
+}
+
+function scheduleMobileActiveFocusClear() {
+  if (!isMobileCombinationsViewport()) return;
+
+  clearMobileActiveFocus();
+
+  if (typeof window === "undefined") return;
+
+  window.requestAnimationFrame?.(clearMobileActiveFocus);
+  window.setTimeout(clearMobileActiveFocus, 80);
+}
+
 function shuffleArray(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -329,6 +357,7 @@ export default function Combinations() {
     setShowExamples(false);
     setXpFeedback(null);
     setRoundXpBalance(0);
+    scheduleMobileActiveFocusClear();
   };
 
   const checkMatch = (leftIdx, rightIdx) => {
@@ -561,6 +590,7 @@ export default function Combinations() {
   };
 
   const nextRound = () => {
+    scheduleMobileActiveFocusClear();
     setRound((r) => r + 1);
   };
 
@@ -630,7 +660,7 @@ export default function Combinations() {
 
           <button
             onClick={nextRound}
-            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
+            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors focus:outline-none md:hover:bg-primary/90 md:focus-visible:ring-2 md:focus-visible:ring-primary/25 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
           >
             Proxima rodada
           </button>
@@ -648,7 +678,7 @@ export default function Combinations() {
 
         <button
           onClick={toggleSound}
-          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
           title={soundEnabled ? "Desativar audio" : "Ativar audio"}
         >
           {soundEnabled ? (
@@ -664,7 +694,7 @@ export default function Combinations() {
           <h1 className="text-2xl font-bold text-foreground">Combinações</h1>
           <button
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
             title={soundEnabled ? "Desativar audio" : "Ativar audio"}
           >
             {soundEnabled ? (
@@ -743,7 +773,7 @@ export default function Combinations() {
             const isError = errorPair?.left === idx;
 
             let cls =
-              "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:hover:border-sky-500/70 dark:hover:bg-sky-500/15";
+              "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] md:hover:border-[#93c5fd] md:hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:md:hover:border-sky-500/70 dark:md:hover:bg-sky-500/15";
 
             if (isMatched)
               cls =
@@ -761,7 +791,7 @@ export default function Combinations() {
                 onPointerDown={() => handleLeftPointerDown(idx)}
                 onClick={(event) => handleLeftClick(idx, event)}
                 disabled={isMatched}
-                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:h-[65px] md:rounded-[10px] ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 focus:outline-none md:h-[65px] md:rounded-[10px] md:focus-visible:ring-2 md:focus-visible:ring-primary/25 ${cls}`}
               >
                 <span className="mx-auto max-w-[92%] break-words leading-snug">{item.text}</span>
                 {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
@@ -777,7 +807,7 @@ export default function Combinations() {
             const isError = errorPair?.right === idx;
 
             let cls =
-              "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:hover:border-sky-500/70 dark:hover:bg-sky-500/15";
+              "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] md:hover:border-[#93c5fd] md:hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:md:hover:border-sky-500/70 dark:md:hover:bg-sky-500/15";
 
             if (isMatched)
               cls =
@@ -795,7 +825,7 @@ export default function Combinations() {
                 onPointerDown={() => handleRightPointerDown(idx)}
                 onClick={(event) => handleRightClick(idx, event)}
                 disabled={isMatched}
-                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 md:h-[65px] md:rounded-[10px] ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 focus:outline-none md:h-[65px] md:rounded-[10px] md:focus-visible:ring-2 md:focus-visible:ring-primary/25 ${cls}`}
               >
                 <span className="mx-auto max-w-[92%] break-words leading-snug">{item.text}</span>
                 {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
@@ -809,7 +839,7 @@ export default function Combinations() {
         <button
           type="button"
           onClick={handleConcludeRound}
-          className="sm:hidden flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          className="sm:hidden flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors focus:outline-none md:hover:bg-primary/90 md:focus-visible:ring-2 md:focus-visible:ring-primary/25"
         >
           Concluir rodada
         </button>

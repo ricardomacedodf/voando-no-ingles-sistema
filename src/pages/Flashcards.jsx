@@ -34,7 +34,13 @@ const FLASHCARD_MAIN_TEXT_MIN_SIZE = 22;
 const FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE = 12.672;
 const FLASHCARD_MAIN_TEXT_MAX_SIZE = 47;
 const FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE = 28.16;
+const FLASHCARD_MAIN_TEXT_FIXED_SIZE_MOBILE = 28;
+const FLASHCARD_MAIN_TEXT_FIXED_LINE_HEIGHT_MOBILE = 35;
+const FLASHCARD_MAIN_TEXT_WRAPPED_SIZE_MOBILE = 22;
+const FLASHCARD_MAIN_TEXT_WRAPPED_LINE_HEIGHT_MOBILE = 34;
 const FLASHCARD_MOBILE_BREAKPOINT = 767;
+const FLASHCARD_REVEAL_HINT_NARROW_MOBILE_MAX_WIDTH = 390;
+const FLASHCARD_REVEAL_HINT_NARROW_MOBILE_OFFSET_Y = -10;
 const FLASHCARD_DISCARD_TRANSITION_MS = 940;
 const FLASHCARD_DISCARD_CLEANUP_MS = 1040;
 const FLASHCARD_DISCARD_TRANSLATE_X = 520;
@@ -71,6 +77,50 @@ function getAdaptiveLineHeightMultiplier(fontSize) {
   return 1.24;
 }
 
+function getRenderedTextLineCount(textElement) {
+  if (!textElement || typeof document === "undefined") return 1;
+
+  const text = textElement.textContent || "";
+  if (!text.trim()) return 1;
+
+  let range = null;
+
+  try {
+    range = document.createRange();
+    range.selectNodeContents(textElement);
+
+    const rects = Array.from(range.getClientRects()).filter(
+      (rect) => rect.width > 0 && rect.height > 0
+    );
+
+    if (rects.length === 0) return 1;
+
+    const lineTops = [];
+
+    rects.forEach((rect) => {
+      const top = Math.round(rect.top);
+      const alreadyCounted = lineTops.some(
+        (lineTop) => Math.abs(lineTop - top) <= 1
+      );
+
+      if (!alreadyCounted) {
+        lineTops.push(top);
+      }
+    });
+
+    return Math.max(1, lineTops.length);
+  } catch {
+    const computedStyle = window.getComputedStyle?.(textElement);
+    const lineHeight = Number.parseFloat(computedStyle?.lineHeight || "0");
+
+    if (!lineHeight) return 1;
+
+    return Math.max(1, Math.round(textElement.scrollHeight / lineHeight));
+  } finally {
+    range?.detach?.();
+  }
+}
+
 function getAdaptiveMainTextStyle(content) {
   const text = typeof content === "string" ? content.trim() : "";
   const length = text.length;
@@ -78,12 +128,20 @@ function getAdaptiveMainTextStyle(content) {
   const isMobileViewport =
     typeof window !== "undefined" &&
     window.innerWidth <= FLASHCARD_MOBILE_BREAKPOINT;
-  const minFontSize = isMobileViewport
-    ? FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE
-    : FLASHCARD_MAIN_TEXT_MIN_SIZE;
-  const maxFontSize = isMobileViewport
-    ? FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE
-    : FLASHCARD_MAIN_TEXT_MAX_SIZE;
+
+  if (isMobileViewport) {
+    return {
+      fontSize: FLASHCARD_MAIN_TEXT_FIXED_SIZE_MOBILE,
+      lineHeight: FLASHCARD_MAIN_TEXT_FIXED_LINE_HEIGHT_MOBILE,
+      maxWidth: "98%",
+      overflowWrap: "break-word",
+      wordBreak: "normal",
+      hyphens: "auto",
+    };
+  }
+
+  const minFontSize = FLASHCARD_MAIN_TEXT_MIN_SIZE;
+  const maxFontSize = FLASHCARD_MAIN_TEXT_MAX_SIZE;
   const longestWord = text
     ? text.split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0)
     : 0;
@@ -105,9 +163,9 @@ function getAdaptiveMainTextStyle(content) {
   const fontSize = clamp(size, minFontSize, maxFontSize);
   const lineHeightMultiplier = getAdaptiveLineHeightMultiplier(fontSize);
 
-  let maxWidth = isMobileViewport ? "98%" : "95%";
-  if (length > 35) maxWidth = isMobileViewport ? "96%" : "92%";
-  if (length > 55) maxWidth = isMobileViewport ? "94%" : "90%";
+  let maxWidth = "95%";
+  if (length > 35) maxWidth = "92%";
+  if (length > 55) maxWidth = "90%";
 
   return {
     fontSize,
@@ -126,12 +184,39 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
     typeof window !== "undefined" &&
     window.innerWidth <= FLASHCARD_MOBILE_BREAKPOINT;
 
-  const minFontSize = isMobile
-    ? FLASHCARD_MAIN_TEXT_MIN_SIZE_MOBILE
-    : FLASHCARD_MAIN_TEXT_MIN_SIZE;
-  const maxFontSize = isMobile
-    ? FLASHCARD_MAIN_TEXT_MAX_SIZE_MOBILE
-    : FLASHCARD_MAIN_TEXT_MAX_SIZE;
+  if (isMobile) {
+    const applyMobileSize = (fontSize, lineHeight) => {
+      textElement.style.fontSize = `${fontSize}px`;
+      textElement.style.lineHeight = `${lineHeight}px`;
+      textElement.style.maxWidth = "98%";
+      textElement.style.marginInline = "auto";
+      textElement.style.overflowWrap = "break-word";
+      textElement.style.wordBreak = "normal";
+      textElement.style.hyphens = "auto";
+    };
+
+    applyMobileSize(
+      FLASHCARD_MAIN_TEXT_FIXED_SIZE_MOBILE,
+      FLASHCARD_MAIN_TEXT_FIXED_LINE_HEIGHT_MOBILE
+    );
+
+    // Força o navegador a recalcular o layout antes de medir as linhas reais.
+    textElement.getBoundingClientRect();
+
+    const renderedLineCount = getRenderedTextLineCount(textElement);
+
+    if (renderedLineCount > 1) {
+      applyMobileSize(
+        FLASHCARD_MAIN_TEXT_WRAPPED_SIZE_MOBILE,
+        FLASHCARD_MAIN_TEXT_WRAPPED_LINE_HEIGHT_MOBILE
+      );
+    }
+
+    return;
+  }
+
+  const minFontSize = FLASHCARD_MAIN_TEXT_MIN_SIZE;
+  const maxFontSize = FLASHCARD_MAIN_TEXT_MAX_SIZE;
 
   let currentSize = clamp(
     Math.round(preferredFontSize),
@@ -150,12 +235,8 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
 
   let safetyCounter = 0;
   while (safetyCounter < 64 && currentSize > minFontSize) {
-    const targetHeight = isMobile
-      ? Math.floor(slotElement.clientHeight * 0.82)
-      : slotElement.clientHeight;
-    const targetWidth = isMobile
-      ? Math.floor(slotElement.clientWidth * 0.98)
-      : slotElement.clientWidth;
+    const targetHeight = slotElement.clientHeight;
+    const targetWidth = slotElement.clientWidth;
     const overflowHeight = textElement.scrollHeight > targetHeight;
     const overflowWidth = textElement.scrollWidth > targetWidth;
 
@@ -186,6 +267,8 @@ export default function Flashcards() {
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
   const [suppressFlipResetTransition, setSuppressFlipResetTransition] = useState(false);
+  const [isNarrowMobileFlashcardViewport, setIsNarrowMobileFlashcardViewport] =
+    useState(false);
   const responseLockRef = useRef(false);
   const prevModeRef = useRef(mode);
   const frontTextRef = useRef(null);
@@ -267,6 +350,43 @@ export default function Flashcards() {
   useEffect(() => {
     return () => {
       clearDiscardOverlays();
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateNarrowMobileViewport = () => {
+      if (typeof window === "undefined") return;
+
+      const viewportWidth = Math.round(
+        window.visualViewport?.width ||
+          window.innerWidth ||
+          document.documentElement?.clientWidth ||
+          0
+      );
+
+      setIsNarrowMobileFlashcardViewport(
+        Boolean(
+          viewportWidth > 0 &&
+            viewportWidth <= FLASHCARD_REVEAL_HINT_NARROW_MOBILE_MAX_WIDTH
+        )
+      );
+    };
+
+    updateNarrowMobileViewport();
+    window.addEventListener("resize", updateNarrowMobileViewport);
+    window.addEventListener("orientationchange", updateNarrowMobileViewport);
+    window.visualViewport?.addEventListener(
+      "resize",
+      updateNarrowMobileViewport
+    );
+
+    return () => {
+      window.removeEventListener("resize", updateNarrowMobileViewport);
+      window.removeEventListener("orientationchange", updateNarrowMobileViewport);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        updateNarrowMobileViewport
+      );
     };
   }, []);
 
@@ -392,6 +512,11 @@ export default function Flashcards() {
   const frontTextStyle = getAdaptiveMainTextStyle(front);
   const backTextStyle = getAdaptiveMainTextStyle(back);
   const progressPct = vocab.length > 0 ? ((current + 1) / vocab.length) * 100 : 0;
+  const revealHintMobileStyle = isNarrowMobileFlashcardViewport
+    ? {
+        transform: `translateY(${FLASHCARD_REVEAL_HINT_NARROW_MOBILE_OFFSET_Y}px)`,
+      }
+    : undefined;
 
   useLayoutEffect(() => {
     const fitVisibleTexts = () => {
@@ -774,7 +899,7 @@ export default function Flashcards() {
               suppressFlipResetTransition ? "!transition-none" : ""
             }`}
           >
-            <div className="flip-card-front flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-card text-center">
+            <div className="flip-card-front flashcard-context-box absolute inset-0 !rounded-[16.25px] border border-border bg-card text-center sm:!rounded-2xl">
               <div
                 ref={frontTextSlotRef}
                 className="flashcard-main-text-slot"
@@ -802,12 +927,15 @@ export default function Flashcards() {
                   {front}
                 </p>
               </div>
-              <p className="flashcard-reveal-hint text-xs text-muted-foreground">
+              <p
+                className="flashcard-reveal-hint text-xs text-muted-foreground"
+                style={revealHintMobileStyle}
+              >
                 Clique para revelar
               </p>
             </div>
 
-            <div className="flip-card-back flashcard-context-box absolute inset-0 rounded-2xl border border-border bg-card text-center">
+            <div className="flip-card-back flashcard-context-box absolute inset-0 !rounded-[16.25px] border border-border bg-card text-center sm:!rounded-2xl">
               <div
                 ref={backTextSlotRef}
                 className="flashcard-main-text-slot"
@@ -838,6 +966,7 @@ export default function Flashcards() {
               <p
                 aria-hidden="true"
                 className="flashcard-reveal-hint flashcard-reveal-hint-placeholder text-xs text-muted-foreground"
+                style={revealHintMobileStyle}
               >
                 Clique para revelar
               </p>

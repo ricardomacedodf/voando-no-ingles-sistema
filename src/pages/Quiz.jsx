@@ -1,11 +1,10 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Volume2, VolumeX, ArrowRight, Check } from "lucide-react";
+import { Volume2, VolumeX, ArrowRight, Check, Lightbulb } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import ModeSelector from "../components/ModeSelector";
 import ExamplesPanel from "../components/ExamplesPanel";
-import ExamplesToggleButton from "../components/ExamplesToggleButton";
 import { scheduleExamplesAutoScroll } from "../lib/examplesAutoScroll";
 import { SFX_EVENTS } from "../lib/sfx";
 import {
@@ -43,6 +42,36 @@ const QUIZ_TEXT_MAX_SIZE_MOBILE = 40;
 const QUIZ_TEXT_SCALE_DESKTOP = 0.9;
 const QUIZ_TEXT_SCALE_MOBILE = 0.95;
 const QUIZ_SINGLE_LINE_LARGE_REDUCTION_MOBILE = 0.9;
+const QUIZ_MOBILE_SINGLE_LINE_FONT_SIZE = 32;
+const QUIZ_MOBILE_MULTI_LINE_FONT_SIZE = 28;
+
+function isMobileQuizViewport() {
+  return (
+    typeof window !== "undefined" &&
+    window.innerWidth <= QUIZ_MOBILE_BREAKPOINT
+  );
+}
+
+function clearMobileActiveFocus() {
+  if (!isMobileQuizViewport() || typeof document === "undefined") return;
+
+  const activeElement = document.activeElement;
+
+  if (activeElement && typeof activeElement.blur === "function") {
+    activeElement.blur();
+  }
+}
+
+function scheduleMobileActiveFocusClear() {
+  if (!isMobileQuizViewport()) return;
+
+  clearMobileActiveFocus();
+
+  if (typeof window === "undefined") return;
+
+  window.requestAnimationFrame?.(clearMobileActiveFocus);
+  window.setTimeout(clearMobileActiveFocus, 80);
+}
 
 function shuffleArray(arr) {
   const a = [...arr];
@@ -101,6 +130,19 @@ function getAdaptiveQuizTextStyle(content) {
   const longestWord = text
     ? text.split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0)
     : 0;
+
+  if (isMobileViewport) {
+    const fontSize = QUIZ_MOBILE_SINGLE_LINE_FONT_SIZE;
+
+    return {
+      fontSize,
+      lineHeight: Math.round(fontSize * getAdaptiveQuizLineHeight(fontSize)),
+      maxWidth: "92%",
+      overflowWrap: longestWord >= 16 ? "anywhere" : "break-word",
+      wordBreak: longestWord >= 16 ? "break-word" : "normal",
+      hyphens: "auto",
+    };
+  }
 
   let size = maxFontSize;
 
@@ -163,11 +205,13 @@ function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
     )}px`;
   };
 
-  let currentSize = clamp(
-    Math.round(preferredFontSize),
-    minFontSize,
-    maxFontSize
-  );
+  let currentSize = isMobile
+    ? QUIZ_MOBILE_SINGLE_LINE_FONT_SIZE
+    : clamp(
+        Math.round(preferredFontSize),
+        minFontSize,
+        maxFontSize
+      );
   applySize(currentSize);
 
   const getEstimatedLineCount = () => {
@@ -179,18 +223,12 @@ function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
     return Math.max(1, Math.round(textElement.scrollHeight / computedLineHeight));
   };
 
-  if (isMobile && currentSize >= Math.round(maxFontSize * 0.82)) {
+  if (isMobile) {
     const estimatedLineCount = getEstimatedLineCount();
-    if (estimatedLineCount <= 1) {
-      const reducedSingleLineSize = clamp(
-        Math.round(currentSize * QUIZ_SINGLE_LINE_LARGE_REDUCTION_MOBILE),
-        minFontSize,
-        maxFontSize
-      );
-      if (reducedSingleLineSize < currentSize) {
-        currentSize = reducedSingleLineSize;
-        applySize(currentSize);
-      }
+
+    if (estimatedLineCount > 1) {
+      currentSize = QUIZ_MOBILE_MULTI_LINE_FONT_SIZE;
+      applySize(currentSize);
     }
   }
 
@@ -341,6 +379,7 @@ export default function Quiz() {
   };
 
   const startRound = (nextRoundNumber, sourceVocab = allVocab) => {
+    scheduleMobileActiveFocusClear();
     setQueue(buildRoundQueue(sourceVocab));
     setRoundNumber(nextRoundNumber);
     setRoundDone(false);
@@ -578,6 +617,8 @@ export default function Quiz() {
   };
 
   const handleNextRound = async () => {
+    scheduleMobileActiveFocusClear();
+
     if (roundNumber >= MAX_ROUNDS) {
       try {
         const data = await fetchVocabulary();
@@ -672,7 +713,7 @@ export default function Quiz() {
 
           <button
             onClick={handleNextRound}
-            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
+            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors focus:outline-none md:hover:bg-primary/90 md:focus-visible:ring-2 md:focus-visible:ring-primary/25 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
           >
             {isLastRound ? "Recomecar" : "Proxima rodada"}
           </button>
@@ -682,14 +723,14 @@ export default function Quiz() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:max-w-[860px] md:overflow-visible sm:space-y-6">
       <div className="relative flex items-center justify-center sm:hidden">
         <div className="min-w-0">
           <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
         </div>
         <button
           onClick={toggleSound}
-          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
           title={soundEnabled ? "Desativar audio" : "Ativar audio"}
         >
           {soundEnabled ? (
@@ -700,12 +741,12 @@ export default function Quiz() {
         </button>
       </div>
 
-      <div className="hidden flex-wrap items-center justify-between gap-3 sm:flex">
+      <div className="hidden mx-auto w-full max-w-[760px] flex-wrap items-center justify-between gap-3 sm:flex">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Quiz</h1>
           <button
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
             title={soundEnabled ? "Desativar audio" : "Ativar audio"}
           >
             {soundEnabled ? (
@@ -748,7 +789,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="hidden sm:block">
+      <div className="hidden mx-auto w-full max-w-[760px] sm:block">
         <div className="flex items-center gap-3 text-sm font-medium">
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">
             {progressCurrent} de {QUESTIONS_PER_ROUND}
@@ -776,7 +817,8 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[671.2px] rounded-xl border border-border bg-card p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] sm:rounded-2xl sm:p-8">
+      <div className="mx-auto w-full max-w-[760px] space-y-5 md:overflow-visible">
+        <div className="mx-auto w-full max-w-[671.2px] md:max-w-[760px] !rounded-[12.5px] border border-border bg-card p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] sm:!rounded-2xl sm:p-8">
         <div
           ref={questionTextSlotRef}
           className="mx-auto flex h-[136px] min-h-[136px] w-full items-center justify-center overflow-hidden px-2 md:h-[132px] md:min-h-[132px]"
@@ -800,10 +842,10 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-4">
+      <div className="mx-auto grid w-full max-w-[671.2px] grid-cols-1 gap-2 md:max-w-[760px] md:grid-cols-2 md:gap-4">
         {options.map((opt, idx) => {
           let classes =
-            "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] hover:border-[#93c5fd] hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:hover:border-sky-500/70 dark:hover:bg-sky-500/15";
+            "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] md:hover:border-[#93c5fd] md:hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:md:hover:border-sky-500/70 dark:md:hover:bg-sky-500/15";
           const isWrongSelection = answered && idx === selected && !opt.correct;
           const isSelectedUnconfirmed = !answered && idx === selected;
           let badgeClasses = "bg-muted text-muted-foreground";
@@ -832,7 +874,7 @@ export default function Quiz() {
               onPointerDown={() => handleOptionPointerDown(idx)}
               onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
-              className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-card px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-[330px] md:justify-self-center md:rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
+              className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-card px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-none md:justify-self-stretch md:rounded-[10px] focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-2 md:focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >
@@ -849,11 +891,43 @@ export default function Quiz() {
           );
         })}
       </div>
+      </div>
 
-      {selected !== null ? (
+      <div className="mx-auto grid w-full grid-cols-2 gap-3 md:max-w-[760px]">
         <button
+          type="button"
+          onClick={() => {
+            if (!answered || !card?.meanings?.length) return;
+            setShowExamples((prev) => !prev);
+          }}
+          disabled={!answered || !card?.meanings?.length}
+          className={`flex h-[58px] w-full items-center justify-center rounded-xl border px-3 text-sm font-semibold transition-all focus:outline-none ${
+            answered && card?.meanings?.length
+              ? "border-border bg-card text-foreground shadow-[0_2px_0_rgba(148,163,184,0.24)] active:scale-[0.99] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)]"
+              : "cursor-not-allowed border-border bg-card text-foreground opacity-[0.44] dark:border-border dark:bg-card dark:text-foreground dark:opacity-[0.29]"
+          }`}
+        >
+          {showExamples ? (
+            "Ocultar exemplo"
+          ) : (
+            <span className="inline-flex items-center justify-center gap-1.5">
+              <Lightbulb className="h-4 w-4 text-amber-400" />
+              <span>Ver exemplo</span>
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={answered ? handleNext : handleConfirm}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          disabled={!answered && selected === null}
+          className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-all focus:outline-none ${
+            answered
+              ? "border-primary bg-primary text-primary-foreground shadow-[0_2px_0_rgba(37,177,95,0.26)] active:scale-[0.99]"
+              : selected !== null
+                ? "border-muted-foreground/50 bg-card text-muted-foreground shadow-[0_2px_0_rgba(107,114,128,0.20)] active:scale-[0.99] dark:border-slate-500/70 dark:bg-card dark:text-slate-300 dark:shadow-[0_2px_0_rgba(148,163,184,0.16)]"
+                : "cursor-not-allowed border-border bg-card text-foreground opacity-[0.44] dark:border-border dark:bg-card dark:text-foreground dark:opacity-[0.29]"
+          }`}
         >
           {answered ? (
             <>
@@ -863,16 +937,10 @@ export default function Quiz() {
             "Confirmar"
           )}
         </button>
-      ) : null}
+      </div>
 
       {answered && card?.meanings?.length > 0 ? (
         <div className="space-y-0">
-          <ExamplesToggleButton
-            expanded={showExamples}
-            onClick={() => setShowExamples((prev) => !prev)}
-            variant="flashcard"
-          />
-
           {showExamples ? (
             <div ref={examplesPanelRef}>
               <ExamplesPanel
