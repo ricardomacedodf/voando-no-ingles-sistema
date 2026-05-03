@@ -170,6 +170,7 @@ export default function Progress() {
   );
   const [loading, setLoading] = useState(true);
   const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const selectedPace = reviewPreferences.pace || REVIEW_PACE.EQUILIBRADO;
 
@@ -228,14 +229,27 @@ export default function Progress() {
     setReviewPreferences(nextPreferences);
   };
 
-  const handleResetHistory = async () => {
-    const confirmed = window.confirm(
-      "Tem certeza que deseja resetar apenas o progresso de estudo?\n\nAs palavras cadastradas serao mantidas.\n\nSerao zerados XP, nivel, streak, medalhas e estatisticas de aprendizado."
-    );
+  useEffect(() => {
+    if (!showResetConfirm) return undefined;
 
-    if (!confirmed) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !isResetting) {
+        setShowResetConfirm(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showResetConfirm, isResetting]);
+
+  const handleResetHistory = async () => {
+    if (isResetting) return;
 
     if (!user?.id) {
+      setShowResetConfirm(false);
       alert("Usuario nao identificado.");
       return;
     }
@@ -263,7 +277,7 @@ export default function Progress() {
       }
 
       await loadProgress();
-      alert("Progresso resetado com sucesso. Suas palavras cadastradas foram mantidas.");
+      setShowResetConfirm(false);
     } catch (error) {
       console.error("Erro ao resetar progresso:", error);
       alert("Ocorreu um erro ao resetar o progresso.");
@@ -298,7 +312,8 @@ export default function Progress() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1080px] space-y-8 px-4 py-4 md:min-h-[1047px] md:px-8 md:py-8">
+    <>
+      <div className="mx-auto w-full max-w-[1080px] space-y-8 px-4 py-4 md:min-h-[1047px] md:px-8 md:py-8">
       <div>
         <h1 className="mb-2 text-2xl font-bold">Progresso</h1>
         <p className="text-muted-foreground">
@@ -518,7 +533,7 @@ export default function Progress() {
       <div className="border-t border-border pt-8">
         <button
           type="button"
-          onClick={handleResetHistory}
+          onClick={() => setShowResetConfirm(true)}
           disabled={isResetting}
           className="inline-flex items-center justify-center rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive hover:text-white disabled:opacity-50"
         >
@@ -526,6 +541,78 @@ export default function Progress() {
           {isResetting ? "Resetando..." : "Resetar progresso"}
         </button>
       </div>
-    </div>
+      </div>
+
+      {showResetConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-progress-title"
+          onClick={() => !isResetting && setShowResetConfirm(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="reset-progress-title" className="text-lg font-bold text-foreground">
+                  Resetar progresso?
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Essa acao afeta apenas o historico de estudo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                disabled={isResetting}
+                className="rounded-full p-1 text-xl leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                aria-label="Fechar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4">
+              <div className="flex gap-3">
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                  <TriangleAlert className="h-5 w-5" />
+                </div>
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">
+                    Tem certeza que deseja resetar apenas o progresso de estudo?
+                  </p>
+                  <p>As palavras cadastradas serao mantidas.</p>
+                  <p>
+                    Serao zerados XP, nivel, streak, medalhas e estatisticas de aprendizado.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                disabled={isResetting}
+                className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleResetHistory}
+                disabled={isResetting}
+                className="rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-destructive/90 disabled:opacity-50"
+              >
+                {isResetting ? "Resetando..." : "Confirmar reset"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

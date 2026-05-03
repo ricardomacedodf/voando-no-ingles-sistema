@@ -24,7 +24,7 @@ export default function Logo({ variant = "sidebar", className = "" }) {
       ) : (
         <div className="min-w-0">
           <h1 className="text-lg font-bold leading-tight text-foreground">Voando no Inglês</h1>
-          <p className="text-xs text-muted-foreground">Teacher Ricardo</p>
+          <p className="text-xs text-muted-foreground">created by Ricardo Macedo</p>
         </div>
       )}
     </Link>
