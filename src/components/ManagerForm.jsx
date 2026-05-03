@@ -481,6 +481,12 @@ const isThirdPartyEmbeddedVideo = (value) => {
   );
 };
 
+const shouldDeleteVideoFromR2 = (videoUrl) => {
+  const cleanVideoUrl = normalizeText(videoUrl);
+
+  return Boolean(cleanVideoUrl) && !isThirdPartyEmbeddedVideo(cleanVideoUrl);
+};
+
 const getThirdPartyEmbedSrc = (value) => {
   const cleanValue = normalizeText(value);
 
@@ -892,7 +898,7 @@ const uploadVideoFileToR2 = async (file, scope = "example") => {
 const deleteVideoFromR2 = async (videoUrl) => {
   const cleanVideoUrl = normalizeText(videoUrl);
 
-  if (!cleanVideoUrl) {
+  if (!shouldDeleteVideoFromR2(cleanVideoUrl)) {
     return {
       deleted: false,
       skipped: true,

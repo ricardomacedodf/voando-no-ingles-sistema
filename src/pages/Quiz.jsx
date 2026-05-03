@@ -942,7 +942,7 @@ export default function Quiz() {
       {answered && card?.meanings?.length > 0 ? (
         <div className="space-y-0">
           {showExamples ? (
-            <div ref={examplesPanelRef}>
+            <div ref={examplesPanelRef} className="mx-auto w-full md:max-w-[760px]">
               <ExamplesPanel
                 allMeanings={card?.meanings}
                 activeMeaning={activeMeaning?.meaning}

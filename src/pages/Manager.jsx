@@ -3,7 +3,8 @@ import {
   Plus,
   Search,
   Trash2,
-  FileJson,
+  Download,
+  Upload,
   AlertTriangle,
   Menu,
 } from "lucide-react";
@@ -187,6 +188,26 @@ function normalizeExampleVideo(example) {
   return normalizeText(rawVideo);
 }
 
+function isThirdPartyEmbeddedVideo(value) {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return false;
+
+  return (
+    /<iframe/i.test(cleanValue) ||
+    /\[iframe/i.test(cleanValue) ||
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co|y\.yarn\.co/i.test(
+      cleanValue
+    )
+  );
+}
+
+function shouldDeleteVideoFromR2(videoUrl) {
+  const cleanVideoUrl = normalizeText(videoUrl);
+
+  return Boolean(cleanVideoUrl) && !isThirdPartyEmbeddedVideo(cleanVideoUrl);
+}
+
 function collectVocabularyVideoUrls(item) {
   if (!item) return [];
 
@@ -223,7 +244,7 @@ function collectVocabularyVideoUrls(item) {
 async function deleteVideoFromR2(videoUrl) {
   const cleanVideoUrl = normalizeText(videoUrl);
 
-  if (!cleanVideoUrl) return;
+  if (!shouldDeleteVideoFromR2(cleanVideoUrl)) return;
 
   const response = await fetch(getR2DeleteApiUrl(), {
     method: "POST",
@@ -260,6 +281,144 @@ async function deleteVideosFromR2(videoUrls) {
   }
 }
 
+function normalizeExportVideoEntry(entry, fallbackThumbnail = "") {
+  if (typeof entry === "string") {
+    const video = normalizeText(entry);
+    return video
+      ? {
+          video,
+          thumbnail: normalizeText(fallbackThumbnail),
+        }
+      : null;
+  }
+
+  if (!entry || typeof entry !== "object") return null;
+
+  const video = normalizeText(
+    entry.video ??
+      entry.videoUrl ??
+      entry.video_url ??
+      entry.wordVideo ??
+      entry.word_video ??
+      entry.globalVideo ??
+      entry.global_video ??
+      ""
+  );
+
+  if (!video) return null;
+
+  return {
+    video,
+    thumbnail: normalizeText(
+      entry.thumbnail ??
+        entry.thumbnailUrl ??
+        entry.thumbnail_url ??
+        entry.wordThumbnail ??
+        entry.word_thumbnail ??
+        entry.globalThumbnail ??
+        entry.global_thumbnail ??
+        fallbackThumbnail
+    ),
+  };
+}
+
+function normalizeExportVideoList(value, fallbackThumbnail = "") {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => normalizeExportVideoEntry(entry, fallbackThumbnail))
+      .filter(Boolean);
+  }
+
+  const entry = normalizeExportVideoEntry(value, fallbackThumbnail);
+
+  return entry ? [entry] : [];
+}
+
+function dedupeExportVideoEntries(entries) {
+  const seen = new Set();
+
+  return entries.filter((entry) => {
+    const video = normalizeText(entry?.video);
+
+    if (!video || seen.has(video)) return false;
+
+    seen.add(video);
+    return true;
+  });
+}
+
+function buildVocabularyExportItem(item) {
+  const fallbackWordThumbnail = normalizeWordThumbnail(item);
+  const wordVideos = dedupeExportVideoEntries([
+    ...normalizeExportVideoList(item?.wordVideos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(item?.word_videos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(item?.globalVideos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(item?.global_videos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(item?.stats?.wordVideos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(item?.stats?.word_videos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(item?.stats?.globalVideos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(item?.stats?.global_videos, fallbackWordThumbnail),
+    ...normalizeExportVideoList(normalizeWordVideo(item), fallbackWordThumbnail),
+  ]);
+
+  return {
+    term: item?.term || "",
+    pronunciation: item?.pronunciation || "",
+    wordVideos,
+    video: normalizeWordVideo(item),
+    thumbnail: fallbackWordThumbnail,
+    meanings: (item?.meanings || []).map((meaning) => {
+      const meaningVideo = normalizeMeaningVideo(meaning);
+
+      return {
+        meaning: meaning?.meaning || "",
+        category: meaning?.category || "",
+        tip: meaning?.tip || "",
+        video: meaningVideo,
+        thumbnail: normalizeText(
+          meaning?.thumbnail ?? meaning?.thumbnailUrl ?? meaning?.thumbnail_url ?? ""
+        ),
+        examples: (meaning?.examples || []).map((example) => {
+          const exampleVideo = normalizeExampleVideo(example);
+
+          return {
+            sentence: example?.sentence || "",
+            translation: example?.translation || "",
+            video: exampleVideo,
+            thumbnail: normalizeText(
+              example?.thumbnail ?? example?.thumbnailUrl ?? example?.thumbnail_url ?? ""
+            ),
+          };
+        }),
+      };
+    }),
+  };
+}
+
+function downloadVocabularyJson(items, fileName) {
+  const blob = new Blob([JSON.stringify(items, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function createSafeFileName(value) {
+  const cleanValue = normalizeText(value)
+    .replace(/[\\/:*?"<>|]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleanValue || "palavra";
+}
+
 function mapVocabularyRow(row) {
   const normalized = normalizeVocabularyItem({
     ...row,
@@ -282,6 +441,7 @@ export default function Manager() {
   const [editItem, setEditItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [itemToConfirmDelete, setItemToConfirmDelete] = useState(null);
   const [deletingItemId, setDeletingItemId] = useState(null);
   const [deletingAll, setDeletingAll] = useState(false);
 
@@ -339,7 +499,8 @@ export default function Manager() {
         throw error;
       }
 
-      loadVocab();
+      setVocab((current) => current.filter((item) => item.id !== id));
+      setItemToConfirmDelete(null);
     } catch (error) {
       console.error("Erro ao apagar item:", error);
       alert(
@@ -349,6 +510,21 @@ export default function Manager() {
     } finally {
       setDeletingItemId(null);
     }
+  };
+
+
+  const handleExportItem = (item) => {
+    if (!item) return;
+
+    downloadVocabularyJson(
+      [buildVocabularyExportItem(item)],
+      `${createSafeFileName(item.term)}.json`
+    );
+  };
+
+  const handleConfirmDeleteItem = () => {
+    if (!itemToConfirmDelete?.id) return;
+    handleDelete(itemToConfirmDelete.id);
   };
 
   const handleDeleteAll = async () => {
@@ -467,15 +643,16 @@ export default function Manager() {
             className="flex min-w-0 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-2 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:gap-1.5 sm:px-3 sm:text-xs"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Nova Palavra</span>
+            <span className="truncate">Nova Palavra/frase</span>
           </button>
 
           <button
             onClick={() => setView("import")}
             className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 py-2 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted sm:gap-1.5 sm:px-3 sm:text-xs"
           >
-            <FileJson className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Importar JSON</span>
+            <Upload className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate sm:hidden">Import</span>
+            <span className="hidden truncate sm:inline">Importar JSON</span>
           </button>
 
           {vocab.length > 0 ? (
@@ -564,7 +741,20 @@ export default function Manager() {
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    handleDelete(item.id);
+                    handleExportItem(item);
+                  }}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={`Exportar ${item.term}`}
+                  title="Exportar palavra"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setItemToConfirmDelete(item);
                   }}
                   disabled={deletingItemId === item.id || deletingAll}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-red-50 disabled:opacity-50"
@@ -577,6 +767,42 @@ export default function Manager() {
           })}
         </div>
       )}
+
+      <AlertDialog
+        open={Boolean(itemToConfirmDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deletingItemId) {
+            setItemToConfirmDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Apagar palavra ou frase
+            </AlertDialogTitle>
+
+            <AlertDialogDescription>
+              Tem certeza que deseja apagar "{itemToConfirmDelete?.term}"? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(deletingItemId)}>
+              Cancelar
+            </AlertDialogCancel>
+
+            <AlertDialogAction
+              onClick={handleConfirmDeleteItem}
+              disabled={Boolean(deletingItemId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+            >
+              {deletingItemId ? "Apagando..." : "Apagar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showDeleteAll} onOpenChange={setShowDeleteAll}>
         <AlertDialogContent>
