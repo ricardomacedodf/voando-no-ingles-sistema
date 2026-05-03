@@ -21,6 +21,7 @@ import { SFX_EVENTS } from "../lib/sfx";
 
 const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
 const MOBILE_EMBED_REOPEN_GUARD_MS = 650;
+const MOBILE_EMBED_OPENING_DELAY_MS = 260;
 const VIDEO_SWIPE_DISTANCE_PX = 42;
 const VIDEO_SWIPE_DIRECTION_RATIO = 1.15;
 
@@ -1150,6 +1151,7 @@ export default function ExamplesPanel({
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
+  const [isMobileEmbedOpening, setIsMobileEmbedOpening] = useState(false);
   const [isMobileLandscapeVideoLayout, setIsMobileLandscapeVideoLayout] = useState(false);
   const [mobileVideoViewportSize, setMobileVideoViewportSize] = useState({
     width: 0,
@@ -1453,6 +1455,27 @@ export default function ExamplesPanel({
     mobileVideo?.key || "mobile-video",
     currentMobileVideoValue || "video",
   ].join("|");
+  const mobileVideoSurfaceBackgroundClass =
+    isCurrentMobileVideoThirdPartyEmbed && isMobileEmbedOpening
+      ? "bg-transparent"
+      : "bg-black";
+
+  useEffect(() => {
+    if (!isMobile || !mobileVideo?.video || !isCurrentMobileVideoThirdPartyEmbed) {
+      setIsMobileEmbedOpening(false);
+      return;
+    }
+
+    setIsMobileEmbedOpening(true);
+
+    const openingTimer = window.setTimeout(() => {
+      setIsMobileEmbedOpening(false);
+    }, MOBILE_EMBED_OPENING_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(openingTimer);
+    };
+  }, [isMobile, mobileVideoPlayerKey, isCurrentMobileVideoThirdPartyEmbed]);
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -1485,6 +1508,7 @@ export default function ExamplesPanel({
       startX: 0,
       startY: 0,
     };
+    setIsMobileEmbedOpening(false);
     setMobileVideo(null);
   };
 
@@ -1510,6 +1534,8 @@ export default function ExamplesPanel({
       if (isThirdPartyMobileVideo && isInsideCloseReopenGuard) {
         return;
       }
+
+      setIsMobileEmbedOpening(Boolean(isThirdPartyMobileVideo));
 
       setMobileVideo({
         video,
@@ -2284,11 +2310,17 @@ export default function ExamplesPanel({
           >
             <div
               className={
-                shouldUseCenteredEmbeddedMobileLayout
-                  ? "touch-pan-y overflow-hidden bg-black"
-                  : isMobileLandscapeVideoLayout
-                  ? "h-[100dvh] w-[100dvw] touch-pan-y overflow-hidden bg-black"
-                  : "aspect-[5/4] w-full touch-pan-y overflow-hidden bg-black"
+                [
+                  "relative transform-gpu",
+                  shouldUseCenteredEmbeddedMobileLayout
+                    ? "touch-pan-y overflow-hidden"
+                    : isMobileLandscapeVideoLayout
+                    ? "h-[100dvh] w-[100dvw] touch-pan-y overflow-hidden"
+                    : "aspect-[5/4] w-full touch-pan-y overflow-hidden",
+                  mobileVideoSurfaceBackgroundClass,
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               }
               style={mobileLandscapeEmbedFrameStyle}
               onClick={(event) => event.stopPropagation()}
@@ -2296,17 +2328,33 @@ export default function ExamplesPanel({
               onPointerUp={handleExpandedVideoPointerUp}
               onPointerCancel={handleExpandedVideoPointerCancel}
             >
-              <ExampleVideoPlayer
-                key={mobileVideoPlayerKey}
-                video={mobileVideo?.video || ""}
-                title={mobileVideo?.title || ""}
-                autoPlay={Boolean(mobileVideo?.autoPlay)}
-                layout={
-                  isMobileLandscapeVideoLayout
-                    ? "mobileFullscreen"
-                    : "mobileMockup"
+              <div
+                className={
+                  [
+                    "h-full w-full transform-gpu transition-opacity duration-150 ease-out",
+                    isCurrentMobileVideoThirdPartyEmbed
+                      ? "[&>div]:bg-transparent [&_iframe]:bg-transparent"
+                      : "",
+                    isCurrentMobileVideoThirdPartyEmbed && isMobileEmbedOpening
+                      ? "opacity-0"
+                      : "opacity-100",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
                 }
-              />
+              >
+                <ExampleVideoPlayer
+                  key={mobileVideoPlayerKey}
+                  video={mobileVideo?.video || ""}
+                  title={mobileVideo?.title || ""}
+                  autoPlay={Boolean(mobileVideo?.autoPlay)}
+                  layout={
+                    isMobileLandscapeVideoLayout
+                      ? "mobileFullscreen"
+                      : "mobileMockup"
+                  }
+                />
+              </div>
             </div>
 
             {false && mobileVideo?.videos?.length > 1 && !isExpandedGlobalWordVideo ? (
