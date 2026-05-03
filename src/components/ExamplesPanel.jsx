@@ -1149,6 +1149,11 @@ export default function ExamplesPanel({
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
   const [isMobileLandscapeVideoLayout, setIsMobileLandscapeVideoLayout] = useState(false);
+  const [mobileVideoViewportSize, setMobileVideoViewportSize] = useState({
+    width: 0,
+    height: 0,
+  });
+  const mobileVideoResizeTimerRef = useRef(null);
   const [videoIndexes, setVideoIndexes] = useState({});
   const [expandedMeaningVideoKey, setExpandedMeaningVideoKey] = useState(null);
   const expandedVideoSwipeRef = useRef({
@@ -1161,32 +1166,76 @@ export default function ExamplesPanel({
   useEffect(() => {
     if (!isMobile) {
       setIsMobileLandscapeVideoLayout(false);
+      setMobileVideoViewportSize({ width: 0, height: 0 });
       return;
     }
+
+    const readViewportSize = () => {
+      if (typeof window === "undefined") return;
+
+      const visualViewport = window.visualViewport;
+      const viewportWidth = Math.round(
+        visualViewport?.width ||
+          window.innerWidth ||
+          document.documentElement?.clientWidth ||
+          0
+      );
+      const viewportHeight = Math.round(
+        visualViewport?.height ||
+          window.innerHeight ||
+          document.documentElement?.clientHeight ||
+          0
+      );
+
+      setMobileVideoViewportSize((current) => {
+        if (current.width === viewportWidth && current.height === viewportHeight) {
+          return current;
+        }
+
+        return {
+          width: viewportWidth,
+          height: viewportHeight,
+        };
+      });
+
+      setIsMobileLandscapeVideoLayout(Boolean(viewportWidth > viewportHeight));
+    };
 
     const checkMobileLandscapeVideoLayout = () => {
       if (typeof window === "undefined") return;
 
-      const viewportWidth = window.innerWidth || 0;
-      const viewportHeight = window.innerHeight || 0;
-      const isCoarsePointer =
-        window.matchMedia?.("(hover: none), (pointer: coarse)")?.matches ||
-        "ontouchstart" in window ||
-        navigator.maxTouchPoints > 0;
+      window.requestAnimationFrame?.(readViewportSize) || readViewportSize();
 
-      setIsMobileLandscapeVideoLayout(
-        Boolean(isCoarsePointer && viewportWidth > viewportHeight)
-      );
+      if (mobileVideoResizeTimerRef.current) {
+        window.clearTimeout(mobileVideoResizeTimerRef.current);
+      }
+
+      // Safari/iOS pode entregar uma medida intermediária durante a rotação.
+      // Um único ajuste final suaviza a transição sem remontar o iframe várias vezes.
+      mobileVideoResizeTimerRef.current = window.setTimeout(() => {
+        readViewportSize();
+        mobileVideoResizeTimerRef.current = null;
+      }, 180);
     };
 
     checkMobileLandscapeVideoLayout();
     window.addEventListener("resize", checkMobileLandscapeVideoLayout);
     window.addEventListener("orientationchange", checkMobileLandscapeVideoLayout);
+    window.visualViewport?.addEventListener("resize", checkMobileLandscapeVideoLayout);
 
     return () => {
+      if (mobileVideoResizeTimerRef.current) {
+        window.clearTimeout(mobileVideoResizeTimerRef.current);
+        mobileVideoResizeTimerRef.current = null;
+      }
+
       window.removeEventListener("resize", checkMobileLandscapeVideoLayout);
       window.removeEventListener(
         "orientationchange",
+        checkMobileLandscapeVideoLayout
+      );
+      window.visualViewport?.removeEventListener(
+        "resize",
         checkMobileLandscapeVideoLayout
       );
     };
@@ -1362,11 +1411,44 @@ export default function ExamplesPanel({
     : "mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3";
   const isExpandedGlobalWordVideo =
     mobileVideo?.groupKey === "global-word-video-group";
-  const isCurrentMobileVideoThirdPartyEmbed = isLikelyThirdPartyEmbedValue(
-    mobileVideo?.video
-  );
+  const currentMobileVideoValue = mobileVideo?.video || "";
+  const isCurrentMobileVideoThirdPartyEmbed =
+    isLikelyThirdPartyEmbedValue(currentMobileVideoValue) ||
+    isThirdPartyEmbeddedVideo(currentMobileVideoValue);
   const shouldUseCenteredEmbeddedMobileLayout =
     isCurrentMobileVideoThirdPartyEmbed && isMobileLandscapeVideoLayout;
+  const mobileLandscapeViewportWidth = mobileVideoViewportSize.width || 0;
+  const mobileLandscapeViewportHeight = mobileVideoViewportSize.height || 0;
+  const mobileLandscapeEmbedWidth =
+    mobileLandscapeViewportWidth && mobileLandscapeViewportHeight
+      ? Math.min(
+          mobileLandscapeViewportWidth,
+          Math.round((mobileLandscapeViewportHeight * 16) / 9)
+        )
+      : 0;
+  const mobileLandscapeEmbedHeight =
+    mobileLandscapeViewportWidth && mobileLandscapeViewportHeight
+      ? Math.min(
+          mobileLandscapeViewportHeight,
+          Math.round((mobileLandscapeViewportWidth * 9) / 16)
+        )
+      : 0;
+  const mobileLandscapeEmbedFrameStyle =
+    shouldUseCenteredEmbeddedMobileLayout &&
+    mobileLandscapeEmbedWidth &&
+    mobileLandscapeEmbedHeight
+      ? {
+          width: `${mobileLandscapeEmbedWidth}px`,
+          height: `${mobileLandscapeEmbedHeight}px`,
+          maxWidth: "100vw",
+          maxHeight: "100vh",
+          aspectRatio: "16 / 9",
+        }
+      : undefined;
+  const mobileVideoPlayerKey = [
+    mobileVideo?.key || "mobile-video",
+    currentMobileVideoValue || "video",
+  ].join("|");
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -1522,10 +1604,10 @@ export default function ExamplesPanel({
       currentVideo.video
     );
     const shouldRenderThirdPartyInline = !isMobile && isCurrentVideoThirdParty;
-    // No mobile, vídeos embedados NÃO devem montar iframe/player como preview.
-    // Eles precisam passar pelo ExampleVideoThumbnail para buscar a imagem real
-    // via resolveExampleVideoThumbnail/api/embed-thumbnail. O player só abre no toque.
-    const shouldRenderMobileThirdPartyPreview = false;
+    // No mobile, vídeos embedados devem preservar a aparência original do provider
+    // como miniatura/preview. Por isso, renderizamos o iframe sem autoplay e usamos
+    // uma camada transparente apenas para abrir o player expandido no primeiro toque.
+    const shouldRenderMobileThirdPartyPreview = isMobile && isCurrentVideoThirdParty;
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
     const shouldAutoPlayDesktopVideo =
       isVideoOpen &&
@@ -1533,6 +1615,7 @@ export default function ExamplesPanel({
       !isCurrentVideoThirdParty;
     const shouldRenderPlayerDirectly =
       shouldRenderThirdPartyInline ||
+      shouldRenderMobileThirdPartyPreview ||
       (isVideoOpen && !isMobile);
     const shouldShowAttachedChip =
       !isMobile &&
@@ -2158,7 +2241,7 @@ export default function ExamplesPanel({
       {mobileVideo?.video ? (
         <div
           className={
-            isMobileLandscapeVideoLayout && !shouldUseCenteredEmbeddedMobileLayout
+            isMobileLandscapeVideoLayout
               ? "fixed inset-0 z-[9999] bg-black"
               : "fixed inset-0 z-[9999] bg-black/80"
           }
@@ -2189,28 +2272,19 @@ export default function ExamplesPanel({
                   ? "h-[100dvh] w-[100dvw] touch-pan-y overflow-hidden bg-black"
                   : "aspect-[5/4] w-full touch-pan-y overflow-hidden bg-black"
               }
-              style={
-                shouldUseCenteredEmbeddedMobileLayout
-                  ? {
-                      width: "min(100dvw, calc(100dvh * 16 / 9))",
-                      height: "min(100dvh, calc(100dvw * 9 / 16))",
-                    }
-                  : undefined
-              }
+              style={mobileLandscapeEmbedFrameStyle}
               onClick={(event) => event.stopPropagation()}
               onPointerDown={handleExpandedVideoPointerDown}
               onPointerUp={handleExpandedVideoPointerUp}
               onPointerCancel={handleExpandedVideoPointerCancel}
             >
               <ExampleVideoPlayer
-                key={mobileVideo?.key || "mobile-video"}
+                key={mobileVideoPlayerKey}
                 video={mobileVideo?.video || ""}
                 title={mobileVideo?.title || ""}
                 autoPlay={Boolean(mobileVideo?.autoPlay)}
                 layout={
-                  shouldUseCenteredEmbeddedMobileLayout
-                    ? "mobileMockup"
-                    : isMobileLandscapeVideoLayout
+                  isMobileLandscapeVideoLayout
                     ? "mobileFullscreen"
                     : "mobileMockup"
                 }

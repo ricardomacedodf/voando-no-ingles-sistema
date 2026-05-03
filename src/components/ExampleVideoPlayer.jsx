@@ -13,6 +13,7 @@ import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
 
 const FALLBACK_MESSAGE = "Este vÃ­deo nÃ£o permite reproduÃ§Ã£o direta aqui.";
 const FULLSCREEN_CONTROLS_HIDE_DELAY = 1000;
+const videoPlaybackStateCache = new Map();
 
 function GlassControlButton({
   label,
@@ -95,6 +96,8 @@ function addAutoplayToUrl(src) {
 
 const normalizeVideoValue = (value) =>
   typeof value === "string" ? value.trim() : "";
+
+const getVideoPlaybackStateKey = (value) => normalizeVideoValue(value);
 
 const extractIframeSrcFromValue = (value) => {
   const cleanValue = normalizeVideoValue(value);
@@ -265,32 +268,11 @@ const getImmediateEmbedPlayback = (value) => {
 const isClipCafeEmbed = (value) =>
   normalizeVideoValue(value).toLowerCase().includes("clip.cafe");
 
-const getClipCafeFrameStyle = ({ isMobileLayout, isMobileLandscape }) => {
-  if (isMobileLayout) {
-    if (isMobileLandscape) {
-      return {
-        left: "50%",
-        top: "50%",
-        width: "100%",
-        height: "100%",
-        minWidth: "100%",
-        minHeight: "100%",
-        maxWidth: "100%",
-        maxHeight: "100%",
-        transform: "translate(-50%, -50%)",
-        transformOrigin: "center center",
-      };
-    }
-
-    return {
-      left: "50%",
-      top: "50%",
-      width: "100%",
-      height: "100%",
-      transform: "translate(-50%, -50%)",
-      transformOrigin: "center center",
-    };
-  }
+const getClipCafeFrameStyle = ({ isMobileLayout }) => {
+  // No mobile o iframe precisa obedecer exatamente o tamanho do wrapper.
+  // Usar transform/medidas em dvw/dvh aqui fazia o ClipCafe manter o layout
+  // interno antigo em alguns navegadores, principalmente Safari, gerando corte.
+  if (isMobileLayout) return undefined;
 
   return {
     left: "51%",
@@ -326,8 +308,16 @@ export default function ExampleVideoPlayer({
   const videoRef = useRef(null);
   const wrapperRef = useRef(null);
   const hideFullscreenControlsTimerRef = useRef(null);
+  const restorePlaybackTimerRef = useRef(null);
   const hasConsumedAutoPlayRef = useRef(false);
+  const hasRestoredPlaybackRef = useRef(false);
   const orientationLockRequestedRef = useRef(false);
+  const playbackStateRef = useRef({
+    key: "",
+    currentTime: 0,
+    duration: 0,
+    wasPlaying: false,
+  });
 
   const [playback, setPlayback] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -344,19 +334,30 @@ export default function ExampleVideoPlayer({
   const [mediaSize, setMediaSize] = useState(null);
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
 
+  const playbackStateKey = useMemo(() => getVideoPlaybackStateKey(video), [video]);
+  const savedOwnVideoPlaybackState =
+    playbackStateKey && !isLikelyThirdPartyEmbedValue(playbackStateKey)
+      ? videoPlaybackStateCache.get(playbackStateKey)
+      : null;
+  const shouldUseNativeVideoAutoPlay = Boolean(
+    autoPlay &&
+      (!savedOwnVideoPlaybackState ||
+        !Number.isFinite(savedOwnVideoPlaybackState.currentTime) ||
+        savedOwnVideoPlaybackState.currentTime <= 0.2)
+  );
+
   useEffect(() => {
     const checkMobileLandscape = () => {
       if (typeof window === "undefined") return;
 
       const viewportWidth = window.innerWidth || 0;
       const viewportHeight = window.innerHeight || 0;
-      const isCoarsePointer =
-        window.matchMedia?.("(hover: none), (pointer: coarse)")?.matches ||
-        "ontouchstart" in window ||
-        navigator.maxTouchPoints > 0;
 
       setIsMobileLandscape(
-        Boolean(isCoarsePointer && viewportWidth > viewportHeight)
+        Boolean(
+          (isMobileMockupLayout || isMobileFullscreenLayout) &&
+            viewportWidth > viewportHeight
+        )
       );
     };
 
@@ -368,7 +369,7 @@ export default function ExampleVideoPlayer({
       window.removeEventListener("resize", checkMobileLandscape);
       window.removeEventListener("orientationchange", checkMobileLandscape);
     };
-  }, []);
+  }, [isMobileMockupLayout, isMobileFullscreenLayout]);
 
   useEffect(() => {
     const checkTouchLike = () => {
@@ -392,17 +393,26 @@ export default function ExampleVideoPlayer({
     let isMounted = true;
     const normalizedVideo = typeof video === "string" ? video.trim() : "";
     const immediateEmbedPlayback = getImmediateEmbedPlayback(normalizedVideo);
+    const savedPlaybackState = videoPlaybackStateCache.get(
+      getVideoPlaybackStateKey(normalizedVideo)
+    );
     hasConsumedAutoPlayRef.current = false;
+    hasRestoredPlaybackRef.current = false;
 
     setPlayback(immediateEmbedPlayback || null);
     setFailed(false);
-    setIsPlaying(false);
+    setIsPlaying(Boolean(savedPlaybackState?.wasPlaying));
     setControlsVisible(false);
-    setCurrentTime(0);
-    setDuration(0);
+    setCurrentTime(savedPlaybackState?.currentTime || 0);
+    setDuration(savedPlaybackState?.duration || 0);
     setIsLooping(true);
     setMediaSize(null);
     clearFullscreenControlsTimer();
+
+    if (restorePlaybackTimerRef.current) {
+      window.clearTimeout(restorePlaybackTimerRef.current);
+      restorePlaybackTimerRef.current = null;
+    }
 
     if (!normalizedVideo) {
       setPlayback({
@@ -413,6 +423,13 @@ export default function ExampleVideoPlayer({
 
       return () => {
         isMounted = false;
+      };
+    }
+
+    if (immediateEmbedPlayback) {
+      return () => {
+        isMounted = false;
+        clearFullscreenControlsTimer();
       };
     }
 
@@ -437,6 +454,17 @@ export default function ExampleVideoPlayer({
       clearFullscreenControlsTimer();
     };
   }, [video]);
+
+  useEffect(() => {
+    return () => {
+      saveOwnVideoPlaybackState();
+
+      if (restorePlaybackTimerRef.current) {
+        window.clearTimeout(restorePlaybackTimerRef.current);
+        restorePlaybackTimerRef.current = null;
+      }
+    };
+  }, [playbackStateKey]);
 
   useEffect(() => {
     const player = videoRef.current;
@@ -464,8 +492,14 @@ export default function ExampleVideoPlayer({
     const pauseWhenPageIsHidden = () => {
       const player = videoRef.current;
 
-      if (player && !player.paused) {
-        player.pause();
+      if (player) {
+        saveOwnVideoPlaybackState({
+          wasPlaying: !player.paused && !player.ended,
+        });
+
+        if (!player.paused) {
+          player.pause();
+        }
       }
 
       clearFullscreenControlsTimer();
@@ -671,6 +705,89 @@ export default function ExampleVideoPlayer({
     }
   }
 
+  function getSavedOwnVideoPlaybackState() {
+    if (!playbackStateKey || isLikelyThirdPartyEmbedValue(playbackStateKey)) {
+      return null;
+    }
+
+    return videoPlaybackStateCache.get(playbackStateKey) || null;
+  }
+
+  function saveOwnVideoPlaybackState(overrides = {}) {
+    if (!playbackStateKey || isLikelyThirdPartyEmbedValue(playbackStateKey)) {
+      return;
+    }
+
+    const player = videoRef.current;
+    const playerCurrentTime = Number.isFinite(player?.currentTime)
+      ? player.currentTime
+      : playbackStateRef.current.currentTime || 0;
+    const playerDuration = Number.isFinite(player?.duration)
+      ? player.duration
+      : playbackStateRef.current.duration || 0;
+    const nextState = {
+      ...playbackStateRef.current,
+      key: playbackStateKey,
+      currentTime: Math.max(0, playerCurrentTime),
+      duration: Math.max(0, playerDuration),
+      wasPlaying:
+        typeof overrides.wasPlaying === "boolean"
+          ? overrides.wasPlaying
+          : player
+          ? !player.paused && !player.ended
+          : Boolean(playbackStateRef.current.wasPlaying),
+      ...overrides,
+    };
+
+    playbackStateRef.current = nextState;
+    videoPlaybackStateCache.set(playbackStateKey, nextState);
+  }
+
+  function restoreOwnVideoPlaybackState(player) {
+    if (!player || hasRestoredPlaybackRef.current) return;
+
+    const savedPlaybackState = getSavedOwnVideoPlaybackState();
+    const savedTime = savedPlaybackState?.currentTime || 0;
+
+    if (!savedPlaybackState || savedTime <= 0.2) {
+      hasRestoredPlaybackRef.current = true;
+      return;
+    }
+
+    const safeDuration = Number.isFinite(player.duration) && player.duration > 0
+      ? player.duration
+      : savedPlaybackState.duration || 0;
+    const safeTime = safeDuration > 0
+      ? Math.min(savedTime, Math.max(0, safeDuration - 0.25))
+      : savedTime;
+
+    try {
+      player.currentTime = safeTime;
+      setCurrentTime(safeTime);
+      hasRestoredPlaybackRef.current = true;
+    } catch {
+      restorePlaybackTimerRef.current = window.setTimeout(() => {
+        try {
+          player.currentTime = safeTime;
+          setCurrentTime(safeTime);
+          hasRestoredPlaybackRef.current = true;
+        } catch {
+          hasRestoredPlaybackRef.current = true;
+        }
+      }, 120);
+    }
+  }
+
+  function shouldResumeOwnVideoPlayback() {
+    const savedPlaybackState = getSavedOwnVideoPlaybackState();
+
+    if (savedPlaybackState) {
+      return Boolean(savedPlaybackState.wasPlaying);
+    }
+
+    return Boolean(autoPlay);
+  }
+
   function lockMobileFullscreenLandscape() {
     if (!isMobileMockupLayout) return;
     if (typeof window === "undefined") return;
@@ -771,6 +888,7 @@ export default function ExampleVideoPlayer({
       player
         .play()
         .then(() => {
+          saveOwnVideoPlaybackState({ wasPlaying: true });
           setIsPlaying(true);
 
           if (isFullscreenMode()) {
@@ -789,6 +907,7 @@ export default function ExampleVideoPlayer({
       return;
     }
 
+    saveOwnVideoPlaybackState({ wasPlaying: false });
     player.pause();
     setIsPlaying(false);
 
@@ -817,6 +936,7 @@ export default function ExampleVideoPlayer({
       return;
     }
 
+    saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: false });
     setCurrentTime(0);
     setIsPlaying(false);
     showControls();
@@ -845,6 +965,7 @@ export default function ExampleVideoPlayer({
 
     player.currentTime = nextTime;
     setCurrentTime(nextTime);
+    saveOwnVideoPlaybackState({ currentTime: nextTime });
     showControls();
   }
 
@@ -970,6 +1091,7 @@ export default function ExampleVideoPlayer({
           allowFullScreen
           loading="eager"
           referrerPolicy="strict-origin-when-cross-origin"
+          scrolling="no"
           onError={() => setFailed(true)}
         />
       </div>
@@ -996,7 +1118,7 @@ export default function ExampleVideoPlayer({
     >
       <video
         ref={videoRef}
-        autoPlay={autoPlay}
+        autoPlay={shouldUseNativeVideoAutoPlay}
         loop={isLooping}
         playsInline
         disablePictureInPicture
@@ -1031,11 +1153,21 @@ export default function ExampleVideoPlayer({
           player.disableRemotePlayback = true;
           player.setAttribute("x-webkit-airplay", "deny");
           player.setAttribute("webkit-playsinline", "true");
+
+          restoreOwnVideoPlaybackState(player);
         }}
         onTimeUpdate={(event) => {
-          setCurrentTime(event.currentTarget.currentTime || 0);
+          const player = event.currentTarget;
+          const nextTime = player.currentTime || 0;
+          setCurrentTime(nextTime);
+          saveOwnVideoPlaybackState({
+            currentTime: nextTime,
+            duration: player.duration || duration || 0,
+            wasPlaying: !player.paused && !player.ended,
+          });
         }}
         onPlay={() => {
+          saveOwnVideoPlaybackState({ wasPlaying: true });
           setIsPlaying(true);
 
           if (isFullscreenMode()) {
@@ -1046,6 +1178,7 @@ export default function ExampleVideoPlayer({
           setControlsVisible(false);
         }}
         onPause={() => {
+          saveOwnVideoPlaybackState({ wasPlaying: false });
           setIsPlaying(false);
 
           clearFullscreenControlsTimer();
@@ -1061,17 +1194,23 @@ export default function ExampleVideoPlayer({
           clearSystemMediaSession();
         }}
         onEnded={() => {
+          saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: false });
           setIsPlaying(false);
           setControlsVisible(true);
           clearFullscreenControlsTimer();
           clearSystemMediaSession();
         }}
         onCanPlay={(event) => {
-          if (!autoPlay || hasConsumedAutoPlayRef.current) return;
+          const player = event.currentTarget;
+          restoreOwnVideoPlaybackState(player);
+
+          if (!shouldResumeOwnVideoPlayback() || hasConsumedAutoPlayRef.current) {
+            return;
+          }
 
           hasConsumedAutoPlayRef.current = true;
 
-          event.currentTarget.play().catch(() => {
+          player.play().catch(() => {
             setIsPlaying(false);
             setControlsVisible(true);
             clearSystemMediaSession();
