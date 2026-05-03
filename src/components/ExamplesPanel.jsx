@@ -20,6 +20,7 @@ import { playSound } from "../lib/gameState";
 import { SFX_EVENTS } from "../lib/sfx";
 
 const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
+const MOBILE_EMBED_REOPEN_GUARD_MS = 650;
 const VIDEO_SWIPE_DISTANCE_PX = 42;
 const VIDEO_SWIPE_DIRECTION_RATIO = 1.15;
 
@@ -1144,6 +1145,7 @@ export default function ExamplesPanel({
   vocabularyItem,
 }) {
   const lastClosePointerSfxAtRef = useRef(0);
+  const lastMobileVideoCloseAtRef = useRef(0);
   const isMobile = useIsMobile();
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
@@ -1375,6 +1377,8 @@ export default function ExamplesPanel({
   useEffect(() => {
     if (!mobileVideo?.video) return;
 
+    const previousBodyOverflow = document.body.style.overflow;
+
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         setMobileVideo(null);
@@ -1386,7 +1390,7 @@ export default function ExamplesPanel({
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousBodyOverflow;
     };
   }, [mobileVideo]);
 
@@ -1474,6 +1478,13 @@ export default function ExamplesPanel({
   };
 
   const closeMobileVideo = () => {
+    lastMobileVideoCloseAtRef.current = Date.now();
+    expandedVideoSwipeRef.current = {
+      active: false,
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+    };
     setMobileVideo(null);
   };
 
@@ -1490,6 +1501,16 @@ export default function ExamplesPanel({
     if (!video) return;
 
     if (isMobile) {
+      const isThirdPartyMobileVideo =
+        isLikelyThirdPartyEmbedValue(video) || isThirdPartyEmbeddedVideo(video);
+      const isInsideCloseReopenGuard =
+        Date.now() - lastMobileVideoCloseAtRef.current <
+        MOBILE_EMBED_REOPEN_GUARD_MS;
+
+      if (isThirdPartyMobileVideo && isInsideCloseReopenGuard) {
+        return;
+      }
+
       setMobileVideo({
         video,
         key: videoKey,
@@ -1604,9 +1625,9 @@ export default function ExamplesPanel({
       currentVideo.video
     );
     const shouldRenderThirdPartyInline = !isMobile && isCurrentVideoThirdParty;
-    // No mobile, vídeos embedados devem preservar a aparência original do provider
-    // como miniatura/preview. Por isso, renderizamos o iframe sem autoplay e usamos
-    // uma camada transparente apenas para abrir o player expandido no primeiro toque.
+    // No mobile, embeds usam o preview original do provider como miniatura,
+    // mas esse preview é desmontado/ocultado enquanto o overlay está aberto
+    // para evitar tela preta ou iframe travado por trás do player expandido.
     const shouldRenderMobileThirdPartyPreview = isMobile && isCurrentVideoThirdParty;
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
     const shouldAutoPlayDesktopVideo =
@@ -1615,7 +1636,7 @@ export default function ExamplesPanel({
       !isCurrentVideoThirdParty;
     const shouldRenderPlayerDirectly =
       shouldRenderThirdPartyInline ||
-      shouldRenderMobileThirdPartyPreview ||
+      (isMobile && isCurrentVideoThirdParty) ||
       (isVideoOpen && !isMobile);
     const shouldShowAttachedChip =
       !isMobile &&
@@ -1636,7 +1657,9 @@ export default function ExamplesPanel({
           dotColor: "#ED9A0A",
         };
     const shouldHideSourceThumbnailOnMobile =
-      isMobile && Boolean(mobileVideo?.key) && mobileVideo.key === currentVideo.key;
+      isMobile &&
+      Boolean(mobileVideo?.key) &&
+      mobileVideo.key === currentVideo.key;
 
     return (
       <div className={isFlashcardMobileLayout ? "mb-3" : "mb-4"}>
@@ -1696,8 +1719,7 @@ export default function ExamplesPanel({
                   className="absolute inset-0 z-30 touch-manipulation bg-transparent"
                   aria-label={currentVideo.title || "Abrir vídeo"}
                   title={currentVideo.title || "Abrir vídeo"}
-                  onPointerDown={(event) => {
-                    if (event.pointerType === "mouse" && event.button !== 0) return;
+                  onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     openVideo({
@@ -1710,10 +1732,6 @@ export default function ExamplesPanel({
                       autoPlayOnOpen: true,
                       desktopAutoPlayOnOpen: false,
                     });
-                  }}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
                   }}
                 />
               ) : null}
