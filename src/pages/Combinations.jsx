@@ -475,6 +475,14 @@ export default function Combinations() {
   const handleLeftClick = (idx, event) => {
     if (matched.has(`l${idx}`) || roundComplete) return;
 
+    const isDeselectingSameItem = selectedLeft === idx && selectedRight === null;
+
+    if (isDeselectingSameItem) {
+      setSelectedLeft(null);
+      scheduleMobileActiveFocusClear();
+      return;
+    }
+
     const isFirstSelection = selectedRight === null;
     if (isFirstSelection && !shouldSkipClickSfxAfterPointer(event)) {
       playSound(SFX_EVENTS.MATCH_SELECT);
@@ -495,6 +503,10 @@ export default function Combinations() {
 
   const handleLeftPointerDown = (idx) => {
     if (matched.has(`l${idx}`) || roundComplete) return;
+
+    const isDeselectingSameItem = selectedLeft === idx && selectedRight === null;
+    if (isDeselectingSameItem) return;
+
     const isFirstSelection = selectedRight === null;
     if (!isFirstSelection) return;
     lastSelectPointerSfxAtRef.current = Date.now();
@@ -503,6 +515,14 @@ export default function Combinations() {
 
   const handleRightClick = (idx, event) => {
     if (matched.has(`r${idx}`) || roundComplete) return;
+
+    const isDeselectingSameItem = selectedRight === idx && selectedLeft === null;
+
+    if (isDeselectingSameItem) {
+      setSelectedRight(null);
+      scheduleMobileActiveFocusClear();
+      return;
+    }
 
     const isFirstSelection = selectedLeft === null;
     if (isFirstSelection && !shouldSkipClickSfxAfterPointer(event)) {
@@ -524,6 +544,10 @@ export default function Combinations() {
 
   const handleRightPointerDown = (idx) => {
     if (matched.has(`r${idx}`) || roundComplete) return;
+
+    const isDeselectingSameItem = selectedRight === idx && selectedLeft === null;
+    if (isDeselectingSameItem) return;
+
     const isFirstSelection = selectedLeft === null;
     if (!isFirstSelection) return;
     lastSelectPointerSfxAtRef.current = Date.now();

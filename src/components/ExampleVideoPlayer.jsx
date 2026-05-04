@@ -387,6 +387,7 @@ export default function ExampleVideoPlayer({
   autoPlay = false,
   layout = "fill",
   controlsMode = "full",
+  resetPlaybackOnMount = false,
 }) {
   const isMobileMockupLayout = layout === "mobileMockup";
   const isMobileFullscreenLayout = layout === "mobileFullscreen";
@@ -433,13 +434,17 @@ export default function ExampleVideoPlayer({
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
 
   const playbackStateKey = useMemo(() => getVideoPlaybackStateKey(video), [video]);
+  const shouldResetPlaybackOnMount = Boolean(resetPlaybackOnMount);
   const savedOwnVideoPlaybackState =
-    playbackStateKey && !isLikelyThirdPartyEmbedValue(playbackStateKey)
+    playbackStateKey &&
+    !shouldResetPlaybackOnMount &&
+    !isLikelyThirdPartyEmbedValue(playbackStateKey)
       ? videoPlaybackStateCache.get(playbackStateKey)
       : null;
   const shouldUseNativeVideoAutoPlay = Boolean(
     autoPlay &&
-      (!savedOwnVideoPlaybackState ||
+      (shouldResetPlaybackOnMount ||
+        !savedOwnVideoPlaybackState ||
         !Number.isFinite(savedOwnVideoPlaybackState.currentTime) ||
         savedOwnVideoPlaybackState.currentTime <= 0.2)
   );
@@ -491,20 +496,36 @@ export default function ExampleVideoPlayer({
     let isMounted = true;
     const normalizedVideo = typeof video === "string" ? video.trim() : "";
     const immediateEmbedPlayback = getImmediateEmbedPlayback(normalizedVideo);
-    const savedPlaybackState = videoPlaybackStateCache.get(
-      getVideoPlaybackStateKey(normalizedVideo)
-    );
+    const normalizedPlaybackStateKey = getVideoPlaybackStateKey(normalizedVideo);
+    const shouldResetThisPlayback =
+      Boolean(resetPlaybackOnMount) &&
+      normalizedPlaybackStateKey &&
+      !isLikelyThirdPartyEmbedValue(normalizedPlaybackStateKey);
+    const savedPlaybackState = shouldResetThisPlayback
+      ? null
+      : videoPlaybackStateCache.get(normalizedPlaybackStateKey);
+
+    if (shouldResetThisPlayback) {
+      videoPlaybackStateCache.delete(normalizedPlaybackStateKey);
+      playbackStateRef.current = {
+        key: normalizedPlaybackStateKey,
+        currentTime: 0,
+        duration: 0,
+        wasPlaying: false,
+      };
+    }
+
     hasConsumedAutoPlayRef.current = false;
-    hasRestoredPlaybackRef.current = false;
+    hasRestoredPlaybackRef.current = shouldResetThisPlayback;
 
     setPlayback(immediateEmbedPlayback || null);
     setFailed(false);
-    setIsPlaying(Boolean(savedPlaybackState?.wasPlaying));
+    setIsPlaying(shouldResetThisPlayback ? false : Boolean(savedPlaybackState?.wasPlaying));
     setControlsVisible(false);
     setIsVolumeControlOpen(false);
     setIsSpeedMenuOpen(false);
-    setCurrentTime(savedPlaybackState?.currentTime || 0);
-    setDuration(savedPlaybackState?.duration || 0);
+    setCurrentTime(shouldResetThisPlayback ? 0 : savedPlaybackState?.currentTime || 0);
+    setDuration(shouldResetThisPlayback ? 0 : savedPlaybackState?.duration || 0);
     setBufferedTime(0);
     setIsLooping(true);
     setMediaSize(null);
@@ -554,7 +575,7 @@ export default function ExampleVideoPlayer({
       isMounted = false;
       clearFullscreenControlsTimer();
     };
-  }, [video]);
+  }, [video, resetPlaybackOnMount]);
 
   useEffect(() => {
     return () => {
@@ -1002,7 +1023,11 @@ export default function ExampleVideoPlayer({
   }
 
   function getSavedOwnVideoPlaybackState() {
-    if (!playbackStateKey || isLikelyThirdPartyEmbedValue(playbackStateKey)) {
+    if (
+      !playbackStateKey ||
+      shouldResetPlaybackOnMount ||
+      isLikelyThirdPartyEmbedValue(playbackStateKey)
+    ) {
       return null;
     }
 

@@ -1214,6 +1214,8 @@ export default function ExamplesPanel({
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
+  const [videoPlaybackOpenTokens, setVideoPlaybackOpenTokens] = useState({});
+  const videoPlaybackOpenTokenRef = useRef(0);
   const [isMobileEmbedOpening, setIsMobileEmbedOpening] = useState(false);
   const [isMobileLandscapeVideoLayout, setIsMobileLandscapeVideoLayout] = useState(false);
   const [mobileVideoViewportSize, setMobileVideoViewportSize] = useState({
@@ -1489,6 +1491,34 @@ export default function ExamplesPanel({
     shouldShowGlobalWordVideoOnTop,
   ]);
 
+  const hasExpandedTip = Object.values(expandedTipKeys).some(Boolean);
+
+  useEffect(() => {
+    if (!hasExpandedTip || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const handlePointerDownOutsideTip = (event) => {
+      const target = event.target;
+
+      if (
+        target &&
+        typeof target.closest === "function" &&
+        target.closest('[data-examples-tip-area="true"]')
+      ) {
+        return;
+      }
+
+      setExpandedTipKeys({});
+    };
+
+    document.addEventListener("pointerdown", handlePointerDownOutsideTip, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDownOutsideTip, true);
+    };
+  }, [hasExpandedTip]);
+
   useEffect(() => {
     if (!shouldUseMeaningVideoCollapse) {
       setExpandedMeaningVideoKey(null);
@@ -1568,8 +1598,14 @@ export default function ExamplesPanel({
   const panelHeaderClass = [
     isFlashcard
       ? isFlashcardMobileLayout
-        ? "mb-3 flex items-center justify-between pb-2.5"
+        ? shouldUseMeaningVideoCollapse
+          ? "mb-0 flex items-center justify-between pb-2.5"
+          : "mb-3 flex items-center justify-between pb-2.5"
+        : shouldUseMeaningVideoCollapse
+        ? "mb-0 flex items-center justify-between pb-2"
         : "mb-4 flex items-center justify-between pb-2"
+      : shouldUseMeaningVideoCollapse
+      ? "mb-0 flex items-center justify-between gap-3 pb-3"
       : "mb-4 flex items-center justify-between gap-3 pb-3",
     panelHeaderDividerClass,
   ]
@@ -1614,6 +1650,7 @@ export default function ExamplesPanel({
   const mobileVideoPlayerKey = [
     mobileVideo?.key || "mobile-video",
     currentMobileVideoValue || "video",
+    mobileVideo?.openToken || "0",
   ].join("|");
   const mobileVideoSurfaceBackgroundClass =
     isCurrentMobileVideoThirdPartyEmbed && isMobileEmbedOpening
@@ -1684,6 +1721,9 @@ export default function ExamplesPanel({
   }) => {
     if (!video) return;
 
+    const nextOpenToken = videoPlaybackOpenTokenRef.current + 1;
+    videoPlaybackOpenTokenRef.current = nextOpenToken;
+
     if (isMobile) {
       const isThirdPartyMobileVideo =
         isLikelyThirdPartyEmbedValue(video) || isThirdPartyEmbeddedVideo(video);
@@ -1705,6 +1745,7 @@ export default function ExamplesPanel({
         videos,
         index,
         autoPlay: Boolean(autoPlayOnOpen),
+        openToken: nextOpenToken,
       });
       return;
     }
@@ -1714,6 +1755,9 @@ export default function ExamplesPanel({
     });
     setDesktopAutoplayByGroup({
       [groupKey]: Boolean(desktopAutoPlayOnOpen),
+    });
+    setVideoPlaybackOpenTokens({
+      [groupKey]: nextOpenToken,
     });
   };
 
@@ -1743,6 +1787,7 @@ export default function ExamplesPanel({
         videos,
         index: safeIndex,
         autoPlay: false,
+        openToken: mobileVideo.openToken || 0,
       });
     }
   };
@@ -1804,6 +1849,7 @@ export default function ExamplesPanel({
     );
 
     const currentVideo = safeVideos[currentIndex];
+    const currentPlaybackOpenToken = videoPlaybackOpenTokens[groupKey] || 0;
 
     if (!currentVideo?.video) return null;
 
@@ -1901,10 +1947,11 @@ export default function ExamplesPanel({
             >
               <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
                 <ExampleVideoPlayer
-                  key={`${currentVideo.key}-${currentVideo.video}`}
+                  key={`${currentVideo.key}-${currentVideo.video}-${currentPlaybackOpenToken}`}
                   video={currentVideo.video}
                   title={currentVideo.title}
                   autoPlay={shouldAutoPlayDesktopVideo}
+                  resetPlaybackOnMount={Boolean(currentPlaybackOpenToken)}
                 />
               </AspectRatio>
 
@@ -2034,6 +2081,7 @@ export default function ExamplesPanel({
       videos,
       index: safeIndex,
       autoPlay: false,
+      openToken: mobileVideo.openToken || 0,
     });
   };
 
@@ -2216,7 +2264,15 @@ export default function ExamplesPanel({
             })
           : null}
 
-        <div className={isFlashcardMobileLayout ? "space-y-3.5" : "space-y-4"}>
+        <div
+          className={
+            shouldUseMeaningVideoCollapse
+              ? "space-y-0"
+              : isFlashcardMobileLayout
+              ? "space-y-3.5"
+              : "space-y-4"
+          }
+        >
           {sorted.map((entry, index) => {
             const visibleExamples = entry.examples.slice(0, 4);
             const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
@@ -2262,18 +2318,21 @@ export default function ExamplesPanel({
               isMeaningExpanded &&
               (index === 0 ||
                 (activeMeaningText && entry.meaning === activeMeaningText));
-            const meaningPreviewButtonContent = ({ hideThumbnail = false, hideSummary = false } = {}) => (
-              <div
-                className={[
-                  "group/meaning-preview flex w-full min-w-0 items-center text-left transition-colors duration-200",
-                  isFlashcardMobileLayout ? "gap-2.5" : "gap-3",
-                  isMeaningExpanded
-                    ? "py-0"
-                    : isFlashcardMobileLayout
-                    ? "min-h-[96px] py-3"
-                    : "min-h-[112px] py-3",
-                ].join(" ")}
-              >
+            const meaningPreviewButtonContent = ({ hideThumbnail = false, hideSummary = false } = {}) => {
+              const shouldShowMeaningLanguageMarker = hideThumbnail || hideSummary;
+
+              return (
+                <div
+                  className={[
+                    "group/meaning-preview flex w-full min-w-0 items-center text-left transition-colors duration-200",
+                    isFlashcardMobileLayout ? "gap-2.5" : "gap-3",
+                    isMeaningExpanded
+                      ? "py-0"
+                      : isFlashcardMobileLayout
+                      ? "min-h-[96px] py-3"
+                      : "min-h-[112px] py-3",
+                  ].join(" ")}
+                >
                 {!hideThumbnail && hasMeaningPreviewMedia ? (
                   <div
                     className={[
@@ -2320,8 +2379,8 @@ export default function ExamplesPanel({
                       "flex min-w-0 flex-col overflow-hidden",
                       !hideThumbnail && !hideSummary && hasMeaningPreviewMedia
                         ? isFlashcardMobileLayout
-                          ? "h-[72px] -translate-y-px"
-                          : "h-[88px] -translate-y-[2px]"
+                          ? "h-[72px]"
+                          : "h-[88px]"
                         : "h-full min-h-full",
                       hideSummary ? "justify-start" : "justify-center",
                       hideSummary
@@ -2334,12 +2393,14 @@ export default function ExamplesPanel({
                     ].join(" ")}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1">
-                        <BrFlagIcon className="h-[clamp(14px,4vw,16px)] w-[clamp(14px,4vw,16px)]" />
-                        <span className="shrink-0 text-[12px] font-normal text-[#6A7181] dark:text-slate-400">
-                          —
+                      {shouldShowMeaningLanguageMarker ? (
+                        <span className="inline-flex items-center gap-1">
+                          <BrFlagIcon className="h-[clamp(14px,4vw,16px)] w-[clamp(14px,4vw,16px)]" />
+                          <span className="shrink-0 text-[12px] font-normal text-[#6A7181] dark:text-slate-400">
+                            —
+                          </span>
                         </span>
-                      </span>
+                      ) : null}
 
                       <p className="min-w-0 truncate text-[13px] font-semibold leading-[1.12] text-[#181818] dark:text-foreground">
                         {meaningPreviewTitle}
@@ -2381,6 +2442,7 @@ export default function ExamplesPanel({
                 </div>
               </div>
             );
+            };
 
             return (
                 <section
@@ -2390,13 +2452,18 @@ export default function ExamplesPanel({
                       ? shouldUseMeaningCollapse
                         ? isMeaningExpanded
                           ? "relative rounded-2xl border border-[var(--meaning-border)] p-3"
-                          : "relative rounded-xl border border-[var(--meaning-border)] p-2"
+                          : "group/meaning relative overflow-hidden rounded-b-[10px] border-b border-[var(--meaning-border)] px-0 py-0"
                         : "relative rounded-2xl border border-[var(--meaning-border)] p-3"
                       : shouldUseMeaningCollapse
                       ? isMeaningExpanded
                         ? "group/meaning relative rounded-xl border border-[var(--meaning-border)] px-4 py-3"
-                        : "group/meaning relative border-b border-[var(--meaning-border)] px-0 py-0"
+                        : "group/meaning relative overflow-hidden rounded-b-[10px] border-b border-[var(--meaning-border)] px-0 py-0"
                       : "group/meaning relative rounded-xl border border-[var(--meaning-border)] px-4 py-3",
+                    shouldUseMeaningVideoCollapse && isMeaningExpanded
+                      ? isFlashcardMobileLayout
+                        ? "mt-3.5"
+                        : "mt-4"
+                      : "",
                     isForegroundMeaning ? "border-t-0" : "",
                   ]
                     .filter(Boolean)
@@ -2561,16 +2628,17 @@ export default function ExamplesPanel({
                 </div>
 
                 {isMeaningExpanded && hasMeaningSupportInfo ? (
-                  <div className="mt-3">
+                  <div className="mt-3" data-examples-tip-area="true">
                     <button
                       type="button"
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
-                        setExpandedTipKeys((current) => ({
-                          ...current,
-                          [tipKey]: !current[tipKey],
-                        }));
+                        setExpandedTipKeys((current) => {
+                          const isCurrentlyExpanded = Boolean(current[tipKey]);
+
+                          return isCurrentlyExpanded ? {} : { [tipKey]: true };
+                        });
                       }}
                       className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold leading-none transition-colors"
                       style={{
@@ -2714,6 +2782,7 @@ export default function ExamplesPanel({
                   video={mobileVideo?.video || ""}
                   title={mobileVideo?.title || ""}
                   autoPlay={Boolean(mobileVideo?.autoPlay)}
+                  resetPlaybackOnMount={Boolean(mobileVideo?.openToken)}
                   layout={
                     isMobileLandscapeVideoLayout
                       ? "mobileFullscreen"
