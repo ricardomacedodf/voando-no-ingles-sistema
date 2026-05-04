@@ -7,10 +7,13 @@ import {
   Lightbulb,
   Play,
   BookOpen,
+  Volume2,
   X,
 } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
 import { useTheme } from "../contexts/ThemeContext";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "@/api/supabaseClient";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
 import {
@@ -231,6 +234,29 @@ const normalizeText = (value) =>
 
 const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
+
+const normalizePronunciationValue = (source) => {
+  if (!source || typeof source !== "object") return "";
+
+  return normalizeText(
+    source?.pronunciation ??
+      source?.pronounce ??
+      source?.pronuncia ??
+      source?.phonetic ??
+      source?.phonetics ??
+      source?.ipa ??
+      source?.pronunciationText ??
+      source?.pronunciation_text ??
+      source?._pronunciation ??
+      source?._wordPronunciation ??
+      source?._globalPronunciation ??
+      source?.stats?.pronunciation ??
+      source?.stats?.pronounce ??
+      source?.stats?.phonetic ??
+      source?.stats?.ipa ??
+      ""
+  );
+};
 
 const getWordVideoFromMeanings = (meanings) => {
   if (!Array.isArray(meanings)) return "";
@@ -508,38 +534,65 @@ const renderUnderlineSequence = (
     );
   });
 
+const getHighlightTermCandidates = (term) => {
+  const cleanTerm =
+    typeof term === "string" ? term.trim().replace(/\s+/g, " ") : "";
+
+  if (!cleanTerm) return [];
+
+  const candidates = [cleanTerm];
+  const words = cleanTerm.split(/\s+/).filter(Boolean);
+
+  // Mantém o comportamento antigo quando o termo completo aparece na frase.
+  // Se não aparecer, tenta destacar o núcleo da expressão.
+  // Ex.: "I kind of" também destaca "kind of" em frases como "I'm kind of tired."
+  if (words.length > 2) {
+    for (let index = 1; index < words.length - 1; index += 1) {
+      candidates.push(words.slice(index).join(" "));
+    }
+  }
+
+  return Array.from(
+    new Set(candidates.map((candidate) => candidate.trim()).filter(Boolean))
+  );
+};
+
 const renderHighlightedTerm = (
   text,
   term,
   { underlineColor = "#ED9A0A" } = {}
 ) => {
   const safeText = typeof text === "string" ? text : "";
-  const safeTerm = typeof term === "string" ? term.trim() : "";
+  const candidates = getHighlightTermCandidates(term);
 
-  if (!safeText || !safeTerm) {
+  if (!safeText || candidates.length === 0) {
     return safeText;
   }
 
-  const pattern = new RegExp(`(${escapeRegExp(safeTerm)})`, "gi");
-  const parts = safeText.split(pattern);
+  for (const candidate of candidates) {
+    const pattern = new RegExp(`(${escapeRegExp(candidate)})`, "gi");
+    const parts = safeText.split(pattern);
 
-  if (parts.length <= 1) {
-    return safeText;
-  }
-
-  return parts.map((part, index) => {
-    const isMatch = part.toLowerCase() === safeTerm.toLowerCase();
-
-    if (!isMatch) {
-      return <Fragment key={`${part}-${index}`}>{part}</Fragment>;
+    if (parts.length <= 1) {
+      continue;
     }
 
-    return (
-      <Fragment key={`${part}-${index}`}>
-        {renderUnderlineSequence(part, `${part}-${index}`, underlineColor)}
-      </Fragment>
-    );
-  });
+    return parts.map((part, index) => {
+      const isMatch = part.toLowerCase() === candidate.toLowerCase();
+
+      if (!isMatch) {
+        return <Fragment key={`${part}-${index}`}>{part}</Fragment>;
+      }
+
+      return (
+        <Fragment key={`${part}-${index}`}>
+          {renderUnderlineSequence(part, `${part}-${index}`, underlineColor)}
+        </Fragment>
+      );
+    });
+  }
+
+  return safeText;
 };
 
 const getYouTubeVideoId = (value) => {
@@ -1143,12 +1196,14 @@ export default function ExamplesPanel({
   wordVideo = "",
   wordThumbnail = "",
   wordVideos = [],
+  pronunciation = "",
   item,
   vocabularyItem,
 }) {
   const lastClosePointerSfxAtRef = useRef(0);
   const lastMobileVideoCloseAtRef = useRef(0);
   const isMobile = useIsMobile();
+  const { user } = useAuth();
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
   const [mobileVideo, setMobileVideo] = useState(null);
@@ -1162,6 +1217,7 @@ export default function ExamplesPanel({
   const [videoIndexes, setVideoIndexes] = useState({});
   const [expandedMeaningVideoKey, setExpandedMeaningVideoKey] = useState(null);
   const [expandedTipKeys, setExpandedTipKeys] = useState({});
+  const [fetchedPronunciation, setFetchedPronunciation] = useState("");
   const expandedVideoSwipeRef = useRef({
     active: false,
     pointerId: null,
@@ -1248,6 +1304,51 @@ export default function ExamplesPanel({
   }, [isMobile]);
 
   const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
+  const lookupPronunciationTerm = normalizeText(titleTerm);
+  const directPronunciation =
+    normalizeText(pronunciation) ||
+    normalizePronunciationValue(item) ||
+    normalizePronunciationValue(vocabularyItem) ||
+    rawMeanings.map((entry) => normalizePronunciationValue(entry)).find(Boolean) ||
+    "";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setFetchedPronunciation("");
+
+    if (directPronunciation || !user?.id || !lookupPronunciationTerm) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const fetchPronunciation = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("vocabulary")
+          .select("pronunciation")
+          .eq("user_id", user.id)
+          .eq("term", lookupPronunciationTerm)
+          .limit(1)
+          .maybeSingle();
+
+        if (cancelled || error) return;
+
+        setFetchedPronunciation(normalizeText(data?.pronunciation));
+      } catch {
+        // Mantém o painel funcionando mesmo se a pronúncia não for encontrada.
+      }
+    };
+
+    fetchPronunciation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [directPronunciation, lookupPronunciationTerm, user?.id]);
+
+  const sharedPronunciation = directPronunciation || fetchedPronunciation;
 
   const wordVideoSources = dedupeVideoEntries([
     ...normalizeVideoList(wordVideos, wordThumbnail),
@@ -1309,8 +1410,9 @@ export default function ExamplesPanel({
 
     return {
       meaning: normalizedMeaningText,
-      category: entry?.category || "vocabulÃ¡rio",
-      tip: entry?.tip || "",
+      category: normalizeText(entry?.category),
+      tip: normalizeText(entry?.tip),
+      pronunciation: normalizePronunciationValue(entry) || sharedPronunciation,
       video: meaningVideo,
       thumbnail: meaningThumbnail,
       topVideos,
@@ -2015,7 +2117,9 @@ export default function ExamplesPanel({
             const visibleExamples = entry.examples.slice(0, 4);
             const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
             const tipKey = `meaning-tip-${entry.meaning}-${index}`;
-            const hasMeaningSupportInfo = Boolean(entry.category || entry.tip);
+            const hasMeaningSupportInfo = Boolean(
+              entry.pronunciation || entry.category || entry.tip
+            );
             const isTipExpanded = Boolean(expandedTipKeys[tipKey]);
             const meaningPalette = getMeaningPaletteByIndex(
               index,
@@ -2291,11 +2395,11 @@ export default function ExamplesPanel({
                         color: meaningPalette.accent,
                       }}
                       aria-expanded={isTipExpanded}
-                      aria-label={isTipExpanded ? "Ocultar modo de uso" : "Mostrar modo de uso"}
-                      title={isTipExpanded ? "Ocultar modo de uso" : "Mostrar modo de uso"}
+                      aria-label={isTipExpanded ? "Ocultar mais sobre" : "Mostrar mais sobre"}
+                      title={isTipExpanded ? "Ocultar mais sobre" : "Mostrar mais sobre"}
                     >
                       <Lightbulb className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span>Modo de uso</span>
+                      <span>Mais sobre</span>
                       <ChevronDown
                         className={[
                           "h-3 w-3 shrink-0 scale-x-[1.2] transform-gpu opacity-80 transition-all duration-200 ease-out",
@@ -2315,28 +2419,41 @@ export default function ExamplesPanel({
                           backgroundColor: meaningPalette.tipBackground,
                         }}
                       >
-                        <div className="flex items-end gap-2">
-                          {entry.tip ? (
-                            <p className="min-w-0 flex-1 text-left text-xs leading-relaxed text-[#5E6778] dark:text-slate-200">
-                              {entry.tip}
-                            </p>
-                          ) : (
-                            <span className="min-w-0 flex-1" />
-                          )}
+                        {entry.pronunciation ? (
+                          <div
+                            className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium leading-none"
+                            style={{ color: meaningPalette.accent }}
+                          >
+                            <Volume2 className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            <span aria-hidden="true">—</span>
+                            <span className="min-w-0 truncate">{entry.pronunciation}</span>
+                          </div>
+                        ) : null}
 
-                          {entry.category ? (
-                            <span
-                              className="mb-[1px] shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none"
-                              style={{
-                                borderColor: meaningPalette.tipBorder,
-                                backgroundColor: meaningPalette.background,
-                                color: meaningPalette.accent,
-                              }}
-                            >
-                              {entry.category}
-                            </span>
-                          ) : null}
-                        </div>
+                        {entry.tip || entry.category ? (
+                          <div className="flex items-end gap-2">
+                            {entry.tip ? (
+                              <p className="min-w-0 flex-1 text-left text-xs leading-relaxed text-[#5E6778] dark:text-slate-200">
+                                {entry.tip}
+                              </p>
+                            ) : (
+                              <span className="min-w-0 flex-1" />
+                            )}
+
+                            {entry.category ? (
+                              <span
+                                className="mb-[1px] shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none"
+                                style={{
+                                  borderColor: meaningPalette.tipBorder,
+                                  backgroundColor: meaningPalette.background,
+                                  color: meaningPalette.accent,
+                                }}
+                              >
+                                {entry.category}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

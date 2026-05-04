@@ -2586,9 +2586,12 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             const exampleSentence = normalizeExampleText(
                               example?.sentence
                             );
-                            const isExampleEmpty = !exampleSentence;
+                            const exampleTranslation = normalizeExampleText(
+                              example?.translation
+                            );
                             const exampleTitle =
-                              exampleSentence || "adicione aqui exemplo";
+                              exampleTranslation || exampleSentence || "adicione aqui exemplo";
+                            const isExampleEmpty = !exampleTranslation && !exampleSentence;
 
                             return (
                               <div

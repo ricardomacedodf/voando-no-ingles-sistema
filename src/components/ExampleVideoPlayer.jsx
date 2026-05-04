@@ -1,10 +1,10 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Gauge,
   Maximize,
   Minimize,
   Pause,
   Play,
-  Repeat,
   Square,
   Volume2,
   VolumeX,
@@ -13,6 +13,10 @@ import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
 
 const FALLBACK_MESSAGE = "Este vÃ­deo nÃ£o permite reproduÃ§Ã£o direta aqui.";
 const FULLSCREEN_CONTROLS_HIDE_DELAY = 1000;
+const PLAYBACK_SPEED_OPTIONS = [0.3, 0.5, 0.8, 1];
+const MIN_PLAYBACK_SPEED = 0.3;
+const MAX_PLAYBACK_SPEED = 1;
+const PLAYBACK_SPEED_STEP = 0.01;
 const videoPlaybackStateCache = new Map();
 
 function GlassControlButton({
@@ -39,18 +43,28 @@ function GlassControlButton({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(event) => {
+        event.currentTarget.blur();
+        onClick?.(event);
+      }}
+      onMouseDown={(event) => {
+        if (event.button === 0) event.preventDefault();
+      }}
+      onPointerUp={(event) => event.currentTarget.blur()}
+      onTouchEnd={(event) => event.currentTarget.blur()}
       aria-label={label}
       title={label}
       className={[
-        "relative shrink-0 overflow-hidden rounded-full",
+        "example-video-player-control-button relative shrink-0 overflow-hidden rounded-full",
         "border border-white/25",
         "bg-white/10 text-white",
         "shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),inset_0_-14px_28px_rgba(0,0,0,0.18),0_14px_34px_rgba(0,0,0,0.42)]",
         "backdrop-blur-md",
         "transition-all duration-200",
         "hover:bg-white/16 hover:border-white/35 hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),inset_0_-14px_28px_rgba(0,0,0,0.2),0_18px_42px_rgba(0,0,0,0.5)]",
-        "active:scale-95",
+        "active:bg-white/[0.14] active:border-white/35",
+        "outline-none ring-0 ring-offset-0",
+        "focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0 focus:!ring-offset-0 focus-visible:!ring-offset-0",
         active ? "bg-white/20 border-white/45" : "",
         variant === "primary"
           ? "shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),inset_0_-18px_34px_rgba(0,0,0,0.22),0_18px_48px_rgba(0,0,0,0.52),0_0_24px_rgba(255,255,255,0.12)]"
@@ -61,6 +75,71 @@ function GlassControlButton({
       <span className="pointer-events-none absolute inset-x-[18%] top-[12%] h-[26%] rounded-full bg-white/20 blur-[10px]" />
       <span className={iconClass}>{children}</span>
     </button>
+  );
+}
+
+function LoopPowerIcon({ className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M7.25 5.2H3.95v3.35"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M4.35 8.1A8.25 8.25 0 1 0 12 3.75"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.35"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SpeedFeedbackDirectionIcon({ direction = 1, className = "" }) {
+  const isDecrease = direction < 0;
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      {isDecrease ? (
+        <>
+          <path
+            d="M11.1 6.35 4.9 12l6.2 5.65V6.35Z"
+            fill="currentColor"
+          />
+          <path
+            d="M19.1 6.35 12.9 12l6.2 5.65V6.35Z"
+            fill="currentColor"
+          />
+        </>
+      ) : (
+        <>
+          <path
+            d="M4.9 6.35 11.1 12l-6.2 5.65V6.35Z"
+            fill="currentColor"
+          />
+          <path
+            d="M12.9 6.35 19.1 12l-6.2 5.65V6.35Z"
+            fill="currentColor"
+          />
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -96,6 +175,14 @@ function addAutoplayToUrl(src) {
 
 const normalizeVideoValue = (value) =>
   typeof value === "string" ? value.trim() : "";
+
+const formatPlaybackRateLabel = (rate) => {
+  const safeRate = Number(rate);
+
+  if (!Number.isFinite(safeRate)) return "1x";
+
+  return `${Number.isInteger(safeRate) ? safeRate : safeRate.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}x`;
+};
 
 const getVideoPlaybackStateKey = (value) => normalizeVideoValue(value);
 
@@ -307,6 +394,10 @@ export default function ExampleVideoPlayer({
 
   const videoRef = useRef(null);
   const wrapperRef = useRef(null);
+  const volumeControlRef = useRef(null);
+  const speedControlRef = useRef(null);
+  const speedFeedbackTimerRef = useRef(null);
+  const playbackControlFeedbackTimerRef = useRef(null);
   const hideFullscreenControlsTimerRef = useRef(null);
   const restorePlaybackTimerRef = useRef(null);
   const hasConsumedAutoPlayRef = useRef(false);
@@ -327,8 +418,14 @@ export default function ExampleVideoPlayer({
   const [controlsVisible, setControlsVisible] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [bufferedTime, setBufferedTime] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [isVolumeControlOpen, setIsVolumeControlOpen] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
+  const [playbackRateFeedback, setPlaybackRateFeedback] = useState(null);
+  const [playbackControlFeedback, setPlaybackControlFeedback] = useState(null);
   const [isLooping, setIsLooping] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mediaSize, setMediaSize] = useState(null);
@@ -403,8 +500,11 @@ export default function ExampleVideoPlayer({
     setFailed(false);
     setIsPlaying(Boolean(savedPlaybackState?.wasPlaying));
     setControlsVisible(false);
+    setIsVolumeControlOpen(false);
+    setIsSpeedMenuOpen(false);
     setCurrentTime(savedPlaybackState?.currentTime || 0);
     setDuration(savedPlaybackState?.duration || 0);
+    setBufferedTime(0);
     setIsLooping(true);
     setMediaSize(null);
     clearFullscreenControlsTimer();
@@ -474,6 +574,7 @@ export default function ExampleVideoPlayer({
     player.volume = volume;
     player.muted = isMuted;
     player.loop = isLooping;
+    player.playbackRate = playbackRate;
 
     player.disablePictureInPicture = true;
     player.disableRemotePlayback = true;
@@ -486,7 +587,31 @@ export default function ExampleVideoPlayer({
     );
     player.setAttribute("x-webkit-airplay", "deny");
     player.setAttribute("webkit-playsinline", "true");
-  }, [volume, isMuted, isLooping, playback?.src]);
+  }, [volume, isMuted, isLooping, playbackRate, playback?.src]);
+
+  useEffect(() => {
+    if (!isVolumeControlOpen && !isSpeedMenuOpen) return;
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+
+      if (
+        volumeControlRef.current?.contains(target) ||
+        speedControlRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setIsVolumeControlOpen(false);
+      setIsSpeedMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isVolumeControlOpen, isSpeedMenuOpen]);
 
   useEffect(() => {
     const pauseWhenPageIsHidden = () => {
@@ -538,7 +663,7 @@ export default function ExampleVideoPlayer({
 
       setIsFullscreen(nextIsFullscreen);
 
-      if (nextIsFullscreen && isPlaying) {
+      if (nextIsFullscreen) {
         showControlsTemporarilyInFullscreen();
         return;
       }
@@ -563,14 +688,8 @@ export default function ExampleVideoPlayer({
   }, [isPlaying]);
 
   useEffect(() => {
-    if (isFullscreen && isPlaying) {
+    if (isFullscreen) {
       showControlsTemporarilyInFullscreen();
-      return;
-    }
-
-    if (isFullscreen && !isPlaying) {
-      clearFullscreenControlsTimer();
-      setControlsVisible(true);
       return;
     }
 
@@ -584,10 +703,7 @@ export default function ExampleVideoPlayer({
 
     const handleVideoFullscreenStart = () => {
       setIsFullscreen(true);
-
-      if (isPlaying) {
-        showControlsTemporarilyInFullscreen();
-      }
+      showControlsTemporarilyInFullscreen();
     };
 
     const handleVideoFullscreenEnd = () => {
@@ -612,6 +728,99 @@ export default function ExampleVideoPlayer({
     };
   }, [playback?.src, isPlaying]);
 
+  useEffect(() => {
+    if (playback?.type !== "video") return;
+
+    const handlePlayerKeyboardShortcut = (event) => {
+      const activeElement = document.activeElement;
+      const isEditingText =
+        activeElement &&
+        (activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA" ||
+          activeElement.isContentEditable);
+
+      if (isEditingText) return;
+
+      const key = event.key;
+      const normalizedKey = typeof key === "string" ? key.toLowerCase() : "";
+
+      if (event.shiftKey) {
+        if (key === "[" || key === "{" || key === "<" || key === ",") {
+          event.preventDefault();
+          stepPlaybackRate(-1, { showFeedback: true, preserveControlsAutoHide: true });
+          return;
+        }
+
+        if (key === "]" || key === "}" || key === ">" || key === ".") {
+          event.preventDefault();
+          stepPlaybackRate(1, { showFeedback: true, preserveControlsAutoHide: true });
+          return;
+        }
+      }
+
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "0" || event.code === "Digit0" || event.code === "Numpad0")
+      ) {
+        event.preventDefault();
+
+        if (event.repeat) return;
+
+        seekToBeginningFromKeyboard();
+        return;
+      }
+
+      if (key === " " || key === "Spacebar" || event.code === "Space") {
+        event.preventDefault();
+
+        if (event.repeat) return;
+
+        togglePlay({ showFeedback: true });
+        return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && normalizedKey === "f") {
+        event.preventDefault();
+
+        if (event.repeat) return;
+
+        toggleFullscreen();
+        return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && normalizedKey === "m") {
+        event.preventDefault();
+
+        if (event.repeat) return;
+
+        toggleMute({ preserveControlsAutoHide: true });
+      }
+    };
+
+    document.addEventListener("keydown", handlePlayerKeyboardShortcut);
+
+    return () => {
+      document.removeEventListener("keydown", handlePlayerKeyboardShortcut);
+    };
+  }, [playback?.type, playbackRate, isMuted, isFullscreen, isPlaying]);
+
+  useEffect(() => {
+    return () => {
+      if (speedFeedbackTimerRef.current) {
+        window.clearTimeout(speedFeedbackTimerRef.current);
+        speedFeedbackTimerRef.current = null;
+      }
+
+      if (playbackControlFeedbackTimerRef.current) {
+        window.clearTimeout(playbackControlFeedbackTimerRef.current);
+        playbackControlFeedbackTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const iframeSrc = useMemo(() => {
     if (!playback?.src) return "";
     return autoPlay ? addAutoplayToUrl(playback.src) : playback.src;
@@ -627,8 +836,19 @@ export default function ExampleVideoPlayer({
       ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
       : 0;
 
+  const bufferedPercent =
+    duration > 0
+      ? Math.min(
+          100,
+          Math.max(
+            progressPercent,
+            (Math.min(duration, Math.max(0, bufferedTime)) / duration) * 100
+          )
+        )
+      : progressPercent;
+
   const progressStyle = {
-    background: `linear-gradient(to right, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.92) ${progressPercent}%, rgba(255,255,255,0.26) ${progressPercent}%, rgba(255,255,255,0.26) 100%)`,
+    background: `linear-gradient(to right, #ff1744 0%, #ff1744 ${progressPercent}%, rgba(255,255,255,0.58) ${progressPercent}%, rgba(255,255,255,0.58) ${bufferedPercent}%, rgba(255,255,255,0.28) ${bufferedPercent}%, rgba(255,255,255,0.28) 100%)`,
   };
 
   const volumePercent = isMuted ? 0 : Math.round(volume * 100);
@@ -636,6 +856,24 @@ export default function ExampleVideoPlayer({
   const volumeStyle = {
     background: `linear-gradient(to right, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.92) ${volumePercent}%, rgba(255,255,255,0.22) ${volumePercent}%, rgba(255,255,255,0.22) 100%)`,
   };
+
+  const playbackRatePercent = Math.min(
+    100,
+    Math.max(
+      0,
+      ((playbackRate - MIN_PLAYBACK_SPEED) /
+        (MAX_PLAYBACK_SPEED - MIN_PLAYBACK_SPEED)) *
+        100
+    )
+  );
+
+  const playbackRateStyle = {
+    background: `linear-gradient(to right, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.92) ${playbackRatePercent}%, rgba(255,255,255,0.22) ${playbackRatePercent}%, rgba(255,255,255,0.22) 100%)`,
+  };
+
+  const isWebOwnPlayerControls = !isTouchLike && !isMobileMockupLayout;
+  const shouldShowVolumeControl = isWebOwnPlayerControls && isVolumeControlOpen;
+  const playbackRateLabel = formatPlaybackRateLabel(playbackRate);
 
   const naturalFrameStyle =
     layout === "natural"
@@ -676,9 +914,7 @@ export default function ExampleVideoPlayer({
     clearFullscreenControlsTimer();
 
     hideFullscreenControlsTimerRef.current = setTimeout(() => {
-      const player = videoRef.current;
-
-      if (isFullscreenMode() && player && !player.paused) {
+      if (isFullscreenMode() && !isVolumeControlOpen && !isSpeedMenuOpen) {
         setControlsVisible(false);
       }
     }, FULLSCREEN_CONTROLS_HIDE_DELAY);
@@ -686,12 +922,7 @@ export default function ExampleVideoPlayer({
 
   function showControlsTemporarilyInFullscreen() {
     setControlsVisible(true);
-
-    const player = videoRef.current;
-
-    if (player && !player.paused) {
-      scheduleFullscreenControlsHide();
-    }
+    scheduleFullscreenControlsHide();
   }
 
   function clearSystemMediaSession() {
@@ -832,11 +1063,41 @@ export default function ExampleVideoPlayer({
     if (isFullscreenMode()) return;
 
     clearFullscreenControlsTimer();
+    setIsVolumeControlOpen(false);
+    setIsSpeedMenuOpen(false);
     setControlsVisible(false);
   }
 
   function toggleControlsVisibility() {
     setControlsVisible((current) => !current);
+  }
+
+  function getControlButtonFromEvent(event) {
+    const target = event?.target;
+    if (!target?.closest) return null;
+
+    const button = target.closest("button");
+    if (!button || !wrapperRef.current?.contains(button)) return null;
+
+    return button;
+  }
+
+  function preventControlButtonFocus(event) {
+    const button = getControlButtonFromEvent(event);
+    if (!button) return;
+
+    if (typeof event.button === "number" && event.button !== 0) return;
+
+    event.preventDefault();
+  }
+
+  function blurControlButtonAfterInteraction(event) {
+    const button = getControlButtonFromEvent(event);
+    if (!button) return;
+
+    window.requestAnimationFrame(() => {
+      button.blur();
+    });
   }
 
   function handleMouseEnter() {
@@ -871,6 +1132,11 @@ export default function ExampleVideoPlayer({
     if (isFullscreenMode()) return;
     if (isTouchLike || isMobileMockupLayout) return;
 
+    if (isVolumeControlOpen || isSpeedMenuOpen) {
+      setControlsVisible(true);
+      return;
+    }
+
     if (isCompactControlsMode && !isPlaying) {
       setControlsVisible(true);
       return;
@@ -879,7 +1145,21 @@ export default function ExampleVideoPlayer({
     hideControls();
   }
 
-  function togglePlay() {
+  function showPlaybackControlFeedback(action) {
+    if (playbackControlFeedbackTimerRef.current) {
+      window.clearTimeout(playbackControlFeedbackTimerRef.current);
+      playbackControlFeedbackTimerRef.current = null;
+    }
+
+    setPlaybackControlFeedback(action);
+
+    playbackControlFeedbackTimerRef.current = window.setTimeout(() => {
+      setPlaybackControlFeedback(null);
+      playbackControlFeedbackTimerRef.current = null;
+    }, 500);
+  }
+
+  function togglePlay(options = {}) {
     const player = videoRef.current;
 
     if (!player) return;
@@ -890,6 +1170,10 @@ export default function ExampleVideoPlayer({
         .then(() => {
           saveOwnVideoPlaybackState({ wasPlaying: true });
           setIsPlaying(true);
+
+          if (options?.showFeedback) {
+            showPlaybackControlFeedback("play");
+          }
 
           if (isFullscreenMode()) {
             showControlsTemporarilyInFullscreen();
@@ -912,12 +1196,15 @@ export default function ExampleVideoPlayer({
     setIsPlaying(false);
 
     if (isFullscreenMode()) {
-      clearFullscreenControlsTimer();
-      setControlsVisible(true);
+      showControlsTemporarilyInFullscreen();
     } else if (isCompactControlsMode) {
       setControlsVisible(true);
     } else {
       setControlsVisible(false);
+    }
+
+    if (options?.showFeedback) {
+      showPlaybackControlFeedback("pause");
     }
 
     clearSystemMediaSession();
@@ -943,6 +1230,59 @@ export default function ExampleVideoPlayer({
     clearSystemMediaSession();
   }
 
+  function seekToBeginningFromKeyboard() {
+    const player = videoRef.current;
+    if (!player) return;
+
+    const shouldKeepPlaying = !player.paused && !player.ended;
+
+    hasConsumedAutoPlayRef.current = true;
+
+    try {
+      player.currentTime = 0;
+    } catch {
+      return;
+    }
+
+    setCurrentTime(0);
+
+    if (shouldKeepPlaying) {
+      saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: true });
+      setIsPlaying(true);
+
+      if (player.paused) {
+        player.play().catch(() => {
+          saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: false });
+          setIsPlaying(false);
+          clearSystemMediaSession();
+        });
+      }
+
+      return;
+    }
+
+    player.pause();
+    saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: false });
+    setIsPlaying(false);
+
+    window.requestAnimationFrame?.(() => {
+      const currentPlayer = videoRef.current;
+      if (!currentPlayer) return;
+
+      try {
+        currentPlayer.pause();
+        currentPlayer.currentTime = 0;
+      } catch {
+        // Mantém o estado pausado mesmo se o navegador bloquear o seek final.
+      }
+
+      saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: false });
+      setCurrentTime(0);
+      setIsPlaying(false);
+      clearSystemMediaSession();
+    });
+  }
+
   function handleVideoClick() {
     if (isFullscreenMode()) {
       showControlsTemporarilyInFullscreen();
@@ -957,6 +1297,31 @@ export default function ExampleVideoPlayer({
     togglePlay();
   }
 
+  function updateBufferedProgress(player) {
+    if (!player) return;
+
+    const safeDuration = Number.isFinite(player.duration)
+      ? player.duration
+      : duration;
+
+    if (!safeDuration || safeDuration <= 0 || !player.buffered?.length) {
+      setBufferedTime(0);
+      return;
+    }
+
+    let nextBufferedTime = 0;
+
+    for (let index = 0; index < player.buffered.length; index += 1) {
+      const rangeEnd = player.buffered.end(index);
+
+      if (Number.isFinite(rangeEnd)) {
+        nextBufferedTime = Math.max(nextBufferedTime, rangeEnd);
+      }
+    }
+
+    setBufferedTime(Math.min(safeDuration, nextBufferedTime));
+  }
+
   function handleSeek(event) {
     const player = videoRef.current;
     const nextTime = Number(event.target.value);
@@ -965,6 +1330,7 @@ export default function ExampleVideoPlayer({
 
     player.currentTime = nextTime;
     setCurrentTime(nextTime);
+    updateBufferedProgress(player);
     saveOwnVideoPlaybackState({ currentTime: nextTime });
     showControls();
   }
@@ -976,12 +1342,125 @@ export default function ExampleVideoPlayer({
 
     setVolume(nextVolume);
     setIsMuted(nextVolume === 0);
+    setIsVolumeControlOpen(true);
     showControls();
   }
 
-  function toggleMute() {
-    setIsMuted((current) => !current);
+  function handleVolumeMouseEnter() {
+    if (!isWebOwnPlayerControls) return;
+
+    setIsSpeedMenuOpen(false);
+    setIsVolumeControlOpen(true);
     showControls();
+  }
+
+  function handleVolumeButtonClick() {
+    if (!isWebOwnPlayerControls) {
+      toggleMute();
+      return;
+    }
+
+    setIsSpeedMenuOpen(false);
+    setIsVolumeControlOpen((current) => !current);
+    showControls();
+  }
+
+  function toggleMute(options = {}) {
+    setIsMuted((current) => !current);
+
+    if (options?.preserveControlsAutoHide) {
+      setIsVolumeControlOpen(false);
+      setIsSpeedMenuOpen(false);
+      return;
+    }
+
+    showControls();
+  }
+
+  function handleSpeedButtonClick() {
+    if (!isWebOwnPlayerControls) return;
+
+    setIsVolumeControlOpen(false);
+    setIsSpeedMenuOpen((current) => !current);
+    showControls();
+  }
+
+  function normalizePlaybackRate(nextRate) {
+    const safeRate = Number(nextRate);
+
+    if (!Number.isFinite(safeRate)) return null;
+
+    const clampedRate = Math.min(
+      MAX_PLAYBACK_SPEED,
+      Math.max(MIN_PLAYBACK_SPEED, safeRate)
+    );
+
+    return PLAYBACK_SPEED_OPTIONS.reduce((closest, option) =>
+      Math.abs(option - clampedRate) < Math.abs(closest - clampedRate)
+        ? option
+        : closest
+    );
+  }
+
+  function showPlaybackRateFeedback(nextRate, direction = 0) {
+    const safeRate = normalizePlaybackRate(nextRate);
+
+    if (safeRate === null) return;
+
+    if (speedFeedbackTimerRef.current) {
+      window.clearTimeout(speedFeedbackTimerRef.current);
+      speedFeedbackTimerRef.current = null;
+    }
+
+    setPlaybackRateFeedback({
+      label: formatPlaybackRateLabel(safeRate),
+      direction,
+    });
+
+    speedFeedbackTimerRef.current = window.setTimeout(() => {
+      setPlaybackRateFeedback(null);
+      speedFeedbackTimerRef.current = null;
+    }, 500);
+  }
+
+  function handlePlaybackRateChange(nextRate, options = {}) {
+    const safeRate = normalizePlaybackRate(nextRate);
+    const player = videoRef.current;
+
+    if (safeRate === null) return;
+
+    setPlaybackRate(safeRate);
+
+    if (player) {
+      player.playbackRate = safeRate;
+    }
+
+    if (!options?.preserveControlsAutoHide) {
+      showControls();
+    }
+  }
+
+  function stepPlaybackRate(direction, options = {}) {
+    const currentIndex = PLAYBACK_SPEED_OPTIONS.findIndex(
+      (option) => option === normalizePlaybackRate(playbackRate)
+    );
+    const defaultPlaybackRateIndex = PLAYBACK_SPEED_OPTIONS.indexOf(1);
+    const safeCurrentIndex = currentIndex >= 0 ? currentIndex : defaultPlaybackRateIndex;
+    const nextIndex = Math.min(
+      PLAYBACK_SPEED_OPTIONS.length - 1,
+      Math.max(0, safeCurrentIndex + direction)
+    );
+    const nextRate = PLAYBACK_SPEED_OPTIONS[nextIndex];
+
+    handlePlaybackRateChange(nextRate, {
+      preserveControlsAutoHide: options?.preserveControlsAutoHide,
+    });
+    setIsVolumeControlOpen(false);
+    setIsSpeedMenuOpen(false);
+
+    if (options.showFeedback) {
+      showPlaybackRateFeedback(nextRate, direction);
+    }
   }
 
   function toggleLoop() {
@@ -1098,24 +1577,50 @@ export default function ExampleVideoPlayer({
     );
   }
 
+  const playerInteractionResetClass =
+    "[&_button]:outline-none [&_button]:ring-0 [&_button]:ring-offset-0 [&_button]:focus:!outline-none [&_button]:focus-visible:!outline-none [&_button]:focus:!ring-0 [&_button]:focus-visible:!ring-0 [&_button]:focus:!ring-offset-0 [&_button]:focus-visible:!ring-offset-0 [&_button:active]:bg-white/[0.14] [&_input]:focus:outline-none [&_input]:focus-visible:outline-none [&_input]:focus:ring-0 [&_input]:focus-visible:ring-0";
+  const fullscreenCursorClass =
+    isFullscreen && !controlsVisible ? "cursor-none" : "";
+
   return (
     <div
       ref={wrapperRef}
       style={isMobileMockupLayout || isMobileFullscreenLayout ? undefined : naturalFrameStyle}
-      className={
+      className={[
         isMobileMockupLayout
           ? "relative flex h-full w-full items-center justify-center overflow-hidden bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none"
           : layout === "natural"
           ? "relative overflow-hidden rounded-xl bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none"
           : isCompactLayout
           ? "group relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none"
-          : "group relative flex h-full w-full items-center justify-center overflow-hidden bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen"
-      }
+          : "group relative flex h-full w-full items-center justify-center overflow-hidden bg-black [&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen",
+        "example-video-player-shell",
+        fullscreenCursorClass,
+        playerInteractionResetClass,
+      ].join(" ")}
       onMouseEnter={handleMouseEnter}
+      onMouseDownCapture={preventControlButtonFocus}
+      onClickCapture={blurControlButtonAfterInteraction}
+      onMouseUpCapture={blurControlButtonAfterInteraction}
+      onTouchEndCapture={blurControlButtonAfterInteraction}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onTouchStart={handleTouchStart}
     >
+      <style>{`
+        .example-video-player-shell button,
+        .example-video-player-shell button:focus,
+        .example-video-player-shell button:focus-visible,
+        .example-video-player-shell button:active {
+          outline: none !important;
+          --tw-ring-color: transparent !important;
+          --tw-ring-offset-width: 0px !important;
+          --tw-ring-offset-color: transparent !important;
+          --tw-ring-shadow: 0 0 #0000 !important;
+          -webkit-tap-highlight-color: transparent;
+        }
+      `}</style>
+
       <video
         ref={videoRef}
         autoPlay={shouldUseNativeVideoAutoPlay}
@@ -1140,6 +1645,7 @@ export default function ExampleVideoPlayer({
           const player = event.currentTarget;
 
           setDuration(player.duration || 0);
+          updateBufferedProgress(player);
           setMediaSize({
             width: player.videoWidth || 16,
             height: player.videoHeight || 9,
@@ -1148,6 +1654,7 @@ export default function ExampleVideoPlayer({
           player.volume = volume;
           player.muted = isMuted;
           player.loop = isLooping;
+          player.playbackRate = playbackRate;
 
           player.disablePictureInPicture = true;
           player.disableRemotePlayback = true;
@@ -1160,11 +1667,18 @@ export default function ExampleVideoPlayer({
           const player = event.currentTarget;
           const nextTime = player.currentTime || 0;
           setCurrentTime(nextTime);
+          updateBufferedProgress(player);
           saveOwnVideoPlaybackState({
             currentTime: nextTime,
             duration: player.duration || duration || 0,
             wasPlaying: !player.paused && !player.ended,
           });
+        }}
+        onProgress={(event) => {
+          updateBufferedProgress(event.currentTarget);
+        }}
+        onLoadedData={(event) => {
+          updateBufferedProgress(event.currentTarget);
         }}
         onPlay={() => {
           saveOwnVideoPlaybackState({ wasPlaying: true });
@@ -1181,13 +1695,12 @@ export default function ExampleVideoPlayer({
           saveOwnVideoPlaybackState({ wasPlaying: false });
           setIsPlaying(false);
 
-          clearFullscreenControlsTimer();
-
           if (isFullscreenMode()) {
-            setControlsVisible(true);
+            showControlsTemporarilyInFullscreen();
           } else if (isCompactControlsMode) {
             setControlsVisible(true);
           } else {
+            clearFullscreenControlsTimer();
             setControlsVisible(false);
           }
 
@@ -1241,7 +1754,9 @@ export default function ExampleVideoPlayer({
                 "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full",
                 "border border-white/55 bg-white/10 text-white",
                 "shadow-[0_4px_10px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.22)]",
-                "backdrop-blur-[2px] transition-[transform,background-color,border-color] duration-200 ease-out",
+                "backdrop-blur-[2px] transition-[background-color,border-color,opacity] duration-200 ease-out",
+                "outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0 focus:!ring-offset-0 focus-visible:!ring-offset-0",
+                "active:bg-white/[0.16]",
                 isTouchLike || isMobileMockupLayout
                   ? ""
                   : "hover:scale-[1.15] hover:border-white/75 hover:bg-white/16",
@@ -1263,13 +1778,40 @@ export default function ExampleVideoPlayer({
             className={[
               "pointer-events-auto absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full",
               "border border-white/55 bg-black/35 text-white shadow-sm backdrop-blur-md",
-              "transition-all duration-200 hover:bg-black/55",
+              "transition-all duration-200 hover:bg-black/55 active:bg-white/[0.14] outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0 focus:!ring-offset-0 focus-visible:!ring-offset-0",
             ].join(" ")}
             aria-label="Expandir vÃ­deo"
             title="Expandir vÃ­deo"
           >
             <Maximize className="h-3.5 w-3.5" />
           </button>
+        </div>
+      ) : null}
+
+      {playbackRateFeedback ? (
+        <div className="pointer-events-none absolute left-1/2 top-[16%] z-40 flex -translate-x-1/2 flex-col items-center gap-2 text-white transition-opacity duration-150">
+          <div className="rounded-lg bg-black/58 px-3.5 py-1.5 text-base font-semibold leading-none shadow-[0_10px_26px_rgba(0,0,0,0.35)] backdrop-blur-md md:text-lg">
+            {playbackRateFeedback.label}
+          </div>
+
+          {playbackRateFeedback.direction !== 0 ? (
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/42 text-white shadow-[0_12px_30px_rgba(0,0,0,0.38)] backdrop-blur-md md:h-16 md:w-16">
+              <SpeedFeedbackDirectionIcon
+                direction={playbackRateFeedback.direction}
+                className="h-8 w-8 md:h-9 md:w-9"
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {playbackControlFeedback ? (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-40 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/52 text-white shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-md transition-opacity duration-150 md:h-24 md:w-24">
+          {playbackControlFeedback === "pause" ? (
+            <Pause className="h-10 w-10 fill-white text-white stroke-[2.2] md:h-12 md:w-12" />
+          ) : (
+            <Play className="ml-1 h-10 w-10 fill-white text-white stroke-[2.2] md:h-12 md:w-12" />
+          )}
         </div>
       ) : null}
 
@@ -1284,7 +1826,7 @@ export default function ExampleVideoPlayer({
       >
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-slate-950/35 to-transparent" />
 
-        <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col items-center">
+        <div className="relative z-10 mx-auto flex w-full max-w-none flex-col items-center">
           <input
             type="range"
             min="0"
@@ -1296,19 +1838,19 @@ export default function ExampleVideoPlayer({
             onTouchStart={showControls}
             style={progressStyle}
             className={[
-              "mb-5 h-1.5 w-[92%] cursor-pointer appearance-none rounded-full bg-transparent outline-none md:mb-3 md:h-1",
+              "mb-5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-transparent outline-none md:mb-3 md:h-1",
               "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent md:[&::-webkit-slider-runnable-track]:h-1",
               "[&::-webkit-slider-thumb]:-mt-[7px] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full md:[&::-webkit-slider-thumb]:-mt-1 md:[&::-webkit-slider-thumb]:h-3 md:[&::-webkit-slider-thumb]:w-3",
-              "[&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-white",
-              "[&::-webkit-slider-thumb]:shadow-[0_0_18px_rgba(255,255,255,0.38),0_7px_18px_rgba(0,0,0,0.38)]",
+              "[&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/80 [&::-webkit-slider-thumb]:bg-[#ff1744]",
+              "[&::-webkit-slider-thumb]:shadow-[0_0_18px_rgba(255,23,68,0.52),0_7px_18px_rgba(0,0,0,0.38)]",
               "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent md:[&::-moz-range-track]:h-1",
               "[&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full md:[&::-moz-range-thumb]:h-3 md:[&::-moz-range-thumb]:w-3",
-              "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white",
+              "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/80 [&::-moz-range-thumb]:bg-[#ff1744]",
             ].join(" ")}
             aria-label="Progresso do vÃ­deo"
           />
 
-          <div className="flex w-full items-end justify-between gap-3 px-1 md:gap-2 md:px-3">
+          <div className="flex w-full items-end justify-between gap-3 px-0 md:gap-2 md:px-0">
             <div className="flex items-center justify-start gap-2">
               <GlassControlButton
                 label={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
@@ -1318,12 +1860,107 @@ export default function ExampleVideoPlayer({
                 {isPlaying ? <Pause /> : <Play className="translate-x-[2px]" />}
               </GlassControlButton>
               {!isTouchLike && !isMobileMockupLayout ? (
-                <GlassControlButton
-                  label="Voltar ao início"
-                  onClick={restartFromBeginning}
-                >
-                  <Square />
-                </GlassControlButton>
+                <>
+                  <GlassControlButton
+                    label="Voltar ao início"
+                    onClick={restartFromBeginning}
+                  >
+                    <Square />
+                  </GlassControlButton>
+
+                  <div
+                    ref={speedControlRef}
+                    className="relative flex select-none items-center"
+                    style={{
+                      userSelect: "none",
+                      WebkitUserSelect: "none",
+                      MozUserSelect: "none",
+                      msUserSelect: "none",
+                    }}
+                  >
+                    <div
+                      className={[
+                        "absolute bottom-[calc(100%+0.7rem)] left-0 z-40 w-[min(17.5rem,calc(100vw-2rem))] translate-x-0 select-none rounded-2xl border border-white/20 bg-black/40 p-3 text-white shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200",
+                        isSpeedMenuOpen
+                          ? "pointer-events-auto opacity-100"
+                          : "pointer-events-none opacity-0",
+                      ].join(" ")}
+                    >
+                      <div className="mb-3 flex select-none items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10">
+                            <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
+                          </span>
+                          <span className="select-none truncate text-[12px] font-semibold leading-none">
+                            Velocidade de reprodução
+                          </span>
+                        </div>
+
+                        <span className="select-none shrink-0 rounded-full bg-white/16 px-2 py-1 text-[11px] font-bold leading-none">
+                          {playbackRateLabel}
+                        </span>
+                      </div>
+
+                      <div className="px-1 pb-2">
+                        <input
+                          type="range"
+                          min={MIN_PLAYBACK_SPEED}
+                          max={MAX_PLAYBACK_SPEED}
+                          step={PLAYBACK_SPEED_STEP}
+                          value={playbackRate}
+                          onChange={(event) =>
+                            handlePlaybackRateChange(event.target.value)
+                          }
+                          onMouseDown={showControls}
+                          onTouchStart={showControls}
+                          style={playbackRateStyle}
+                          className={[
+                            "h-1.5 w-full cursor-pointer appearance-none rounded-full bg-transparent outline-none",
+                            "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent",
+                            "[&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full",
+                            "[&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-white",
+                            "[&::-webkit-slider-thumb]:shadow-[0_0_14px_rgba(255,255,255,0.32),0_6px_14px_rgba(0,0,0,0.36)]",
+                            "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent",
+                            "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full",
+                            "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white",
+                          ].join(" ")}
+                          aria-label="Velocidade de reprodução"
+                        />
+
+                        <div className="mt-2 flex select-none items-center justify-between text-[9px] font-semibold text-white/55">
+                          <span>{formatPlaybackRateLabel(MIN_PLAYBACK_SPEED)}</span>
+                          <span>{formatPlaybackRateLabel(MAX_PLAYBACK_SPEED)}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-1 flex select-none flex-wrap items-center justify-center gap-1.5">
+                        {PLAYBACK_SPEED_OPTIONS.map((speedOption) => (
+                          <button
+                            key={speedOption}
+                            type="button"
+                            onClick={() => handlePlaybackRateChange(speedOption)}
+                            className={[
+                              "select-none rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none text-white transition-colors outline-none ring-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0",
+                              playbackRate === speedOption
+                                ? "bg-white/24"
+                                : "bg-white/8 hover:bg-white/14",
+                            ].join(" ")}
+                          >
+                            {formatPlaybackRateLabel(speedOption)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <GlassControlButton
+                      label={`Velocidade: ${playbackRateLabel}`}
+                      onClick={handleSpeedButtonClick}
+                      active={isSpeedMenuOpen || playbackRate !== 1}
+                    >
+                      <Gauge />
+                    </GlassControlButton>
+                  </div>
+                </>
               ) : null}
             </div>
 
@@ -1333,11 +1970,22 @@ export default function ExampleVideoPlayer({
                 onClick={toggleLoop}
                 active={isLooping}
               >
-                <Repeat />
+                <LoopPowerIcon />
               </GlassControlButton>
 
-              <div className="group/volume relative flex items-center">
-                <div className="pointer-events-none absolute bottom-[calc(100%+0.7rem)] left-1/2 z-40 flex h-28 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-white/20 bg-black/30 opacity-0 shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200 group-hover/volume:pointer-events-auto group-hover/volume:opacity-100 group-focus-within/volume:pointer-events-auto group-focus-within/volume:opacity-100 md:h-32 md:w-11">
+              <div
+                ref={volumeControlRef}
+                className="relative flex items-center"
+                onMouseEnter={handleVolumeMouseEnter}
+              >
+                <div
+                  className={[
+                    "absolute bottom-[calc(100%+0.7rem)] left-1/2 z-40 flex h-28 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-white/20 bg-black/30 shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200 md:h-32 md:w-11",
+                    shouldShowVolumeControl
+                      ? "pointer-events-auto opacity-100"
+                      : "pointer-events-none opacity-0",
+                  ].join(" ")}
+                >
                   <input
                     type="range"
                     min="0"
@@ -1363,11 +2011,9 @@ export default function ExampleVideoPlayer({
                 </div>
 
                 <GlassControlButton
-                  label={
-                    isMuted || volume === 0 ? "Ativar som" : "Silenciar vÃ­deo"
-                  }
-                  onClick={toggleMute}
-                  active={!isMuted && volume > 0}
+                  label="Volume"
+                  onClick={handleVolumeButtonClick}
+                  active={shouldShowVolumeControl || (!isMuted && volume > 0)}
                 >
                   {isMuted || volume === 0 ? <VolumeX /> : <Volume2 />}
                 </GlassControlButton>
