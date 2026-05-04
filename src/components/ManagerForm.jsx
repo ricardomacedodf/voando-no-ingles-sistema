@@ -48,6 +48,8 @@ const getWordVideoKey = (index) => `${WORD_VIDEO_KEY}-${index}`;
 // Render larger and scale down to tune native control size,
 // while keeping the preview fully filled and aligned.
 const EMBED_PREVIEW_VISUAL_SCALE = 0.65;
+const THUMBNAIL_CAPTURE_TIME_SECONDS = 1;
+const THUMBNAIL_END_GUARD_SECONDS = 0.05;
 
 const emptyExample = {
   sentence: "",
@@ -757,23 +759,28 @@ const createVideoThumbnailFromFile = async (file) =>
       }
     };
 
-    const seekToMiddleFrame = () => {
-      if (settled) return;
-
+    const getThumbnailCaptureTime = () => {
       const duration =
         Number.isFinite(video.duration) && video.duration > 0
           ? video.duration
           : 0;
 
-      if (!duration) {
+      if (!duration) return 0;
+
+      const latestSafeTime = Math.max(0, duration - THUMBNAIL_END_GUARD_SECONDS);
+
+      return Math.min(THUMBNAIL_CAPTURE_TIME_SECONDS, latestSafeTime);
+    };
+
+    const seekToThumbnailCaptureFrame = () => {
+      if (settled) return;
+
+      const targetTime = getThumbnailCaptureTime();
+
+      if (targetTime <= 0) {
         window.requestAnimationFrame(drawFrame);
         return;
       }
-
-      const targetTime =
-        duration > 1
-          ? Math.min(Math.max(0.15, duration * 0.5), duration - 0.1)
-          : 0.15;
 
       try {
         video.currentTime = targetTime;
@@ -807,7 +814,7 @@ const createVideoThumbnailFromFile = async (file) =>
         finish("");
       }, 9000);
 
-      video.addEventListener("loadedmetadata", seekToMiddleFrame, {
+      video.addEventListener("loadedmetadata", seekToThumbnailCaptureFrame, {
         once: true,
       });
 
@@ -1129,8 +1136,8 @@ function ExampleVideoPreview({
       <div className="absolute inset-0 bg-black/10 transition-colors duration-200 group-hover:bg-black/6" />
 
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-white/55 shadow-[0_10px_20px_rgba(15,23,42,0.18),inset_0_1px_1px_rgba(255,255,255,0.75)] backdrop-blur-md transition-all duration-200 group-hover:scale-105 group-hover:bg-white/72 dark:border-white/35 dark:bg-white/25 dark:shadow-[0_10px_20px_rgba(2,6,23,0.45)] dark:group-hover:bg-white/35">
-          <Play className="ml-[2px] h-4 w-4 fill-[#ED9A0A] text-[#ED9A0A] stroke-[2.2]" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/40 shadow-[0_8px_20px_rgba(15,23,42,0.22)] backdrop-blur-sm transition-all duration-200 group-hover:scale-105 group-hover:bg-black/50 dark:border-white/40 dark:bg-black/45 dark:shadow-[0_10px_20px_rgba(2,6,23,0.45)] dark:group-hover:bg-black/55">
+          <Play className="ml-[1.5px] h-4 w-4 fill-white text-white stroke-[2.2]" />
         </div>
       </div>
     </button>

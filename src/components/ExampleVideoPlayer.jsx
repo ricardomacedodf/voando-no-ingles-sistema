@@ -17,6 +17,7 @@ const PLAYBACK_SPEED_OPTIONS = [0.3, 0.5, 0.8, 1];
 const MIN_PLAYBACK_SPEED = 0.3;
 const MAX_PLAYBACK_SPEED = 1;
 const PLAYBACK_SPEED_STEP = 0.01;
+const TIMELINE_KEYBOARD_STEP_SECONDS = 5;
 const videoPlaybackStateCache = new Map();
 
 function GlassControlButton({
@@ -729,7 +730,9 @@ export default function ExampleVideoPlayer({
   }, [playback?.src, isPlaying]);
 
   useEffect(() => {
-    if (playback?.type !== "video") return;
+    if (!playback || playback.type === "fallback") return;
+
+    const isNativeVideoPlayback = playback.type === "video";
 
     const handlePlayerKeyboardShortcut = (event) => {
       const activeElement = document.activeElement;
@@ -744,7 +747,59 @@ export default function ExampleVideoPlayer({
       const key = event.key;
       const normalizedKey = typeof key === "string" ? key.toLowerCase() : "";
 
-      if (event.shiftKey) {
+      if (
+        isNativeVideoPlayback &&
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowLeft" || event.code === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        stepVolume(-1, { preserveControlsAutoHide: true });
+        return;
+      }
+
+      if (
+        isNativeVideoPlayback &&
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowRight" || event.code === "ArrowRight")
+      ) {
+        event.preventDefault();
+        stepVolume(1, { preserveControlsAutoHide: true });
+        return;
+      }
+
+      if (
+        isNativeVideoPlayback &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowLeft" || event.code === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        seekTimelineByKeyboardStep(-1);
+        return;
+      }
+
+      if (
+        isNativeVideoPlayback &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowRight" || event.code === "ArrowRight")
+      ) {
+        event.preventDefault();
+        seekTimelineByKeyboardStep(1);
+        return;
+      }
+
+      if (isNativeVideoPlayback && event.shiftKey) {
         if (key === "[" || key === "{" || key === "<" || key === ",") {
           event.preventDefault();
           stepPlaybackRate(-1, { showFeedback: true, preserveControlsAutoHide: true });
@@ -759,6 +814,7 @@ export default function ExampleVideoPlayer({
       }
 
       if (
+        isNativeVideoPlayback &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
@@ -773,7 +829,10 @@ export default function ExampleVideoPlayer({
         return;
       }
 
-      if (key === " " || key === "Spacebar" || event.code === "Space") {
+      if (
+        isNativeVideoPlayback &&
+        (key === " " || key === "Spacebar" || event.code === "Space")
+      ) {
         event.preventDefault();
 
         if (event.repeat) return;
@@ -791,7 +850,13 @@ export default function ExampleVideoPlayer({
         return;
       }
 
-      if (!event.ctrlKey && !event.metaKey && !event.altKey && normalizedKey === "m") {
+      if (
+        isNativeVideoPlayback &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        normalizedKey === "m"
+      ) {
         event.preventDefault();
 
         if (event.repeat) return;
@@ -805,7 +870,7 @@ export default function ExampleVideoPlayer({
     return () => {
       document.removeEventListener("keydown", handlePlayerKeyboardShortcut);
     };
-  }, [playback?.type, playbackRate, isMuted, isFullscreen, isPlaying]);
+  }, [playback, playbackRate, isMuted, isFullscreen, isPlaying, currentTime, duration]);
 
   useEffect(() => {
     return () => {
@@ -1230,6 +1295,45 @@ export default function ExampleVideoPlayer({
     clearSystemMediaSession();
   }
 
+  function seekTimelineByKeyboardStep(direction) {
+    const player = videoRef.current;
+    if (!player) return;
+
+    const safeDirection = direction < 0 ? -1 : 1;
+    const safeDuration =
+      Number.isFinite(player.duration) && player.duration > 0
+        ? player.duration
+        : duration;
+    const baseTime = Number.isFinite(player.currentTime)
+      ? player.currentTime
+      : currentTime || 0;
+    const maxTime = safeDuration > 0 ? safeDuration : Number.MAX_SAFE_INTEGER;
+    const nextTime = Math.min(
+      maxTime,
+      Math.max(0, baseTime + safeDirection * TIMELINE_KEYBOARD_STEP_SECONDS)
+    );
+
+    try {
+      player.currentTime = nextTime;
+    } catch {
+      return;
+    }
+
+    setCurrentTime(nextTime);
+    updateBufferedProgress(player);
+    saveOwnVideoPlaybackState({
+      currentTime: nextTime,
+      duration: safeDuration || duration || 0,
+      wasPlaying: !player.paused && !player.ended,
+    });
+
+    if (isFullscreenMode()) {
+      showControlsTemporarilyInFullscreen();
+    } else {
+      showControls();
+    }
+  }
+
   function seekToBeginningFromKeyboard() {
     const player = videoRef.current;
     if (!player) return;
@@ -1285,7 +1389,7 @@ export default function ExampleVideoPlayer({
 
   function handleVideoClick() {
     if (isFullscreenMode()) {
-      showControlsTemporarilyInFullscreen();
+      togglePlay({ showFeedback: true });
       return;
     }
 
@@ -1349,8 +1453,6 @@ export default function ExampleVideoPlayer({
   function handleVolumeMouseEnter() {
     if (!isWebOwnPlayerControls) return;
 
-    setIsSpeedMenuOpen(false);
-    setIsVolumeControlOpen(true);
     showControls();
   }
 
@@ -1375,6 +1477,39 @@ export default function ExampleVideoPlayer({
     }
 
     showControls();
+  }
+
+  function stepVolume(direction, options = {}) {
+    const safeDirection = direction < 0 ? -1 : 1;
+    const volumeStep = 0.05;
+
+    setVolume((currentVolume) => {
+      const baseVolume = isMuted
+        ? 0
+        : Number.isFinite(currentVolume)
+        ? currentVolume
+        : 0;
+      const nextVolume = Math.min(
+        1,
+        Math.max(0, Number((baseVolume + safeDirection * volumeStep).toFixed(2)))
+      );
+      const player = videoRef.current;
+
+      if (player) {
+        player.volume = nextVolume;
+        player.muted = nextVolume === 0;
+      }
+
+      setIsMuted(nextVolume === 0);
+      setIsVolumeControlOpen(false);
+      setIsSpeedMenuOpen(false);
+
+      if (!options?.preserveControlsAutoHide) {
+        showControls();
+      }
+
+      return nextVolume;
+    });
   }
 
   function handleSpeedButtonClick() {
@@ -1550,13 +1685,16 @@ export default function ExampleVideoPlayer({
     });
     return (
       <div
-        className={
+        ref={wrapperRef}
+        className={[
           isMobilePlayerLayout
             ? "relative h-full w-full overflow-hidden bg-black"
             : layout === "natural"
             ? "relative aspect-video w-full overflow-hidden rounded-xl bg-black"
-            : "relative h-full w-full overflow-hidden bg-black"
-        }
+            : "relative h-full w-full overflow-hidden bg-black",
+          "example-video-player-shell",
+          "[&:fullscreen]:h-screen [&:fullscreen]:w-screen [&:fullscreen]:rounded-none [&:-webkit-full-screen]:h-screen [&:-webkit-full-screen]:w-screen [&:-webkit-full-screen]:rounded-none",
+        ].join(" ")}
       >
         <iframe
           src={iframeSrc}
@@ -1579,8 +1717,10 @@ export default function ExampleVideoPlayer({
 
   const playerInteractionResetClass =
     "[&_button]:outline-none [&_button]:ring-0 [&_button]:ring-offset-0 [&_button]:focus:!outline-none [&_button]:focus-visible:!outline-none [&_button]:focus:!ring-0 [&_button]:focus-visible:!ring-0 [&_button]:focus:!ring-offset-0 [&_button]:focus-visible:!ring-offset-0 [&_button:active]:bg-white/[0.14] [&_input]:focus:outline-none [&_input]:focus-visible:outline-none [&_input]:focus:ring-0 [&_input]:focus-visible:ring-0";
-  const fullscreenCursorClass =
-    isFullscreen && !controlsVisible ? "cursor-none" : "";
+  const shouldHideFullscreenCursor = isFullscreen && !controlsVisible;
+  const fullscreenCursorClass = shouldHideFullscreenCursor
+    ? "example-video-player-shell--cursor-hidden cursor-none"
+    : "cursor-auto";
 
   return (
     <div
@@ -1608,6 +1748,11 @@ export default function ExampleVideoPlayer({
       onTouchStart={handleTouchStart}
     >
       <style>{`
+        .example-video-player-shell.example-video-player-shell--cursor-hidden,
+        .example-video-player-shell.example-video-player-shell--cursor-hidden * {
+          cursor: none !important;
+        }
+
         .example-video-player-shell button,
         .example-video-player-shell button:focus,
         .example-video-player-shell button:focus-visible,
@@ -1976,7 +2121,6 @@ export default function ExampleVideoPlayer({
               <div
                 ref={volumeControlRef}
                 className="relative flex items-center"
-                onMouseEnter={handleVolumeMouseEnter}
               >
                 <div
                   className={[

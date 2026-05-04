@@ -26,6 +26,8 @@ import { SFX_EVENTS } from "../lib/sfx";
 const EXAMPLES_POINTER_SFX_GUARD_MS = 700;
 const MOBILE_EMBED_REOPEN_GUARD_MS = 650;
 const MOBILE_EMBED_OPENING_DELAY_MS = 260;
+const THUMBNAIL_CAPTURE_TIME_SECONDS = 1;
+const THUMBNAIL_END_GUARD_SECONDS = 0.05;
 const VIDEO_SWIPE_DISTANCE_PX = 42;
 const VIDEO_SWIPE_DIRECTION_RATIO = 1.15;
 
@@ -830,23 +832,28 @@ function ExampleVideoThumbnail({
       }
     };
 
-    const seekToMiddleFrame = () => {
-      if (cancelled || captured || !previewVideo) return;
-
+    const getThumbnailCaptureTime = () => {
       const duration =
-        Number.isFinite(previewVideo.duration) && previewVideo.duration > 0
+        Number.isFinite(previewVideo?.duration) && previewVideo.duration > 0
           ? previewVideo.duration
           : 0;
 
-      if (!duration) {
+      if (!duration) return null;
+
+      const latestSafeTime = Math.max(0, duration - THUMBNAIL_END_GUARD_SECONDS);
+
+      return Math.min(THUMBNAIL_CAPTURE_TIME_SECONDS, latestSafeTime);
+    };
+
+    const seekToThumbnailCaptureFrame = () => {
+      if (cancelled || captured || !previewVideo) return;
+
+      const targetTime = getThumbnailCaptureTime();
+
+      if (targetTime === null) {
         window.requestAnimationFrame(drawFrame);
         return;
       }
-
-      const targetTime =
-        duration > 1
-          ? Math.min(Math.max(0.15, duration * 0.5), duration - 0.1)
-          : 0.15;
 
       try {
         previewVideo.currentTime = targetTime;
@@ -951,7 +958,7 @@ function ExampleVideoThumbnail({
           applyFallback();
         }, 8000);
 
-        previewVideo.addEventListener("loadedmetadata", seekToMiddleFrame, {
+        previewVideo.addEventListener("loadedmetadata", seekToThumbnailCaptureFrame, {
           once: true,
         });
 
@@ -1509,8 +1516,6 @@ export default function ExamplesPanel({
   useEffect(() => {
     if (!mobileVideo?.video) return;
 
-    const previousBodyOverflow = document.body.style.overflow;
-
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         setMobileVideo(null);
@@ -1518,11 +1523,9 @@ export default function ExamplesPanel({
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousBodyOverflow;
     };
   }, [mobileVideo]);
 
@@ -1540,11 +1543,38 @@ export default function ExamplesPanel({
       ? "mt-0 bg-transparent p-0 text-foreground"
       : "mt-0 rounded-xl border border-[#EDF0F3] bg-white p-6 text-[#1A1A1A] dark:border-border dark:bg-card dark:text-foreground"
     : "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] p-5 animate-in fade-in slide-in-from-top-2 duration-200 dark:bg-card";
-  const panelHeaderClass = isFlashcard
-    ? isFlashcardMobileLayout
-      ? "mb-3 flex items-center justify-between border-b border-border pb-2.5"
-      : "mb-4 flex items-center justify-between border-b border-border pb-2"
-    : "mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3";
+  const firstMeaningGroupKey = sorted.length
+    ? `meaning-video-group-${sorted[0].meaning}-0`
+    : null;
+  const foregroundMeaningGroupKey = shouldUseMeaningVideoCollapse
+    ? expandedMeaningVideoKey || firstExpandedMeaningVideoKey
+    : firstMeaningGroupKey;
+  const isFirstMeaningInForeground = Boolean(
+    firstMeaningGroupKey && foregroundMeaningGroupKey === firstMeaningGroupKey
+  );
+  const isLowerMeaningInForeground = Boolean(
+    firstMeaningGroupKey &&
+      foregroundMeaningGroupKey &&
+      foregroundMeaningGroupKey !== firstMeaningGroupKey
+  );
+  const shouldHidePanelHeaderDivider = shouldShowGlobalWordVideoOnTop
+    ? !isLowerMeaningInForeground
+    : isFirstMeaningInForeground;
+  const panelHeaderDividerClass = shouldHidePanelHeaderDivider
+    ? ""
+    : isFlashcard
+    ? "border-b border-border"
+    : "border-b border-border/70";
+  const panelHeaderClass = [
+    isFlashcard
+      ? isFlashcardMobileLayout
+        ? "mb-3 flex items-center justify-between pb-2.5"
+        : "mb-4 flex items-center justify-between pb-2"
+      : "mb-4 flex items-center justify-between gap-3 pb-3",
+    panelHeaderDividerClass,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const isExpandedGlobalWordVideo =
     mobileVideo?.groupKey === "global-word-video-group";
   const currentMobileVideoValue = mobileVideo?.video || "";
@@ -1788,8 +1818,7 @@ export default function ExamplesPanel({
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
     const shouldAutoPlayDesktopVideo =
       isVideoOpen &&
-      Boolean(desktopAutoplayByGroup[groupKey]) &&
-      !isCurrentVideoThirdParty;
+      Boolean(desktopAutoplayByGroup[groupKey]);
     const shouldRenderPlayerDirectly =
       shouldRenderThirdPartyInline ||
       (isMobile && isCurrentVideoThirdParty) ||
@@ -1812,9 +1841,22 @@ export default function ExamplesPanel({
       isMobile &&
       Boolean(mobileVideo?.key) &&
       mobileVideo.key === currentVideo.key;
+    const videoSurfaceBleedClass = isFlashcardMobileLayout
+      ? "-mx-3.5 -mt-3.5 !w-[calc(100%+1.75rem)]"
+      : "-mx-4 -mt-3 !w-[calc(100%+2rem)]";
 
     return (
-      <div className={isFlashcardMobileLayout ? "mb-3" : "mb-4"}>
+      <div
+        className={
+          meaningPalette
+            ? isFlashcardMobileLayout
+              ? "mb-2.5"
+              : "mb-3"
+            : isFlashcardMobileLayout
+            ? "mb-3"
+            : "mb-4"
+        }
+      >
         {shouldShowAttachedChip ? (
           <div className="mb-2 flex items-center">
             <span
@@ -1851,17 +1893,18 @@ export default function ExamplesPanel({
                 .join(" ")
             }
           >
-            <div className="relative overflow-hidden rounded-xl bg-black">
+            <div
+              className={[
+                "relative overflow-hidden rounded-xl bg-black",
+                videoSurfaceBleedClass,
+              ].join(" ")}
+            >
               <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
                 <ExampleVideoPlayer
                   key={`${currentVideo.key}-${currentVideo.video}`}
                   video={currentVideo.video}
                   title={currentVideo.title}
-                  autoPlay={
-                    shouldRenderThirdPartyInline
-                      ? false
-                      : shouldAutoPlayDesktopVideo
-                  }
+                  autoPlay={shouldAutoPlayDesktopVideo}
                 />
               </AspectRatio>
 
@@ -1933,6 +1976,7 @@ export default function ExamplesPanel({
               }
               className={[
                 "aspect-video h-auto",
+                videoSurfaceBleedClass,
                 shouldHideSourceThumbnailOnMobile ? "hidden" : "",
               ]
                 .filter(Boolean)
@@ -2051,6 +2095,66 @@ export default function ExamplesPanel({
     event.stopPropagation();
   };
 
+  const getMeaningPreviewMedia = (entry) => {
+    const topVideo = Array.isArray(entry?.topVideos) ? entry.topVideos.find(Boolean) : null;
+    const firstExampleWithMedia = Array.isArray(entry?.examples)
+      ? entry.examples.find((example) => example?.thumbnail || example?.video)
+      : null;
+
+    const previewVideo = normalizeText(topVideo?.video || firstExampleWithMedia?.video);
+    const previewThumbnail = normalizeText(
+      topVideo?.thumbnail ||
+        entry?.thumbnail ||
+        firstExampleWithMedia?.thumbnail ||
+        (previewVideo && isThirdPartyEmbeddedVideo(previewVideo)
+          ? getPlatformThumbnailCandidates(previewVideo)[0] || ""
+          : "")
+    );
+
+    return {
+      video: previewVideo,
+      thumbnail: previewThumbnail,
+    };
+  };
+
+  const getMeaningPreviewExamples = (entry) => {
+    if (!Array.isArray(entry?.examples)) return [];
+
+    return entry.examples
+      .map((example) => normalizeText(example?.translation || ""))
+      .filter(Boolean)
+      .slice(0, 3);
+  };
+
+  const openMeaningPreviewVideoInline = ({ entry, groupKey }) => {
+    const safeVideos = Array.isArray(entry?.topVideos)
+      ? entry.topVideos.filter(Boolean)
+      : [];
+
+    if (safeVideos.length === 0) return false;
+
+    const currentIndex = Math.min(
+      videoIndexes[groupKey] || 0,
+      safeVideos.length - 1
+    );
+    const currentVideo = safeVideos[currentIndex];
+
+    if (!currentVideo?.video) return false;
+
+    openVideo({
+      video: currentVideo.video,
+      videoKey: currentVideo.key,
+      videoTitle: currentVideo.title,
+      groupKey,
+      videos: safeVideos,
+      index: currentIndex,
+      autoPlayOnOpen: true,
+      desktopAutoPlayOnOpen: true,
+    });
+
+    return true;
+  };
+
   if (rawMeanings.length === 0) return null;
 
   return (
@@ -2134,154 +2238,214 @@ export default function ExamplesPanel({
               : shouldUseMeaningVideoCollapse && hasMeaningVideo;
             const isMeaningExpanded =
               !shouldUseMeaningCollapse || expandedMeaningVideoKey === groupKey;
-            const meaningHoverBorderColor = mixHexColors(
-              meaningPalette.border,
-              meaningPalette.accent,
-              0.5
+            const isMobileMeaningVideoPlaybackActive = Boolean(
+              isMobile &&
+                mobileVideo?.video &&
+                typeof mobileVideo?.groupKey === "string" &&
+                mobileVideo.groupKey.startsWith("meaning-video-group-")
+            );
+            const shouldHideMeaningDuringMobilePlayback =
+              isMobileMeaningVideoPlaybackActive && mobileVideo.groupKey !== groupKey;
+
+            if (shouldHideMeaningDuringMobilePlayback) {
+              return null;
+            }
+
+            const meaningPreview = getMeaningPreviewMedia(entry);
+            const meaningPreviewTitle =
+              entry.meaning || `Significado ${index + 1}`;
+            const meaningPreviewExamples = getMeaningPreviewExamples(entry);
+            const hasMeaningPreviewMedia = Boolean(
+              meaningPreview.video || meaningPreview.thumbnail
+            );
+            const isForegroundMeaning =
+              isMeaningExpanded &&
+              (index === 0 ||
+                (activeMeaningText && entry.meaning === activeMeaningText));
+            const meaningPreviewButtonContent = ({ hideThumbnail = false, hideSummary = false } = {}) => (
+              <div
+                className={[
+                  "group/meaning-preview flex w-full min-w-0 items-center text-left transition-colors duration-200",
+                  isFlashcardMobileLayout ? "gap-2.5" : "gap-3",
+                  isMeaningExpanded
+                    ? "py-0"
+                    : isFlashcardMobileLayout
+                    ? "min-h-[96px] py-3"
+                    : "min-h-[112px] py-3",
+                ].join(" ")}
+              >
+                {!hideThumbnail && hasMeaningPreviewMedia ? (
+                  <div
+                    className={[
+                      "relative shrink-0 self-center overflow-hidden rounded-md border bg-black/10",
+                      isFlashcardMobileLayout ? "w-[128px]" : "w-[156px]",
+                    ].join(" ")}
+                    style={{ borderColor: meaningPalette.border }}
+                  >
+                    <AspectRatio ratio={16 / 9}>
+                      {meaningPreview.thumbnail ? (
+                        <img
+                          src={meaningPreview.thumbnail}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(237,154,10,0.12),transparent_32%),linear-gradient(135deg,#F8FAFC_0%,#EFF4F8_55%,#E6EDF5_100%)]" />
+                      )}
+
+                      <div className="absolute inset-0 bg-black/12 transition-colors duration-200 group-hover/meaning-preview:bg-black/[0.08]" />
+
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <span
+                          className={[
+                            "flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/40 shadow-[0_8px_20px_rgba(15,23,42,0.22)] backdrop-blur-sm transition-all duration-200",
+                            isMobile
+                              ? "opacity-100"
+                              : "scale-95 opacity-0 group-hover/meaning-preview:scale-100 group-hover/meaning-preview:opacity-100",
+                          ].join(" ")}
+                        >
+                          <Play className="ml-[1.5px] h-3.5 w-3.5 fill-white text-white stroke-[2.2]" />
+                        </span>
+                      </div>
+                    </AspectRatio>
+                  </div>
+                ) : null}
+
+                <div className="min-w-0 flex-1 self-center py-0">
+                  <div
+                    className={[
+                      "flex min-w-0 flex-col overflow-hidden",
+                      !hideThumbnail && !hideSummary && hasMeaningPreviewMedia
+                        ? isFlashcardMobileLayout
+                          ? "h-[72px] -translate-y-px"
+                          : "h-[88px] -translate-y-[2px]"
+                        : "h-full min-h-full",
+                      hideSummary ? "justify-start" : "justify-center",
+                      hideSummary
+                        ? "gap-0"
+                        : meaningPreviewExamples.length > 1
+                        ? isFlashcardMobileLayout
+                          ? "gap-[3px]"
+                          : "gap-1"
+                        : "gap-1.5",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1">
+                        <BrFlagIcon className="h-[clamp(14px,4vw,16px)] w-[clamp(14px,4vw,16px)]" />
+                        <span className="shrink-0 text-[12px] font-normal text-[#6A7181] dark:text-slate-400">
+                          —
+                        </span>
+                      </span>
+
+                      <p className="min-w-0 truncate text-[13px] font-semibold leading-[1.12] text-[#181818] dark:text-foreground">
+                        {meaningPreviewTitle}
+                      </p>
+                    </div>
+
+                    {!hideSummary ? (
+                      meaningPreviewExamples.length > 0 ? (
+                        <ul
+                          className={
+                            meaningPreviewExamples.length > 1 ? "space-y-0.5" : "space-y-1"
+                          }
+                        >
+                          {meaningPreviewExamples.map((previewText, previewIndex) => (
+                            <li
+                              key={`${groupKey}-preview-${previewIndex}`}
+                              className={[
+                                "flex items-start gap-1.5 text-[#667085] dark:text-slate-300/90",
+                                isFlashcardMobileLayout
+                                  ? "text-[10.5px] leading-[1.22]"
+                                  : "text-[11px] leading-[1.24]",
+                              ].join(" ")}
+                            >
+                              <span
+                                className="mt-[3.5px] h-[3px] w-[3px] shrink-0 rounded-full bg-[#98A2B3] dark:bg-slate-500/90"
+                                aria-hidden="true"
+                              />
+                              <span className="min-w-0 truncate">{previewText}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[10px] leading-[1.32] text-[#667085]/85 dark:text-slate-300/70">
+                          Clique para abrir este significado.
+                        </p>
+                      )
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             );
 
             return (
                 <section
                   key={`${entry.meaning}-${index}`}
-                  className={
+                  className={[
                     isFlashcardMobileLayout
-                      ? "relative rounded-2xl border border-[var(--meaning-border)] p-3.5"
-                      : [
-                          "group/meaning rounded-xl border border-[var(--meaning-border)] px-4 py-3",
-                          shouldUseMeaningCollapse
-                            ? [
-                                "cursor-pointer",
-                                !isMeaningExpanded
-                                  ? "transition-colors duration-200 hover:border-[var(--meaning-hover-border)]"
-                                  : "",
-                              ].join(" ")
-                            : "",
-                        ].join(" ")
-                  }
+                      ? shouldUseMeaningCollapse
+                        ? isMeaningExpanded
+                          ? "relative rounded-2xl border border-[var(--meaning-border)] p-3"
+                          : "relative rounded-xl border border-[var(--meaning-border)] p-2"
+                        : "relative rounded-2xl border border-[var(--meaning-border)] p-3"
+                      : shouldUseMeaningCollapse
+                      ? isMeaningExpanded
+                        ? "group/meaning relative rounded-xl border border-[var(--meaning-border)] px-4 py-3"
+                        : "group/meaning relative border-b border-[var(--meaning-border)] px-0 py-0"
+                      : "group/meaning relative rounded-xl border border-[var(--meaning-border)] px-4 py-3",
+                    isForegroundMeaning ? "border-t-0" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   style={{
-                    backgroundColor: meaningPalette.background,
+                    backgroundColor:
+                      !shouldUseMeaningCollapse || isMeaningExpanded
+                        ? meaningPalette.background
+                        : "transparent",
                     "--meaning-border": meaningPalette.border,
-                    ...(!isFlashcardMobileLayout &&
-                    shouldUseMeaningCollapse &&
-                    !isMeaningExpanded
-                      ? { "--meaning-hover-border": meaningHoverBorderColor }
-                      : {}),
                   }}
               >
                 <div className="min-w-0">
                   {shouldUseMeaningCollapse ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setExpandedMeaningVideoKey((current) =>
-                          current === groupKey ? null : groupKey
-                        );
-                      }}
-                      className={[
-                        "w-full text-left transition-colors duration-200",
-                        "focus-visible:outline-none focus-visible:ring-2",
-                        isFlashcardMobileLayout ? "" : "focus-visible:ring-[#CBD5E1]",
-                        isMeaningExpanded ? "mb-2" : "mb-0",
-                        isMeaningExpanded
-                          ? isFlashcardMobileLayout
-                            ? "rounded-lg px-1 py-1.5"
-                            : "rounded-md px-1 py-1"
-                          : isFlashcardMobileLayout
-                            ? "rounded-lg px-1 py-1.5"
-                            : "rounded-md px-1 py-1",
-                      ].join(" ")}
-                      aria-label={`Mostrar significado ${entry.meaning}`}
-                      title={`Mostrar significado ${entry.meaning}`}
-                    >
-                      <span
-                        className={[
-                          "flex justify-between gap-3",
-                          isMeaningExpanded ? "items-start" : "items-center",
-                        ].join(" ")}
+                    isMeaningExpanded ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExpandedMeaningVideoKey((current) =>
+                            current === groupKey ? null : groupKey
+                          );
+                        }}
+                        className="sr-only"
+                        aria-label={`Mostrar significado ${entry.meaning}`}
+                        title={`Mostrar significado ${entry.meaning}`}
                       >
-                        <span
-                          className={[
-                            "inline-flex min-w-0 flex-wrap items-center gap-2",
-                            isMeaningExpanded ? "border-b pb-1.5" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          style={
-                            isMeaningExpanded
-                              ? { borderBottomColor: meaningPalette.border }
-                              : undefined
+                        {`Mostrar significado ${entry.meaning}`}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExpandedMeaningVideoKey(groupKey);
+
+                          if (!isMobile && hasMeaningVideo) {
+                            openMeaningPreviewVideoInline({ entry, groupKey });
                           }
-                        >
-                          <span className="inline-flex items-center gap-1">
-                            <BrFlagIcon className="h-[clamp(16px,4.4vw,18px)] w-[clamp(16px,4.4vw,18px)]" />
-                            <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-400">
-                              —
-                            </span>
-                          </span>
-
-                          <span className="font-bold text-[#181818] dark:text-foreground">
-                            {entry.meaning}
-                          </span>
-                        </span>
-
-                        <span className="inline-flex items-center gap-2 self-center">
-                          <ChevronDown
-                            className={[
-                              "h-3 w-3 shrink-0 scale-x-[1.2] transform-gpu opacity-80 transition-all duration-200 ease-out",
-                              isMeaningExpanded
-                                ? "-translate-y-[0.5px] -rotate-180"
-                                : "translate-y-0 rotate-0",
-                            ].join(" ")}
-                            style={{ color: meaningPalette.accent }}
-                            aria-hidden="true"
-                          />
-
-                          {!isMeaningExpanded && shouldUseMeaningCollapse ? (
-                            <span
-                              className="inline-flex h-[clamp(18px,4.4vw,20px)] w-[clamp(18px,4.4vw,20px)] shrink-0 items-center justify-center rounded-full border opacity-90 transition-all duration-200 ease-out"
-                              style={{
-                                borderColor: meaningPalette.tipBorder,
-                                backgroundColor: meaningPalette.tipBackground,
-                                color: meaningPalette.accent,
-                              }}
-                              aria-label={
-                                hasMeaningVideo
-                                  ? "Significado com vídeo anexado"
-                                  : "Significado com exemplos cadastrados"
-                              }
-                              title={
-                                hasMeaningVideo
-                                  ? "Significado com vídeo anexado"
-                                  : "Significado com exemplos cadastrados"
-                              }
-                            >
-                              {hasMeaningVideo ? (
-                                <Play className="ml-[1px] h-[9px] w-[9px] fill-current stroke-[2.2]" />
-                              ) : (
-                                <BookOpen className="h-[10px] w-[10px] stroke-[2.2]" />
-                              )}
-                            </span>
-                          ) : null}
-                        </span>
-                      </span>
-                    </button>
-                  ) : (
-                    <div
-                      className="mb-2 inline-flex max-w-full flex-wrap items-center gap-2 border-b pb-1.5"
-                      style={{ borderBottomColor: meaningPalette.border }}
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        <BrFlagIcon className="h-[clamp(16px,4.4vw,18px)] w-[clamp(16px,4.4vw,18px)]" />
-                        <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-400">
-                          —
-                        </span>
-                      </span>
-
-                      <span className="font-bold text-[#181818] dark:text-foreground">
-                        {entry.meaning}
-                      </span>
-                    </div>
-                  )}
+                        }}
+                        className={[
+                          "w-full rounded-md text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CBD5E1]",
+                          isFlashcardMobileLayout ? "px-0.5" : "px-2",
+                        ].join(" ")}
+                        aria-label={`Mostrar significado ${entry.meaning}`}
+                        title={`Mostrar significado ${entry.meaning}`}
+                      >
+                        {meaningPreviewButtonContent()}
+                      </button>
+                    )
+                  ) : null}
 
                   {isMeaningExpanded ? (
                     <>
@@ -2293,6 +2457,26 @@ export default function ExamplesPanel({
                             meaningPalette,
                           })
                         : null}
+
+                      <div className="mb-3 border-b pb-2 pt-1.5" style={{ borderBottomColor: meaningPalette.border }}>
+                        {shouldUseMeaningCollapse ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedMeaningVideoKey((current) =>
+                                current === groupKey ? null : groupKey
+                              );
+                            }}
+                            className="w-full text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#CBD5E1]"
+                            aria-label={`Mostrar significado ${entry.meaning}`}
+                            title={`Mostrar significado ${entry.meaning}`}
+                          >
+                            {meaningPreviewButtonContent({ hideThumbnail: true, hideSummary: true })}
+                          </button>
+                        ) : (
+                          <div>{meaningPreviewButtonContent({ hideThumbnail: true, hideSummary: true })}</div>
+                        )}
+                      </div>
 
                       {visibleExamples.length > 0 ? (
                         <div className={isFlashcardMobileLayout ? "space-y-2.5" : "space-y-2"}>
