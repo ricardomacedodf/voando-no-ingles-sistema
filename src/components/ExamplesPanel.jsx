@@ -6,6 +6,7 @@ import {
   Languages,
   Lightbulb,
   Play,
+  BookOpen,
   X,
 } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
@@ -1044,9 +1045,9 @@ function ExampleVideoThumbnail({
         isOpen
           ? "border-[#ED9A0A]/80 dark:border-[#ED9A0A]/70"
           : "border-[#D9E2EC] dark:border-border",
-        "bg-[#F8FAFC] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_18px_rgba(15,23,42,0.06)] dark:bg-muted/40 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_18px_rgba(2,6,23,0.45)]",
+        "bg-[#F8FAFC] dark:bg-muted/40",
         "transition-all duration-200",
-        "hover:border-[#ED9A0A]/70 hover:shadow-[0_12px_24px_rgba(15,23,42,0.10)] dark:hover:shadow-[0_12px_24px_rgba(2,6,23,0.55)]",
+        "hover:border-[#ED9A0A]/70",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/35 focus-visible:ring-offset-2",
       ].join(" ")}
     >
@@ -1160,6 +1161,7 @@ export default function ExamplesPanel({
   const mobileVideoResizeTimerRef = useRef(null);
   const [videoIndexes, setVideoIndexes] = useState({});
   const [expandedMeaningVideoKey, setExpandedMeaningVideoKey] = useState(null);
+  const [expandedTipKeys, setExpandedTipKeys] = useState({});
   const expandedVideoSwipeRef = useRef({
     active: false,
     pointerId: null,
@@ -1323,9 +1325,10 @@ export default function ExamplesPanel({
     };
   });
 
-  const sorted = activeMeaning
+  const activeMeaningText = normalizeText(activeMeaning);
+  const sorted = activeMeaningText
     ? [...normalized].sort((a, b) =>
-        a.meaning === activeMeaning ? -1 : b.meaning === activeMeaning ? 1 : 0
+        a.meaning === activeMeaningText ? -1 : b.meaning === activeMeaningText ? 1 : 0
       )
     : normalized;
   const hasMultipleMeanings = sorted.length > 1;
@@ -1339,17 +1342,37 @@ export default function ExamplesPanel({
         return accumulator;
       }, [])
     : [];
+  const allMeaningGroupKeys = sorted.map(
+    (entry, index) => `meaning-video-group-${entry.meaning}-${index}`
+  );
+  const activeMeaningGroupKey = activeMeaningText
+    ? sorted.reduce((match, entry, index) => {
+        if (match) return match;
+
+        if (entry.meaning === activeMeaningText) {
+          return `meaning-video-group-${entry.meaning}-${index}`;
+        }
+
+        return null;
+      }, null)
+    : null;
+  const collapsibleMeaningGroupKeys = activeMeaningText
+    ? allMeaningGroupKeys
+    : videoMeaningGroupKeys;
 
   const shouldUseMeaningVideoCollapse =
-    hasMultipleMeanings && videoMeaningGroupKeys.length > 1;
-  const firstExpandedMeaningVideoKey = videoMeaningGroupKeys[0] || null;
-  const videoMeaningGroupsSignature = videoMeaningGroupKeys.join("||");
+    hasMultipleMeanings && collapsibleMeaningGroupKeys.length > 0;
+  const firstExpandedMeaningVideoKey = activeMeaningText
+    ? activeMeaningGroupKey
+    : collapsibleMeaningGroupKeys[0] || null;
+  const videoMeaningGroupsSignature = collapsibleMeaningGroupKeys.join("||");
 
   useEffect(() => {
     setOpenDesktopVideos({});
     setDesktopAutoplayByGroup({});
     setMobileVideo(null);
     setVideoIndexes({});
+    setExpandedTipKeys({});
   }, [
     allMeanings,
     activeMeaning,
@@ -1364,13 +1387,18 @@ export default function ExamplesPanel({
     }
 
     setExpandedMeaningVideoKey((current) => {
-      if (current && videoMeaningGroupKeys.includes(current)) {
+      if (activeMeaningText) {
+        return firstExpandedMeaningVideoKey;
+      }
+
+      if (current && collapsibleMeaningGroupKeys.includes(current)) {
         return current;
       }
 
       return firstExpandedMeaningVideoKey;
     });
   }, [
+    activeMeaningText,
     shouldUseMeaningVideoCollapse,
     firstExpandedMeaningVideoKey,
     videoMeaningGroupsSignature,
@@ -1664,11 +1692,7 @@ export default function ExamplesPanel({
       shouldRenderThirdPartyInline ||
       (isMobile && isCurrentVideoThirdParty) ||
       (isVideoOpen && !isMobile);
-    const shouldShowAttachedChip =
-      !isMobile &&
-      !shouldRenderThirdPartyInline &&
-      !isVideoOpen &&
-      groupKey !== "global-word-video-group";
+    const shouldShowAttachedChip = false;
     const attachedChipPalette = meaningPalette
       ? {
           borderColor: meaningPalette.tipBorder,
@@ -1725,7 +1749,7 @@ export default function ExamplesPanel({
                 .join(" ")
             }
           >
-            <div className="relative overflow-hidden rounded-xl bg-black shadow-[0_16px_34px_rgba(15,23,42,0.16)]">
+            <div className="relative overflow-hidden rounded-xl bg-black">
               <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
                 <ExampleVideoPlayer
                   key={`${currentVideo.key}-${currentVideo.video}`}
@@ -1988,8 +2012,11 @@ export default function ExamplesPanel({
 
         <div className={isFlashcardMobileLayout ? "space-y-3.5" : "space-y-4"}>
           {sorted.map((entry, index) => {
-            const visibleExamples = entry.examples.slice(0, 3);
+            const visibleExamples = entry.examples.slice(0, 4);
             const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
+            const tipKey = `meaning-tip-${entry.meaning}-${index}`;
+            const hasMeaningSupportInfo = Boolean(entry.category || entry.tip);
+            const isTipExpanded = Boolean(expandedTipKeys[tipKey]);
             const meaningPalette = getMeaningPaletteByIndex(
               index,
               meaningPaletteCollection
@@ -1998,8 +2025,9 @@ export default function ExamplesPanel({
               shouldShowSpecificVideosInsideMeanings &&
               Array.isArray(entry.topVideos) &&
               entry.topVideos.length > 0;
-            const shouldUseMeaningCollapse =
-              shouldUseMeaningVideoCollapse && hasMeaningVideo;
+            const shouldUseMeaningCollapse = activeMeaningText
+              ? shouldUseMeaningVideoCollapse
+              : shouldUseMeaningVideoCollapse && hasMeaningVideo;
             const isMeaningExpanded =
               !shouldUseMeaningCollapse || expandedMeaningVideoKey === groupKey;
             const meaningHoverBorderColor = mixHexColors(
@@ -2013,17 +2041,9 @@ export default function ExamplesPanel({
                   key={`${entry.meaning}-${index}`}
                   className={
                     isFlashcardMobileLayout
-                      ? [
-                          "relative rounded-2xl border border-[var(--meaning-border)] p-3.5",
-                          isDarkTheme
-                            ? "shadow-[0_10px_24px_rgba(2,6,23,0.38)]"
-                            : "shadow-[0_8px_20px_rgba(15,23,42,0.035)]",
-                        ].join(" ")
+                      ? "relative rounded-2xl border border-[var(--meaning-border)] p-3.5"
                       : [
                           "group/meaning rounded-xl border border-[var(--meaning-border)] px-4 py-3",
-                          isDarkTheme
-                            ? "shadow-[0_12px_26px_rgba(2,6,23,0.4)]"
-                            : "shadow-[0_10px_26px_rgba(15,23,42,0.05)]",
                           shouldUseMeaningCollapse
                             ? [
                                 "cursor-pointer",
@@ -2075,7 +2095,19 @@ export default function ExamplesPanel({
                           isMeaningExpanded ? "items-start" : "items-center",
                         ].join(" ")}
                       >
-                        <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
+                        <span
+                          className={[
+                            "inline-flex min-w-0 flex-wrap items-center gap-2",
+                            isMeaningExpanded ? "border-b pb-1.5" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          style={
+                            isMeaningExpanded
+                              ? { borderBottomColor: meaningPalette.border }
+                              : undefined
+                          }
+                        >
                           <span className="inline-flex items-center gap-1">
                             <BrFlagIcon className="h-[clamp(16px,4.4vw,18px)] w-[clamp(16px,4.4vw,18px)]" />
                             <span className="shrink-0 text-sm font-normal text-[#6A7181] dark:text-slate-400">
@@ -2086,25 +2118,12 @@ export default function ExamplesPanel({
                           <span className="font-bold text-[#181818] dark:text-foreground">
                             {entry.meaning}
                           </span>
-
-                          {entry.category ? (
-                            <span
-                              className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                              style={{
-                                borderColor: meaningPalette.tipBorder,
-                                backgroundColor: meaningPalette.tipBackground,
-                                color: meaningPalette.accent,
-                              }}
-                            >
-                              {entry.category}
-                            </span>
-                          ) : null}
                         </span>
 
                         <span className="inline-flex items-center gap-2 self-center">
                           <ChevronDown
                             className={[
-                              "h-3.5 w-3.5 shrink-0 scale-x-[1.2] transform-gpu opacity-80 transition-all duration-200 ease-out",
+                              "h-3 w-3 shrink-0 scale-x-[1.2] transform-gpu opacity-80 transition-all duration-200 ease-out",
                               isMeaningExpanded
                                 ? "-translate-y-[0.5px] -rotate-180"
                                 : "translate-y-0 rotate-0",
@@ -2113,19 +2132,30 @@ export default function ExamplesPanel({
                             aria-hidden="true"
                           />
 
-                          {!isMeaningExpanded && hasMeaningVideo ? (
+                          {!isMeaningExpanded && shouldUseMeaningCollapse ? (
                             <span
-                              className={[
-                                "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border opacity-80 transition-all duration-200 ease-out",
-                              ].join(" ")}
+                              className="inline-flex h-[clamp(18px,4.4vw,20px)] w-[clamp(18px,4.4vw,20px)] shrink-0 items-center justify-center rounded-full border opacity-90 transition-all duration-200 ease-out"
                               style={{
                                 borderColor: meaningPalette.tipBorder,
                                 backgroundColor: meaningPalette.tipBackground,
                                 color: meaningPalette.accent,
                               }}
-                              aria-hidden="true"
+                              aria-label={
+                                hasMeaningVideo
+                                  ? "Significado com vídeo anexado"
+                                  : "Significado com exemplos cadastrados"
+                              }
+                              title={
+                                hasMeaningVideo
+                                  ? "Significado com vídeo anexado"
+                                  : "Significado com exemplos cadastrados"
+                              }
                             >
-                              <Play className="ml-[1px] h-2.5 w-2.5 fill-current stroke-[2.2]" />
+                              {hasMeaningVideo ? (
+                                <Play className="ml-[1px] h-[9px] w-[9px] fill-current stroke-[2.2]" />
+                              ) : (
+                                <BookOpen className="h-[10px] w-[10px] stroke-[2.2]" />
+                              )}
                             </span>
                           ) : null}
                         </span>
@@ -2146,19 +2176,6 @@ export default function ExamplesPanel({
                       <span className="font-bold text-[#181818] dark:text-foreground">
                         {entry.meaning}
                       </span>
-
-                      {entry.category ? (
-                        <span
-                          className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                          style={{
-                            borderColor: meaningPalette.tipBorder,
-                            backgroundColor: meaningPalette.tipBackground,
-                            color: meaningPalette.accent,
-                          }}
-                        >
-                          {entry.category}
-                        </span>
-                      ) : null}
                     </div>
                   )}
 
@@ -2255,25 +2272,73 @@ export default function ExamplesPanel({
                   ) : null}
                 </div>
 
-                {isMeaningExpanded && entry.tip ? (
+                {isMeaningExpanded && hasMeaningSupportInfo ? (
                   <div className="mt-3">
-                    <div
-                      className="inline-flex w-full max-w-full items-start gap-1.5 rounded-lg border px-2.5 py-2"
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setExpandedTipKeys((current) => ({
+                          ...current,
+                          [tipKey]: !current[tipKey],
+                        }));
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold leading-none transition-colors"
                       style={{
                         borderColor: meaningPalette.tipBorder,
                         backgroundColor: meaningPalette.tipBackground,
+                        color: meaningPalette.accent,
                       }}
+                      aria-expanded={isTipExpanded}
+                      aria-label={isTipExpanded ? "Ocultar modo de uso" : "Mostrar modo de uso"}
+                      title={isTipExpanded ? "Ocultar modo de uso" : "Mostrar modo de uso"}
                     >
-                      <Lightbulb
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0"
-                        style={{ color: meaningPalette.accent }}
+                      <Lightbulb className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span>Modo de uso</span>
+                      <ChevronDown
+                        className={[
+                          "h-3 w-3 shrink-0 scale-x-[1.2] transform-gpu opacity-80 transition-all duration-200 ease-out",
+                          isTipExpanded
+                            ? "-translate-y-[0.5px] -rotate-180"
+                            : "translate-y-0 rotate-0",
+                        ].join(" ")}
+                        aria-hidden="true"
                       />
-                      <span
-                        className="min-w-0 text-xs italic leading-relaxed text-[#5E6778] dark:text-slate-200"
+                    </button>
+
+                    {isTipExpanded ? (
+                      <div
+                        className="mt-2 rounded-lg border px-2.5 py-2"
+                        style={{
+                          borderColor: meaningPalette.tipBorder,
+                          backgroundColor: meaningPalette.tipBackground,
+                        }}
                       >
-                        {entry.tip}
-                      </span>
-                    </div>
+                        <div className="flex items-end gap-2">
+                          {entry.tip ? (
+                            <p className="min-w-0 flex-1 text-left text-xs leading-relaxed text-[#5E6778] dark:text-slate-200">
+                              {entry.tip}
+                            </p>
+                          ) : (
+                            <span className="min-w-0 flex-1" />
+                          )}
+
+                          {entry.category ? (
+                            <span
+                              className="mb-[1px] shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none"
+                              style={{
+                                borderColor: meaningPalette.tipBorder,
+                                backgroundColor: meaningPalette.background,
+                                color: meaningPalette.accent,
+                              }}
+                            >
+                              {entry.category}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </section>
