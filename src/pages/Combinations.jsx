@@ -875,6 +875,7 @@ export default function Combinations() {
             expanded={showExamples}
             onClick={() => setShowExamples((prev) => !prev)}
             variant="flashcard"
+            className="hide-on-mobile-video-expanded"
           />
 
           {showExamples ? (
@@ -894,4 +895,3 @@ export default function Combinations() {
     </div>
   );
 }
-

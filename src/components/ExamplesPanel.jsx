@@ -712,6 +712,7 @@ function ExampleVideoThumbnail({
   isOpen = false,
   isMobile = false,
   className = "h-[84px]",
+  style,
 }) {
   const [thumbnailSrc, setThumbnailSrc] = useState(() => {
     const rawVideo = normalizeText(video);
@@ -1098,6 +1099,7 @@ function ExampleVideoThumbnail({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onPointerLeave={handlePointerCancel}
+      style={style}
       className={[
         "group relative w-full touch-pan-y overflow-hidden rounded-lg border",
         "cursor-pointer",
@@ -1568,10 +1570,20 @@ export default function ExamplesPanel({
     : FLASHCARD_MOBILE_MEANING_PALETTE;
   const titleValue = titleTerm ? titleTerm.trim() : "Exemplos";
   const highlightTerm = titleTerm ? titleTerm.trim() : "";
+  const shouldUseExpandedVideoHeaderSpacing = Boolean(
+    shouldShowGlobalWordVideoOnTop ||
+      sorted.some(
+        (entry) => Array.isArray(entry?.topVideos) && entry.topVideos.length > 0
+      )
+  );
   const panelContainerClass = isFlashcard
     ? isFlashcardMobileLayout
       ? "mt-0 bg-transparent p-0 text-foreground"
+      : shouldUseExpandedVideoHeaderSpacing
+      ? "mt-0 rounded-xl border border-[#EDF0F3] bg-white px-6 pb-6 pt-4 text-[#1A1A1A] dark:border-border dark:bg-card dark:text-foreground"
       : "mt-0 rounded-xl border border-[#EDF0F3] bg-white p-6 text-[#1A1A1A] dark:border-border dark:bg-card dark:text-foreground"
+    : shouldUseExpandedVideoHeaderSpacing
+    ? "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] px-5 pb-5 pt-3 animate-in fade-in slide-in-from-top-2 duration-200 dark:bg-card"
     : "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] p-5 animate-in fade-in slide-in-from-top-2 duration-200 dark:bg-card";
   const firstMeaningGroupKey = sorted.length
     ? `meaning-video-group-${sorted[0].meaning}-0`
@@ -1587,30 +1599,46 @@ export default function ExamplesPanel({
       foregroundMeaningGroupKey &&
       foregroundMeaningGroupKey !== firstMeaningGroupKey
   );
-  const shouldHidePanelHeaderDivider = shouldShowGlobalWordVideoOnTop
+  const shouldHidePanelHeaderDivider = shouldUseExpandedVideoHeaderSpacing
+    ? true
+    : shouldShowGlobalWordVideoOnTop
     ? !isLowerMeaningInForeground
     : isFirstMeaningInForeground;
   const panelHeaderDividerClass = shouldHidePanelHeaderDivider
-    ? ""
+    ? "border-b border-transparent"
     : isFlashcard
     ? "border-b border-border"
     : "border-b border-border/70";
   const panelHeaderClass = [
     isFlashcard
       ? isFlashcardMobileLayout
-        ? shouldUseMeaningVideoCollapse
-          ? "mb-0 flex items-center justify-between pb-2.5"
+        ? shouldUseExpandedVideoHeaderSpacing
+          ? "mb-0 flex items-center justify-between pb-0"
+          : shouldUseMeaningVideoCollapse
+          ? "mb-0 flex items-center justify-between pb-0"
           : "mb-3 flex items-center justify-between pb-2.5"
+        : shouldUseExpandedVideoHeaderSpacing
+        ? "mb-0 flex items-center justify-between pb-0"
         : shouldUseMeaningVideoCollapse
-        ? "mb-0 flex items-center justify-between pb-2"
+        ? "mb-0 flex items-center justify-between pb-0"
         : "mb-4 flex items-center justify-between pb-2"
+      : shouldUseExpandedVideoHeaderSpacing
+      ? "mb-0 flex items-center justify-between gap-3 pb-0"
       : shouldUseMeaningVideoCollapse
-      ? "mb-0 flex items-center justify-between gap-3 pb-3"
+      ? "mb-0 flex items-center justify-between gap-3 pb-0"
       : "mb-4 flex items-center justify-between gap-3 pb-3",
     panelHeaderDividerClass,
   ]
     .filter(Boolean)
     .join(" ");
+  const panelHeaderOffsetClass = shouldUseExpandedVideoHeaderSpacing
+    ? "pt-[2.25px]"
+    : shouldUseMeaningVideoCollapse
+    ? "pt-[1.5px]"
+    : isFlashcardMobileLayout
+    ? "pt-1.5"
+    : "pt-1.5";
+  const panelHeaderInsetClass = isFlashcardMobileLayout ? "px-4" : "px-3.5";
   const isExpandedGlobalWordVideo =
     mobileVideo?.groupKey === "global-word-video-group";
   const currentMobileVideoValue = mobileVideo?.video || "";
@@ -1673,6 +1701,19 @@ export default function ExamplesPanel({
       window.clearTimeout(openingTimer);
     };
   }, [isMobile, mobileVideoPlayerKey, isCurrentMobileVideoThirdPartyEmbed]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const className = "examples-mobile-video-expanded";
+    const shouldSetClass = Boolean(isMobile && mobileVideo?.video);
+
+    document.body.classList.toggle(className, shouldSetClass);
+
+    return () => {
+      document.body.classList.remove(className);
+    };
+  }, [isMobile, mobileVideo?.video]);
 
   const shouldSkipClickSfxAfterPointer = (event) => {
     if (!event) return false;
@@ -1792,11 +1833,36 @@ export default function ExamplesPanel({
     }
   };
 
-  const renderVideoControls = ({ groupKey, videos, currentIndex }) => {
+  const resetVideoGroupIndexToStart = (groupKey) => {
+    if (!groupKey) return;
+
+    setVideoIndexes((current) => {
+      if (current[groupKey] === 0 || current[groupKey] === undefined) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [groupKey]: 0,
+      };
+    });
+  };
+
+  const renderVideoControls = ({
+    groupKey,
+    videos,
+    currentIndex,
+    isIntegratedSurface = false,
+  }) => {
     if (!Array.isArray(videos) || videos.length <= 1) return null;
 
     return (
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div
+        className={[
+          isIntegratedSurface ? "mt-0" : "mt-2",
+          "flex items-center justify-between gap-2",
+        ].join(" ")}
+      >
         <button
           type="button"
           onClick={(event) => {
@@ -1838,7 +1904,12 @@ export default function ExamplesPanel({
     );
   };
 
-  const renderTopVideoCarousel = ({ videos, groupKey, meaningPalette = null }) => {
+  const renderTopVideoCarousel = ({
+    videos,
+    groupKey,
+    meaningPalette = null,
+    attachContextBelow = false,
+  }) => {
     const safeVideos = Array.isArray(videos) ? videos.filter(Boolean) : [];
 
     if (safeVideos.length === 0) return null;
@@ -1887,14 +1958,84 @@ export default function ExamplesPanel({
       isMobile &&
       Boolean(mobileVideo?.key) &&
       mobileVideo.key === currentVideo.key;
-    const videoSurfaceBleedClass = isFlashcardMobileLayout
+    const isIntegratedGlobalSurface =
+      attachContextBelow && groupKey === "global-word-video-group";
+    const isSpecificExpandedVideoSurface =
+      !isIntegratedGlobalSurface && Boolean(meaningPalette);
+    const integratedSurfaceCornerRadius = isFlashcardMobileLayout
+      ? "14px"
+      : "0.75rem";
+    const integratedTopRadiusStyle = isIntegratedGlobalSurface
+      ? {
+          width: "100%",
+          maxWidth: "100%",
+          marginLeft: 0,
+          marginRight: 0,
+          boxSizing: "border-box",
+          borderTopLeftRadius: integratedSurfaceCornerRadius,
+          borderTopRightRadius: integratedSurfaceCornerRadius,
+          borderBottomLeftRadius: 0,
+          borderBottomRightRadius: 0,
+        }
+      : undefined;
+    const videoSurfaceBleedClass = isIntegratedGlobalSurface
+      ? "w-full max-w-full"
+      : isSpecificExpandedVideoSurface
+      ? isFlashcardMobileLayout
+        ? "-mx-3.5 mt-0 !w-[calc(100%+1.75rem)]"
+        : "-mx-4 mt-0 !w-[calc(100%+2rem)]"
+      : isFlashcardMobileLayout
       ? "-mx-3.5 -mt-3.5 !w-[calc(100%+1.75rem)]"
       : "-mx-4 -mt-3 !w-[calc(100%+2rem)]";
+    const integratedSurfaceRadiusClass = isIntegratedGlobalSurface
+      ? isFlashcardMobileLayout
+        ? "rounded-t-[14px] rounded-b-none"
+        : "rounded-t-xl rounded-b-none"
+      : "rounded-xl";
+    const integratedFrameRadiusClass = isIntegratedGlobalSurface
+      ? isFlashcardMobileLayout
+        ? "!rounded-[14px]"
+        : "!rounded-xl"
+      : "";
+    const integratedThumbnailRadiusClass = isIntegratedGlobalSurface
+      ? isFlashcardMobileLayout
+        ? "!rounded-[14px] !border-0"
+        : "!rounded-xl !border-0"
+      : "";
+    const integratedSurfacePalette = isIntegratedGlobalSurface
+      ? getMeaningPaletteByIndex(0, meaningPaletteCollection)
+      : null;
+    const integratedSurfaceBorderClass = isIntegratedGlobalSurface
+      ? "w-full max-w-full border border-b-0"
+      : "";
+    const integratedSurfaceStyle = integratedSurfacePalette
+      ? {
+          ...integratedTopRadiusStyle,
+          borderColor: integratedSurfacePalette.border,
+          backgroundColor: integratedSurfacePalette.background,
+        }
+      : integratedTopRadiusStyle;
+    const integratedVideoRadiusStyle = isIntegratedGlobalSurface
+      ? {
+          ...integratedTopRadiusStyle,
+          borderBottomLeftRadius: integratedSurfaceCornerRadius,
+          borderBottomRightRadius: integratedSurfaceCornerRadius,
+        }
+      : undefined;
+    const integratedFrameStyle = integratedVideoRadiusStyle;
+    const integratedThumbnailStyle = isIntegratedGlobalSurface
+      ? {
+          ...integratedVideoRadiusStyle,
+          borderWidth: 0,
+        }
+      : undefined;
 
     return (
       <div
         className={
-          meaningPalette
+          attachContextBelow
+            ? "mb-0 w-full max-w-full"
+            : meaningPalette
             ? isFlashcardMobileLayout
               ? "mb-2.5"
               : "mb-3"
@@ -1941,11 +2082,20 @@ export default function ExamplesPanel({
           >
             <div
               className={[
-                "relative overflow-hidden rounded-xl bg-black",
+                "relative overflow-hidden bg-black",
+                integratedSurfaceRadiusClass,
+                integratedSurfaceBorderClass,
                 videoSurfaceBleedClass,
               ].join(" ")}
+              style={integratedSurfaceStyle}
             >
-              <AspectRatio ratio={16 / 9} className={VIDEO_FRAME_CLASS}>
+              <AspectRatio
+                ratio={16 / 9}
+                className={[VIDEO_FRAME_CLASS, integratedFrameRadiusClass]
+                  .filter(Boolean)
+                  .join(" ")}
+                style={integratedFrameStyle}
+              >
                 <ExampleVideoPlayer
                   key={`${currentVideo.key}-${currentVideo.video}-${currentPlaybackOpenToken}`}
                   video={currentVideo.video}
@@ -1984,69 +2134,89 @@ export default function ExamplesPanel({
                   groupKey,
                   videos: safeVideos,
                   currentIndex,
+                  isIntegratedSurface: isIntegratedGlobalSurface,
                 })
               : null}
           </div>
         ) : (
           <div>
-            <ExampleVideoThumbnail
-              video={currentVideo.video}
-              thumbnail={currentVideo.thumbnail}
-              title={currentVideo.title}
-              isOpen={isVideoOpen}
-              isMobile={isMobile}
-              onSwipeLeft={
-                groupKey === "global-word-video-group" && safeVideos.length > 1
-                  ? (event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      goToVideoIndex({
-                        groupKey,
-                        videos: safeVideos,
-                        nextIndex: currentIndex + 1,
-                      });
-                    }
-                  : undefined
-              }
-              onSwipeRight={
-                groupKey === "global-word-video-group" && safeVideos.length > 1
-                  ? (event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      goToVideoIndex({
-                        groupKey,
-                        videos: safeVideos,
-                        nextIndex: currentIndex - 1,
-                      });
-                    }
-                  : undefined
-              }
+            <div
               className={[
-                "aspect-video h-auto",
-                videoSurfaceBleedClass,
-                shouldHideSourceThumbnailOnMobile ? "hidden" : "",
+                isIntegratedGlobalSurface
+                  ? [
+                      "overflow-hidden",
+                      integratedSurfaceRadiusClass,
+                      integratedSurfaceBorderClass,
+                    ].join(" ")
+                  : "",
+                isIntegratedGlobalSurface ? videoSurfaceBleedClass : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
-              onClick={() =>
-                openVideo({
-                  video: currentVideo.video,
-                  videoKey: currentVideo.key,
-                  videoTitle: currentVideo.title,
-                  groupKey,
-                  videos: safeVideos,
-                  index: currentIndex,
-                  autoPlayOnOpen: true,
-                  desktopAutoPlayOnOpen: !isCurrentVideoThirdParty,
-                })
-              }
-            />
+              style={isIntegratedGlobalSurface ? integratedSurfaceStyle : undefined}
+            >
+              <ExampleVideoThumbnail
+                video={currentVideo.video}
+                thumbnail={currentVideo.thumbnail}
+                title={currentVideo.title}
+                isOpen={isVideoOpen}
+                isMobile={isMobile}
+                onSwipeLeft={
+                  groupKey === "global-word-video-group" && safeVideos.length > 1
+                    ? (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        goToVideoIndex({
+                          groupKey,
+                          videos: safeVideos,
+                          nextIndex: currentIndex + 1,
+                        });
+                      }
+                    : undefined
+                }
+                onSwipeRight={
+                  groupKey === "global-word-video-group" && safeVideos.length > 1
+                    ? (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        goToVideoIndex({
+                          groupKey,
+                          videos: safeVideos,
+                          nextIndex: currentIndex - 1,
+                        });
+                      }
+                    : undefined
+                }
+                className={[
+                  "aspect-video h-auto",
+                  isIntegratedGlobalSurface ? "" : videoSurfaceBleedClass,
+                  integratedThumbnailRadiusClass,
+                  shouldHideSourceThumbnailOnMobile ? "hidden" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                style={integratedThumbnailStyle}
+                onClick={() =>
+                  openVideo({
+                    video: currentVideo.video,
+                    videoKey: currentVideo.key,
+                    videoTitle: currentVideo.title,
+                    groupKey,
+                    videos: safeVideos,
+                    index: currentIndex,
+                    autoPlayOnOpen: true,
+                    desktopAutoPlayOnOpen: !isCurrentVideoThirdParty,
+                  })
+                }
+              />
+            </div>
 
             {!shouldHideSourceThumbnailOnMobile
               ? renderVideoControls({
                   groupKey,
                   videos: safeVideos,
                   currentIndex,
+                  isIntegratedSurface: isIntegratedGlobalSurface,
                 })
               : null}
           </div>
@@ -2174,17 +2344,20 @@ export default function ExamplesPanel({
       .slice(0, 3);
   };
 
-  const openMeaningPreviewVideoInline = ({ entry, groupKey }) => {
+  const openMeaningPreviewVideoInline = ({
+    entry,
+    groupKey,
+    startFromFirstVideo = false,
+  }) => {
     const safeVideos = Array.isArray(entry?.topVideos)
       ? entry.topVideos.filter(Boolean)
       : [];
 
     if (safeVideos.length === 0) return false;
 
-    const currentIndex = Math.min(
-      videoIndexes[groupKey] || 0,
-      safeVideos.length - 1
-    );
+    const currentIndex = startFromFirstVideo
+      ? 0
+      : Math.min(videoIndexes[groupKey] || 0, safeVideos.length - 1);
     const currentVideo = safeVideos[currentIndex];
 
     if (!currentVideo?.video) return false;
@@ -2210,7 +2383,7 @@ export default function ExamplesPanel({
       <div
         className={panelContainerClass}
       >
-        <div className={panelHeaderClass}>
+        <div className={[panelHeaderClass, panelHeaderOffsetClass, panelHeaderInsetClass].join(" ")}>
           <div className="flex min-w-0 items-center gap-2 text-foreground">
             <UsFlagIcon className={isFlashcard ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0"} />
 
@@ -2261,6 +2434,7 @@ export default function ExamplesPanel({
                     : `${titleValue} â€” vÃ­deo geral ${index + 1}`,
               })),
               groupKey: "global-word-video-group",
+              attachContextBelow: true,
             })
           : null}
 
@@ -2274,7 +2448,7 @@ export default function ExamplesPanel({
           }
         >
           {sorted.map((entry, index) => {
-            const visibleExamples = entry.examples.slice(0, 4);
+            const visibleExamples = Array.isArray(entry.examples) ? entry.examples : [];
             const groupKey = `meaning-video-group-${entry.meaning}-${index}`;
             const tipKey = `meaning-tip-${entry.meaning}-${index}`;
             const hasMeaningSupportInfo = Boolean(
@@ -2294,6 +2468,10 @@ export default function ExamplesPanel({
               : shouldUseMeaningVideoCollapse && hasMeaningVideo;
             const isMeaningExpanded =
               !shouldUseMeaningCollapse || expandedMeaningVideoKey === groupKey;
+            const shouldAttachMeaningToGlobalVideo =
+              shouldShowGlobalWordVideoOnTop && index === 0;
+            const shouldRenderMeaningAttachedToGlobalVideo =
+              shouldAttachMeaningToGlobalVideo && isMeaningExpanded;
             const isMobileMeaningVideoPlaybackActive = Boolean(
               isMobile &&
                 mobileVideo?.video &&
@@ -2318,6 +2496,12 @@ export default function ExamplesPanel({
               isMeaningExpanded &&
               (index === 0 ||
                 (activeMeaningText && entry.meaning === activeMeaningText));
+            const shouldAlignExpandedSpecificVideoSurface = Boolean(
+              shouldUseMeaningCollapse &&
+                isMeaningExpanded &&
+                hasMeaningVideo &&
+                !shouldRenderMeaningAttachedToGlobalVideo
+            );
             const meaningPreviewButtonContent = ({ hideThumbnail = false, hideSummary = false } = {}) => {
               const shouldShowMeaningLanguageMarker = hideThumbnail || hideSummary;
 
@@ -2451,20 +2635,28 @@ export default function ExamplesPanel({
                     isFlashcardMobileLayout
                       ? shouldUseMeaningCollapse
                         ? isMeaningExpanded
-                          ? "relative rounded-2xl border border-[var(--meaning-border)] p-3"
+                          ? "relative rounded-2xl border border-[var(--meaning-border)] px-3 pb-3 pt-1"
                           : "group/meaning relative overflow-hidden rounded-b-[10px] border-b border-[var(--meaning-border)] px-0 py-0"
                         : "relative rounded-2xl border border-[var(--meaning-border)] p-3"
                       : shouldUseMeaningCollapse
                       ? isMeaningExpanded
-                        ? "group/meaning relative rounded-xl border border-[var(--meaning-border)] px-4 py-3"
+                        ? "group/meaning relative rounded-xl border border-[var(--meaning-border)] px-4 pb-3 pt-1"
                         : "group/meaning relative overflow-hidden rounded-b-[10px] border-b border-[var(--meaning-border)] px-0 py-0"
                       : "group/meaning relative rounded-xl border border-[var(--meaning-border)] px-4 py-3",
-                    shouldUseMeaningVideoCollapse && isMeaningExpanded
+                    shouldUseMeaningVideoCollapse &&
+                    isMeaningExpanded &&
+                    !shouldRenderMeaningAttachedToGlobalVideo
                       ? isFlashcardMobileLayout
-                        ? "mt-3.5"
-                        : "mt-4"
+                        ? "mt-1"
+                        : "mt-1"
+                      : "",
+                    shouldRenderMeaningAttachedToGlobalVideo
+                      ? isFlashcardMobileLayout
+                        ? "mt-0 w-full max-w-full overflow-hidden rounded-t-none rounded-b-[14px] border-t-0"
+                        : "mt-0 w-full max-w-full overflow-hidden rounded-t-none border-t-0"
                       : "",
                     isForegroundMeaning ? "border-t-0" : "",
+                    shouldAlignExpandedSpecificVideoSurface ? "overflow-hidden !pt-0" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -2474,6 +2666,16 @@ export default function ExamplesPanel({
                         ? meaningPalette.background
                         : "transparent",
                     "--meaning-border": meaningPalette.border,
+                    ...(shouldRenderMeaningAttachedToGlobalVideo
+                      ? {
+                          width: "100%",
+                          maxWidth: "100%",
+                          boxSizing: "border-box",
+                          borderTopWidth: 0,
+                          borderTopLeftRadius: 0,
+                          borderTopRightRadius: 0,
+                        }
+                      : {}),
                   }}
               >
                 <div className="min-w-0">
@@ -2496,10 +2698,15 @@ export default function ExamplesPanel({
                       <button
                         type="button"
                         onClick={() => {
+                          resetVideoGroupIndexToStart(groupKey);
                           setExpandedMeaningVideoKey(groupKey);
 
                           if (!isMobile && hasMeaningVideo) {
-                            openMeaningPreviewVideoInline({ entry, groupKey });
+                            openMeaningPreviewVideoInline({
+                              entry,
+                              groupKey,
+                              startFromFirstVideo: true,
+                            });
                           }
                         }}
                         className={[

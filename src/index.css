@@ -175,6 +175,10 @@
   body.quiz-mobile-stable-gutter {
     scrollbar-gutter: stable both-edges;
   }
+
+  body.examples-mobile-video-expanded .hide-on-mobile-video-expanded {
+    display: none !important;
+  }
 }
 
 /* Custom scrollbar */

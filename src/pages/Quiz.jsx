@@ -893,7 +893,7 @@ export default function Quiz() {
       </div>
       </div>
 
-      <div className="mx-auto grid w-full grid-cols-2 gap-3 md:max-w-[760px]">
+      <div className="hide-on-mobile-video-expanded mx-auto grid w-full grid-cols-2 gap-3 md:max-w-[760px]">
         <button
           type="button"
           onClick={() => {

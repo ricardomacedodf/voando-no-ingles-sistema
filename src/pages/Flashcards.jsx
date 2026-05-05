@@ -1004,6 +1004,7 @@ export default function Flashcards() {
             expanded={showExamples}
             onClick={() => setShowExamples((value) => !value)}
             variant="flashcard"
+            className="hide-on-mobile-video-expanded"
           />
 
           {showExamples ? (
@@ -1023,5 +1024,4 @@ export default function Flashcards() {
     </div>
   );
 }
-
 
