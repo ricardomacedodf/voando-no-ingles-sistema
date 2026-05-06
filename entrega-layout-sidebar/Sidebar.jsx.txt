@@ -1,6 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
 import {
-  Home,
   BarChart3,
   BookOpen,
   HelpCircle,
@@ -20,11 +19,10 @@ const COLLAPSED_PROFILE_MENU_WIDTH = 252;
 const SIDEBAR_TRANSITION_MS = 300;
 
 const navItems = [
-  { label: "Início", path: "/", icon: Home },
+  { label: "Progresso", path: "/progresso", icon: BarChart3 },
   { label: "Flashcards", path: "/flashcards", icon: BookOpen },
   { label: "Quiz", path: "/quiz", icon: HelpCircle },
   { label: "Combinações", path: "/combinacoes", icon: Puzzle },
-  { label: "Progresso", path: "/progresso", icon: BarChart3 },
   { label: "Gerenciador", path: "/gerenciador", icon: Layers3 },
 ];
 
