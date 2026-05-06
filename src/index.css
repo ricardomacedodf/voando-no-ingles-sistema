@@ -55,6 +55,8 @@
     --mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
     --mobile-safe-area-left: env(safe-area-inset-left, 0px);
     --mobile-surface-bg: #f9fafb;
+    --app-light-page-gradient: linear-gradient(135deg, #FFFFFF 0%, #F8F8F8 50%, #F0F0F0 100%);
+    --app-page-background: var(--app-light-page-gradient);
     --mobile-shell-horizontal-gap: clamp(0.75rem, 2.4vw, 1.25rem);
     --mobile-shell-vertical-gap: clamp(0.75rem, 2.2vw, 1rem);
     --mobile-bottom-nav-height: 66px;
@@ -102,6 +104,7 @@
     --info: 210 100% 52%;
     --info-foreground: 0 0% 100%;
     --mobile-surface-bg: #0c1014;
+    --app-page-background: var(--mobile-surface-bg);
   }
 }
 
@@ -113,12 +116,15 @@
   body,
   #root {
     min-height: 100%;
+    background: var(--app-page-background);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    background-size: cover;
   }
   body {
-    @apply bg-background text-foreground font-inter antialiased;
+    @apply text-foreground font-inter antialiased;
     min-height: 100vh;
     min-height: 100dvh;
-    background-color: var(--mobile-surface-bg);
   }
   #root {
     min-height: inherit;
@@ -129,7 +135,10 @@
   .app-mobile-safe-shell {
     min-height: 100vh;
     min-height: 100dvh;
-    background-color: var(--mobile-surface-bg);
+    background: var(--app-page-background);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    background-size: cover;
   }
 
   .app-mobile-safe-main {

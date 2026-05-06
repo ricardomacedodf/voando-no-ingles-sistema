@@ -6,7 +6,8 @@ import {
   Download,
   Upload,
   AlertTriangle,
-  Menu,
+  ChevronRight,
+  Layers3,
 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
@@ -436,6 +437,41 @@ function mapVocabularyRow(row) {
   };
 }
 
+function VideoAttachmentGlyph({ className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 1024 1024"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <path
+        d="M200 760H565M200 760C145 760 110 725 110 670V280C110 225 145 190 200 190H760C815 190 850 225 850 280V475"
+        stroke="currentColor"
+        strokeWidth="32"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M430 385C430 366 451 355 467 365L620 460C636 470 636 494 620 504L467 599C451 609 430 598 430 579Z"
+        stroke="currentColor"
+        strokeWidth="32"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M685 790L847 628C892 583 965 615 965 679C965 699 957 718 943 732L777 898C716 959 615 916 615 829C615 798 627 768 649 746L788 607C822 573 880 597 880 645C880 660 874 675 863 686L731 818"
+        stroke="currentColor"
+        strokeWidth="32"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+
 export default function Manager() {
   const { user } = useAuth();
 
@@ -664,33 +700,44 @@ export default function Manager() {
   }
 
   return (
-    <div>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-[25px] font-bold leading-[30px] text-foreground">
+    <div className="relative min-h-[calc(100vh-4rem)] w-full overflow-visible bg-transparent dark:bg-transparent">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-y-0 left-0 right-0 z-0 bg-[linear-gradient(to_bottom_right,#FFFFFF,#F8F8F8,#F0F0F0)] dark:hidden md:left-[216px]"
+      />
+
+      <div className="relative z-10 mx-auto w-full max-w-[1120px] px-4 pb-8 pt-2 sm:px-6 lg:px-8">
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#86868B] dark:text-[#8E8E93]">
+            <Layers3 className="h-3.5 w-3.5" />
+            <span>Gerenciador</span>
+          </div>
+
+          <h1 className="text-[2rem] font-semibold leading-tight tracking-[-0.03em] text-[#1D1D1F] dark:text-[#F5F5F7] sm:text-[2.35rem]">
             Gerenciador
           </h1>
 
-          <p className="text-sm text-muted-foreground">
-            {vocab.length} palavras/frases cadastradas
+          <p className="mt-1 text-sm leading-relaxed text-[#6E6E73] dark:text-[#A1A1A6]">
+            Palavras/frases cadastradas: {vocab.length}
           </p>
         </div>
 
         <div className={actionButtonsClass}>
           <button
             onClick={handleNew}
-            className="flex min-w-0 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-2 text-[11px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:gap-1.5 sm:px-3 sm:text-xs"
+            className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-full bg-[#0071E3] px-4 py-2 text-xs font-semibold text-white shadow-none transition-colors hover:bg-[#0077ED] active:bg-[#006EDB] dark:bg-[#0A84FF] dark:hover:bg-[#2290FF]"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Nova Palavra/frase</span>
+            <span className="truncate">Nova palavra/frase</span>
           </button>
 
           <button
             onClick={() => setView("import")}
-            className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 py-2 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted sm:gap-1.5 sm:px-3 sm:text-xs"
+            className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-full border border-[#D2D2D7] bg-white px-4 py-2 text-xs font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
           >
             <Upload className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate sm:hidden">Import</span>
+            <span className="truncate sm:hidden">Importar</span>
             <span className="hidden truncate sm:inline">Importar JSON</span>
           </button>
 
@@ -698,10 +745,9 @@ export default function Manager() {
             <button
               onClick={() => setShowDeleteAll(true)}
               disabled={deletingAll}
-              className="flex min-w-0 items-center justify-center gap-1 rounded-lg border border-destructive/30 bg-card px-2 py-2 text-[11px] font-semibold text-destructive transition-colors hover:bg-destructive hover:text-white disabled:opacity-50 sm:gap-1.5 sm:px-3 sm:text-xs"
+              className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-full border border-[#F2D7D5] bg-white px-4 py-2 text-xs font-semibold text-[#B42318] transition-colors hover:bg-[#FFF7F6] active:bg-[#FCEDEA] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#5A2521] dark:bg-[#2C2C2E] dark:text-[#FF9F95] dark:hover:bg-[#2B1513]"
             >
               <Trash2 className="h-3.5 w-3.5 shrink-0" />
-
               <span className="truncate">
                 {deletingAll ? "Apagando..." : "Apagar tudo"}
               </span>
@@ -710,32 +756,32 @@ export default function Manager() {
         </div>
       </div>
 
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="relative mb-5">
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#86868B] dark:text-[#8E8E93]" />
 
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar palavras ou frases..."
-          className="w-full rounded-xl border border-border bg-card py-2.5 pl-9 pr-4 text-sm transition-all placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="min-h-12 w-full rounded-[22px] border border-[#D2D2D7] bg-white px-11 py-3 text-sm font-medium text-[#1D1D1F] shadow-none transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
         />
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="h-7 w-7 animate-spin rounded-full border-3 border-border border-t-primary" />
+          <div className="h-7 w-7 animate-spin rounded-full border-3 border-[#D2D2D7] border-t-[#0071E3] dark:border-[#3A3A3C] dark:border-t-[#0A84FF]" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="rounded-[26px] border border-[#E5E5EA] bg-white/92 px-5 py-16 text-center ring-1 ring-black/[0.025] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05]">
+          <p className="text-sm font-medium text-[#6E6E73] dark:text-[#A1A1A6]">
             {search
               ? "Nenhum resultado encontrado."
               : "Nenhuma palavra cadastrada ainda."}
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {filtered.map((item) => {
             const hasAnyVideo = collectVocabularyVideoUrls(item).length > 0;
 
@@ -751,30 +797,31 @@ export default function Manager() {
                     handleEdit(item);
                   }
                 }}
-                className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,0.06)] transition-all hover:border-primary hover:shadow-[0_8px_23px_rgba(15,23,42,0.09)] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="group flex min-h-[64px] cursor-pointer items-center gap-2.5 rounded-[20px] border border-[#E5E5EA] bg-white px-4 py-2 shadow-none ring-1 ring-black/[0.02] transition-colors hover:border-[#D2D2D7] hover:bg-[#F5F5F7] focus:border-[#0071E3]/45 focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.04] dark:hover:border-[#3A3A3C] dark:hover:bg-[#202024] dark:focus:border-[#0A84FF]/55 dark:focus:ring-[#0A84FF]/20"
                 aria-label={`Editar ${item.term}`}
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/50">
-                  <Menu className="h-3.5 w-3.5" strokeWidth={1.4} />
-                </div>
-
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
-                    <p className="truncate text-sm font-semibold text-foreground">
+                    <p className="truncate text-[15px] font-semibold text-[#1D1D1F] dark:text-[#F5F5F7]">
                       {item.term}
                     </p>
-
-                    {hasAnyVideo ? (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-primary">
-                        VÍDEO
-                      </span>
-                    ) : null}
                   </div>
 
-                  <p className="truncate text-xs text-muted-foreground">
-                    {item.meanings?.slice(0, 3).map((m) => m.meaning).join(", ")}
+                  <p className="mt-0.5 truncate text-xs leading-relaxed text-[#6E6E73] dark:text-[#A1A1A6]">
+                    {item.meanings?.slice(0, 3).map((m) => m.meaning).join(", ") ||
+                      "Sem significados cadastrados"}
                   </p>
                 </div>
+
+                {hasAnyVideo ? (
+                  <span
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-[#8E8E93] transition-colors group-hover:text-[#6E6E73] dark:text-[#8E8E93] dark:group-hover:text-[#A1A1A6]"
+                    aria-label="Vídeo anexado"
+                    title="Vídeo anexado"
+                  >
+                    <VideoAttachmentGlyph className="h-3.5 w-3.5" />
+                  </span>
+                ) : null}
 
                 <button
                   type="button"
@@ -782,11 +829,11 @@ export default function Manager() {
                     event.stopPropagation();
                     handleExportItem(item);
                   }}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6E6E73] transition-colors hover:bg-[#EDEDF0] hover:text-[#1D1D1F] dark:text-[#A1A1A6] dark:hover:bg-[#2C2C2E] dark:hover:text-[#F5F5F7]"
                   aria-label={`Exportar ${item.term}`}
                   title="Exportar palavra"
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-3.5 w-3.5" />
                 </button>
 
                 <button
@@ -796,11 +843,13 @@ export default function Manager() {
                     setItemToConfirmDelete(item);
                   }}
                   disabled={deletingItemId === item.id || deletingAll}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-red-50 disabled:opacity-50"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#B42318] transition-colors hover:bg-[#FFF7F6] active:bg-[#FCEDEA] disabled:cursor-not-allowed disabled:opacity-50 dark:text-[#FF9F95] dark:hover:bg-[#2B1513]"
                   aria-label={`Apagar ${item.term}`}
                 >
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
+
+                <ChevronRight className="h-4 w-4 shrink-0 text-[#8E8E93] transition-transform group-hover:translate-x-0.5 group-hover:text-[#0071E3] dark:text-[#8E8E93] dark:group-hover:text-[#0A84FF]" />
               </div>
             );
           })}
@@ -872,6 +921,7 @@ export default function Manager() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 }

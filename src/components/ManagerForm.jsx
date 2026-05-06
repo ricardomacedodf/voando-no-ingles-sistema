@@ -1264,37 +1264,6 @@ function SectionHeader({
   );
 }
 
-function SummaryMetric({ icon, label, value, tone = "neutral" }) {
-  const toneClasses = {
-    neutral: "bg-[#F5F5F7] text-[#1D1D1F] dark:bg-[#1C1C1E] dark:text-[#F5F5F7]",
-    success: "bg-[#F5F5F7] text-[#1D1D1F] dark:bg-[#1C1C1E] dark:text-[#F5F5F7]",
-    warning:
-      "bg-[#F5F5F7] text-[#1D1D1F] dark:bg-[#1C1C1E] dark:text-[#F5F5F7]",
-    info: "bg-[#F5F5F7] text-[#1D1D1F] dark:bg-[#1C1C1E] dark:text-[#F5F5F7]",
-  };
-
-  return (
-    <div
-      className={[
-        "flex min-h-[72px] items-center gap-3 rounded-[22px] border border-transparent px-4 py-3 shadow-none ring-1 ring-black/[0.035] dark:ring-white/[0.07]",
-        toneClasses[tone] || toneClasses.neutral,
-      ].join(" ")}
-    >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#0071E3] shadow-none ring-1 ring-black/[0.04] dark:bg-[#2C2C2E] dark:text-[#0A84FF] dark:ring-white/[0.06]">
-        {icon}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#86868B] dark:text-[#A1A1A6]">
-          {label}
-        </span>
-        <span className="block text-lg font-semibold leading-tight text-[#1D1D1F] dark:text-[#F5F5F7]">
-          {value}
-        </span>
-      </span>
-    </div>
-  );
-}
-
 function AppendVideoPanel({
   title,
   description,
@@ -2356,6 +2325,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     };
   });
 
+  const [expandedMeaningTips, setExpandedMeaningTips] = useState({});
+
   const [saving, setSaving] = useState(false);
   const [videoEditor, setVideoEditor] = useState({
     key: null,
@@ -3064,6 +3035,13 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     }
   };
 
+  const toggleMeaningTipExpanded = (mIdx) => {
+    setExpandedMeaningTips((current) => ({
+      ...current,
+      [mIdx]: !current[mIdx],
+    }));
+  };
+
   const updateMeaning = (idx, field, value) => {
     const updated = [...meanings];
     updated[idx] = { ...updated[idx], [field]: value };
@@ -3115,6 +3093,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     setMeanings([...meanings, { ...emptyMeaning, examples: [{ ...emptyExample }] }]);
     setExpandedMeanings((current) => ({ ...current, [nextIndex]: true }));
     setExpandedExamples((current) => ({ ...current, [firstExampleKey]: false }));
+    setExpandedMeaningTips((current) => ({ ...current, [nextIndex]: false }));
     setPendingNewMeanings((current) => ({ ...current, [nextIndex]: true }));
     revealMeaningCardForEditing(nextIndex, { shouldHighlight: true });
   };
@@ -3158,6 +3137,19 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       });
 
       setPendingNewMeanings((current) => {
+        const next = {};
+
+        Object.entries(current).forEach(([key, value]) => {
+          const currentIndex = Number(key);
+          if (!value || currentIndex === idx) return;
+          const nextIndex = currentIndex > idx ? currentIndex - 1 : currentIndex;
+          next[nextIndex] = true;
+        });
+
+        return next;
+      });
+
+      setExpandedMeaningTips((current) => {
         const next = {};
 
         Object.entries(current).forEach(([key, value]) => {
@@ -3560,32 +3552,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   };
 
   const newWordVideoUploadError = videoUploadErrors[NEW_WORD_VIDEO_KEY] || "";
-  const totalExamples = meanings.reduce(
-    (total, meaningItem) =>
-      total +
-      (meaningItem.examples || []).filter((example) => !isExampleDraftEmpty(example))
-        .length,
-    0
-  );
-  const meaningVideoCount = meanings.reduce(
-    (total, meaningItem) => total + normalizeMeaningVideos(meaningItem).length,
-    0
-  );
-  const exampleVideoCount = meanings.reduce(
-    (total, meaningItem) =>
-      total +
-      (meaningItem.examples || []).reduce(
-        (exampleTotal, example) =>
-          exampleTotal + normalizeExampleVideos(example).length,
-        0
-      ),
-    0
-  );
-  const totalVideoCount =
-    wordVideos.length + meaningVideoCount + exampleVideoCount;
-  const completedMeanings = meanings.filter((meaningItem) =>
-    normalizeText(meaningItem.meaning)
-  ).length;
   const hasAnyMeaningContent = meanings.some(
     (meaningItem) =>
       normalizeText(meaningItem.meaning) ||
@@ -3619,36 +3585,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
         </div>
 
-        <div className="mt-6 hidden gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryMetric
-            icon={<Languages className="h-4 w-4" />}
-            label="Significados"
-            value={`${completedMeanings}/${meanings.length}`}
-            tone={completedMeanings > 0 ? "success" : "warning"}
-          />
-          <SummaryMetric
-            icon={<BookOpenText className="h-4 w-4" />}
-            label="Exemplos"
-            value={totalExamples}
-            tone={totalExamples > 0 ? "info" : "neutral"}
-          />
-          <SummaryMetric
-            icon={<Clapperboard className="h-4 w-4" />}
-            label="Vídeos"
-            value={totalVideoCount}
-            tone={totalVideoCount > 0 ? "warning" : "neutral"}
-          />
-          <SummaryMetric
-            icon={<Layers3 className="h-4 w-4" />}
-            label="Camada ativa"
-            value={hasWordLevelVideos ? "Geral" : hasMeaningOrExampleVideos ? "Interna" : "Livre"}
-            tone={hasWordLevelVideos || hasMeaningOrExampleVideos ? "info" : "neutral"}
-          />
-        </div>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-6 md:gap-8">
-        <section className="order-1 rounded-[28px] border border-[#E5E5EA] bg-white p-5 shadow-none ring-1 ring-black/[0.025] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05] md:p-6">
+      <div className="flex min-w-0 flex-col gap-5 md:gap-6">
+        <section className="order-1 border-y border-[#E5E5EA]/80 px-2 py-5 dark:border-[#2C2C2E] sm:px-0 md:py-6">
           <SectionHeader
             eyebrow="Camada 1"
             title="Dados principais"
@@ -3687,8 +3627,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </div>
         </section>
 
-        <section className="order-2 space-y-4 px-2 sm:px-0">
-          <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,720px)_auto] md:items-end md:justify-between md:gap-x-8">
+        <section className="order-2 space-y-5 px-2 sm:px-0 md:space-y-6">
+          <div className="flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,720px)_auto] md:items-start md:justify-between md:gap-x-8">
             <div className="min-w-0">
               <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#86868B] dark:text-[#8E8E93]">
                 <Layers3 className="h-3.5 w-3.5" />
@@ -3704,7 +3644,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               </p>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2 md:translate-y-1">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 pt-1 md:mt-8 md:translate-y-0">
               <StatusPill tone="neutral">
                 {meanings.length} significado{meanings.length === 1 ? "" : "s"}
               </StatusPill>
@@ -3721,7 +3661,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             {meanings.map((meaningItem, mIdx) => {
               const isExpanded = Boolean(expandedMeanings[mIdx]);
               const meaningTitle = normalizeText(meaningItem.meaning);
@@ -3757,23 +3697,25 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                 filledExamplesCount === 1 ? "exemplo" : "exemplos"
               }`;
               const meaningCardClassName = shouldUseEmptyMeaningAccent
-                ? "border-[#E5E5EA] dark:border-[#2C2C2E]"
+                ? isExpanded
+                  ? "border-[#B7D7F8] bg-white ring-0 shadow-none dark:border-[#245A8F] dark:bg-[#1C1C1E] dark:ring-0 dark:shadow-none"
+                  : "border-[#E5E5EA] bg-white dark:border-[#2C2C2E] dark:bg-[#1C1C1E]"
                 : isExpanded
-                  ? "border-[#D6E8FA] shadow-[0_14px_36px_rgba(15,23,42,0.08)] dark:border-[#244B72] dark:shadow-[0_18px_38px_rgba(0,0,0,0.28)]"
-                  : "border-[#E5E5EA] dark:border-[#2C2C2E]";
+                  ? "border-[#B7D7F8] bg-white ring-0 shadow-none dark:border-[#245A8F] dark:bg-[#1C1C1E] dark:ring-0 dark:shadow-none"
+                  : "border-[#E5E5EA] bg-white dark:border-[#2C2C2E] dark:bg-[#1C1C1E]";
               const meaningHeaderClassName = shouldUseEmptyMeaningAccent
                 ? isExpanded
                   ? "border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
-                  : "border-transparent bg-[#FBFBFD] hover:bg-white dark:bg-[#1A1C20] dark:hover:bg-[#20242B]"
+                  : "border-transparent bg-white hover:bg-[#F5F5F7] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
                 : isExpanded
                   ? "border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
-                  : "border-[#E5E5EA] bg-[#FBFBFD] hover:bg-white dark:border-[#2C2C2E] dark:bg-[#1A1C20] dark:hover:bg-[#20242B]";
+                  : "border-transparent bg-white hover:bg-[#F5F5F7] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]";
               const meaningIndexClassName = isExpanded
-                ? "border-[#0071E3] bg-[#0071E3] text-white shadow-[0_8px_18px_rgba(0,113,227,0.22)] dark:border-[#0A84FF] dark:bg-[#0A84FF] dark:shadow-[0_10px_20px_rgba(10,132,255,0.28)]"
-                : "border-[#E5E5EA] bg-[#F5F5F7] text-[#6E6E73] dark:border-[#3A3A3C] dark:bg-[#2A2D33] dark:text-[#D1D1D6]";
+                ? "border-[#E5E5EA] bg-[#F5F5F7] text-[#6E6E73] shadow-none ring-0 dark:border-[#3A3A3C] dark:bg-[#2A2D33] dark:text-[#D1D1D6] dark:shadow-none dark:ring-0"
+                : "border-[#E5E5EA] bg-[#F5F5F7] text-[#6E6E73] shadow-none ring-0 dark:border-[#3A3A3C] dark:bg-[#2A2D33] dark:text-[#D1D1D6] dark:shadow-none dark:ring-0";
               const emptyMeaningIndexClassName = isExpanded
-                ? "border-[#0071E3] bg-[#0071E3] text-white shadow-[0_8px_18px_rgba(0,113,227,0.22)] dark:border-[#0A84FF] dark:bg-[#0A84FF] dark:shadow-[0_10px_20px_rgba(10,132,255,0.28)]"
-                : "border-[#D6E8FA] bg-[#F5FAFF] text-[#0071E3] dark:border-[#244B72] dark:bg-[#102235] dark:text-[#66B7FF]";
+                ? "border-[#E5E5EA] bg-[#F5F5F7] text-[#6E6E73] shadow-none ring-0 dark:border-[#3A3A3C] dark:bg-[#2A2D33] dark:text-[#D1D1D6] dark:shadow-none dark:ring-0"
+                : "border-[#E5E5EA] bg-[#F5F5F7] text-[#6E6E73] shadow-none ring-0 dark:border-[#3A3A3C] dark:bg-[#2A2D33] dark:text-[#D1D1D6] dark:shadow-none dark:ring-0";
 
               return (
                 <div
@@ -3785,7 +3727,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                       delete meaningCardRefs.current[mIdx];
                     }
                   }}
-                  className={`overflow-hidden rounded-[28px] border bg-white ring-1 ring-black/[0.025] transition-all duration-200 dark:bg-[#17181C] dark:ring-white/[0.05] ${meaningCardClassName} ${
+                  className={`overflow-hidden rounded-[22px] border shadow-none ring-1 ring-black/[0.025] transition-all duration-200 dark:ring-white/[0.05] ${meaningCardClassName} ${
                     recentlyAddedMeaningIndex === mIdx
                       ? "manager-form-editor-card-created"
                       : ""
@@ -3801,7 +3743,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         toggleMeaningExpanded(mIdx);
                       }
                     }}
-                    className={`group flex cursor-pointer items-stretch justify-between gap-4 border-b px-4 py-4 transition-all duration-200 md:px-5 ${meaningHeaderClassName}`}
+                    className={`group flex cursor-pointer items-center justify-between gap-3 border-b px-4 py-2.5 transition-colors duration-200 md:px-4 ${meaningHeaderClassName}`}
                     aria-expanded={isExpanded}
                   >
                     <div className="min-w-0 flex flex-1 items-center gap-3 text-left">
@@ -3809,7 +3751,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         {shouldUseEmptyMeaningAccent ? (
                           <>
                             <span
-                              className={`inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border px-2 text-xs font-semibold transition-all duration-200 ${emptyMeaningIndexClassName}`}
+                              className={`inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border px-2 text-xs font-semibold transition-colors duration-200 ${emptyMeaningIndexClassName}`}
                               aria-hidden="true"
                             >
                               <Plus className="h-4 w-4 stroke-[2.2]" />
@@ -3828,7 +3770,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         ) : (
                           <>
                             <span
-                              className={`inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border px-2 text-xs font-semibold transition-all duration-200 ${meaningIndexClassName}`}
+                              className={`inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border px-2 text-xs font-semibold transition-colors duration-200 ${meaningIndexClassName}`}
                             >
                               {mIdx + 1}
                             </span>
@@ -3890,8 +3832,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                   </div>
 
                   {isExpanded ? (
-                    <div className="flex flex-col gap-5 p-4 md:p-5">
-                      <div className="order-1 border-b border-[#E5E5EA] pb-5 dark:border-[#2C2C2E]">
+                    <div className="flex flex-col gap-4 p-4">
+                      <div className="order-1 border-b border-[#E5E5EA] pb-4 dark:border-[#2C2C2E]">
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
                           <div className="hidden md:block">
                             <MeaningLanguageLabel />
@@ -3945,7 +3887,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                       </div>
 
-                      <div className="order-2 border-b border-[#E5E5EA] pb-5 dark:border-[#2C2C2E] md:hidden">
+                      <div className="order-2 border-b border-[#E5E5EA] pb-4 dark:border-[#2C2C2E] md:hidden">
                         <MeaningLanguageLabel compact />
                         <input
                           type="text"
@@ -3983,7 +3925,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                           ) : null}
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           {meaningItem.examples.map((example, eIdx) => {
                             const exampleKey = getExampleKey(mIdx, eIdx);
                             const exampleVideoEntries = normalizeExampleVideos(example);
@@ -4052,16 +3994,20 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               videoEditor.key === newExampleVideoKey;
                             const newExampleVideoUploadError =
                               videoUploadErrors[newExampleVideoKey] || "";
-                            const exampleCardClassName = shouldShowEmptyExamplePlaceholder
-                              ? "border-[#E5E5EA] bg-[#FBFBFD] dark:border-[#2C2C2E] dark:bg-[#1A1C20]"
+                            const exampleCardClassName = isExampleExpanded
+                              ? "border-[#B7D7F8] bg-white ring-0 shadow-none dark:border-[#245A8F] dark:bg-[#1C1C1E] dark:ring-0 dark:shadow-none"
+                              : shouldShowEmptyExamplePlaceholder
+                              ? "border-[#E5E5EA] bg-white dark:border-[#2C2C2E] dark:bg-[#1C1C1E]"
                               : isExampleIncomplete
-                              ? "border-[#D6E8FA] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.08)] dark:border-[#244B72] dark:bg-[#1C1C1E] dark:shadow-[0_18px_38px_rgba(0,0,0,0.28)]"
+                              ? "border-[#D2D2D7] bg-white dark:border-[#3A3A3C] dark:bg-[#1C1C1E]"
                               : "border-[#E5E5EA] bg-white dark:border-[#2C2C2E] dark:bg-[#1C1C1E]";
-                            const exampleHeaderClassName = shouldShowEmptyExamplePlaceholder
-                              ? "group flex cursor-pointer items-stretch justify-between gap-3 border-b-0 bg-[#FBFBFD] px-4 py-4 transition-colors hover:bg-white dark:bg-[#1A1C20] dark:hover:bg-[#20242B]"
+                            const exampleHeaderClassName = isExampleExpanded
+                              ? "group flex cursor-pointer items-center justify-between gap-3 border-b border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] px-4 py-2.5 transition-colors dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
+                              : shouldShowEmptyExamplePlaceholder
+                              ? "group flex cursor-pointer items-center justify-between gap-3 border-b-0 bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
                               : isExampleIncomplete
-                              ? "group flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] px-4 py-3 transition-colors hover:bg-[#FAFAFC] dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)] dark:hover:bg-[#20242B]"
-                              : "group flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-3 transition-colors hover:bg-[#FAFAFC] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#2C2C2E]";
+                              ? "group flex cursor-pointer items-center justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
+                              : "group flex cursor-pointer items-center justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]";
 
                             return (
                               <div
@@ -4073,7 +4019,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     delete exampleCardRefs.current[exampleKey];
                                   }
                                 }}
-                                className={`overflow-hidden rounded-[22px] border shadow-none transition-colors duration-200 ${exampleCardClassName} ${
+                                className={`overflow-hidden rounded-[20px] border shadow-none ring-1 ring-black/[0.02] transition-all duration-200 dark:ring-white/[0.04] ${exampleCardClassName} ${
                                   recentlyAddedExampleKey === exampleKey && !isExampleIncomplete
                                     ? "manager-form-editor-card-created"
                                     : ""
@@ -4112,8 +4058,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                           EX:
                                         </span>
                                         <span
-                                          className="shrink-0 text-sm font-semibold"
-                                          style={{ color: accent.bar }}
+                                          className="shrink-0 text-sm font-semibold text-[#6E6E73] dark:text-[#A1A1A6]"
                                         >
                                           {eIdx + 1}
                                         </span>
@@ -4164,7 +4109,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                 </div>
 
                                 {isExampleExpanded ? (
-                                  <div className="p-4">
+                                  <div className="p-3.5 md:p-4">
                                     <div
                                       className={
                                         hasVideo
@@ -4800,21 +4745,48 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         </div>
                       </div>
 
-                      <div className="order-6 rounded-[22px] border border-[#E5E5EA] bg-[#FAFAFC] p-4 dark:border-[#2C2C2E] dark:bg-[#111113] md:order-4">
-                        <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
-                          <Lightbulb className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
-                          Dica de uso
-                        </label>
+                      <div className="order-6 md:order-4">
+                        {expandedMeaningTips[mIdx] ? (
+                          <div className="rounded-[20px] border border-[#D2D2D7] bg-white px-4 py-3 transition-colors dark:border-[#3A3A3C] dark:bg-[#1C1C1E]">
+                            <button
+                              type="button"
+                              onClick={() => toggleMeaningTipExpanded(mIdx)}
+                              className="flex w-full items-center justify-between gap-3 text-left"
+                              aria-expanded="true"
+                            >
+                              <span className="inline-flex min-w-0 items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
+                                <Lightbulb className="h-3.5 w-3.5 shrink-0 text-[#6E6E73] dark:text-[#A1A1A6]" />
+                                <span>Dica de uso</span>
+                              </span>
 
-                        <input
-                          type="text"
-                          value={meaningItem.tip}
-                          onChange={(e) =>
-                            updateMeaning(mIdx, "tip", e.target.value)
-                          }
-                          placeholder="Explique quando usar este significado"
-                          className="min-h-11 w-full rounded-[16px] border border-[#D2D2D7] bg-white px-3.5 py-2 text-sm italic text-[#424245] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#1C1C1E] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
-                        />
+                              <ChevronDown className="h-4 w-4 shrink-0 rotate-180 text-[#6E6E73] transition-transform duration-200 dark:text-[#A1A1A6]" />
+                            </button>
+
+                            <input
+                              type="text"
+                              value={meaningItem.tip}
+                              onChange={(e) =>
+                                updateMeaning(mIdx, "tip", e.target.value)
+                              }
+                              placeholder="Explique quando usar este significado"
+                              className="mt-3 min-h-11 w-full rounded-[16px] border border-[#D2D2D7] bg-white px-3.5 py-2 text-sm italic text-[#424245] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleMeaningTipExpanded(mIdx)}
+                            className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-[#D2D2D7] bg-white px-4 py-3 text-left transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:border-[#3A3A3C] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
+                            aria-expanded="false"
+                          >
+                            <span className="inline-flex min-w-0 items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
+                              <Lightbulb className="h-3.5 w-3.5 shrink-0 text-[#6E6E73] dark:text-[#A1A1A6]" />
+                              <span>Dica de uso</span>
+                            </span>
+
+                            <ChevronDown className="h-4 w-4 shrink-0 text-[#6E6E73] transition-transform duration-200 dark:text-[#A1A1A6]" />
+                          </button>
+                        )}
                       </div>
 
                     </div>
@@ -4825,217 +4797,113 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </div>
         </section>
         {!hasMeaningOrExampleVideos ? (
-          <section className="order-4 overflow-hidden rounded-[26px] border border-[#E5E5EA] bg-white shadow-none ring-1 ring-black/[0.025] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05]">
-          <button
-            type="button"
-            onClick={() =>
-              setIsWordVideoSectionExpanded((current) => !current)
-            }
-            className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-[#FAFAFC] dark:hover:bg-[#222225] md:px-6 md:py-5"
-            aria-expanded={isWordVideoSectionExpanded}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#86868B] dark:text-[#8E8E93]">
-                  <Clapperboard className="h-3.5 w-3.5" />
-                  Recurso opcional
-                </span>
+          (() => {
+            const currentWordVideoEntry = wordVideos[0] || {};
+            const currentWordVideoValue = normalizeText(currentWordVideoEntry?.video);
+            const currentWordThumbnailValue = currentWordVideoValue
+              ? normalizeText(currentWordVideoEntry?.thumbnail)
+              : "";
+            const wordVideoKey = currentWordVideoValue
+              ? getWordVideoKey(0)
+              : NEW_WORD_VIDEO_KEY;
+            const isEditingWordVideo = videoEditor.key === wordVideoKey;
+            const isUploadingWordVideo = uploadingVideoKey === wordVideoKey;
+            const isDeletingWordVideo = deletingVideoKey === wordVideoKey;
+            const wordVideoUploadError = videoUploadErrors[wordVideoKey] || "";
+            const isWordPreviewActive = activeVideoPreviewKey === wordVideoKey;
 
-                <StatusPill
-                  tone={wordVideos.length > 0 ? "success" : "neutral"}
-                  className="min-h-6 px-2 text-[10px]"
-                  icon={
-                    wordVideos.length > 0 ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <FileVideo className="h-3.5 w-3.5" />
-                    )
+            return (
+              <section className="order-4">
+                <VideoControlCard
+                  title="Vídeo geral da palavra/frase"
+                  description="Use apenas quando um único vídeo precisar representar a palavra inteira."
+                  emptyLabel="Sem vídeo geral"
+                  video={currentWordVideoValue}
+                  thumbnail={currentWordThumbnailValue}
+                  isEditing={isEditingWordVideo}
+                  editorValue={videoEditor.value}
+                  uploadError={wordVideoUploadError || newWordVideoUploadError}
+                  isUploading={isUploadingWordVideo}
+                  isDeleting={isDeletingWordVideo}
+                  isPreviewActive={isWordPreviewActive}
+                  isContextCollapsible
+                  isContextExpanded={isWordVideoSectionExpanded}
+                  onToggleContext={() =>
+                    setIsWordVideoSectionExpanded((current) => !current)
                   }
-                >
-                  {wordVideos.length > 0
-                    ? `${wordVideos.length} vídeo${wordVideos.length === 1 ? "" : "s"}`
-                    : "sem vídeo"}
-                </StatusPill>
-              </div>
-
-              <h3 className="mt-2 text-xl font-semibold tracking-[-0.015em] text-[#1D1D1F] dark:text-[#F5F5F7] md:text-2xl">
-                Vídeo geral da palavra/frase
-              </h3>
-
-              <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-[#6E6E73] dark:text-[#A1A1A6] md:text-sm">
-                Use apenas quando um único vídeo precisar representar a palavra inteira.
-              </p>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2 pt-0.5">
-              <span className="hidden text-xs font-semibold text-[#86868B] dark:text-[#8E8E93] sm:inline">
-                {isWordVideoSectionExpanded ? "Ocultar" : "Mostrar"}
-              </span>
-
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#D2D2D7] bg-[#F5F5F7] text-[#6E6E73] transition-colors dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#D1D1D6]">
-                {isWordVideoSectionExpanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </span>
-            </div>
-          </button>
-
-          {isWordVideoSectionExpanded ? (
-            <div className="space-y-4 border-t border-[#E5E5EA] bg-[#FAFAFC] px-5 py-4 dark:border-[#2C2C2E] dark:bg-[#161618] md:px-6 md:py-5">
-              {hasMeaningOrExampleVideos ? (
-                <LayerRuleNotice>
-                  Há vídeos anexados em significados ou exemplos. Para adicionar
-                  vídeo geral, remova primeiro esses vídeos internos.
-                </LayerRuleNotice>
-              ) : null}
-
-              {wordVideos.map((wordVideoEntry, index) => {
-                const wordVideoKey = getWordVideoKey(index);
-                const videoValue = normalizeText(wordVideoEntry?.video);
-                const thumbnailValue = videoValue
-                  ? normalizeText(wordVideoEntry?.thumbnail)
-                  : "";
-                const isEditingWordVideo = videoEditor.key === wordVideoKey;
-                const isUploadingWordVideo = uploadingVideoKey === wordVideoKey;
-                const isDeletingWordVideo = deletingVideoKey === wordVideoKey;
-                const wordVideoUploadError = videoUploadErrors[wordVideoKey] || "";
-                const isWordPreviewActive = activeVideoPreviewKey === wordVideoKey;
-
-                return (
-                  <VideoControlCard
-                    key={wordVideoKey}
-                    title={`Vídeo geral ${index + 1}`}
-                    description="Use para explicar a palavra ou frase de forma geral."
-                    emptyLabel="Sem vídeo geral"
-                    video={videoValue}
-                    thumbnail={thumbnailValue}
-                    isEditing={isEditingWordVideo}
-                    editorValue={videoEditor.value}
-                    uploadError={wordVideoUploadError}
-                    isUploading={isUploadingWordVideo}
-                    isDeleting={isDeletingWordVideo}
-                    isPreviewActive={isWordPreviewActive}
-                    previewVariant="inline-right"
-                    inlineSize="wide"
-                    mobileCompact
-                    removeButtonMode="icon"
-                    layerIcon={<Clapperboard className="h-4 w-4" />}
-                    addButtonLabel="Adicionar vídeo geral"
-                    changeButtonLabel="Trocar vídeo geral"
-                    saveButtonLabel="Salvar vídeo geral"
-                    onPlay={() => setActiveVideoPreviewKey(wordVideoKey)}
-                    onOpenEditor={() => openVideoEditor(wordVideoKey, videoValue)}
-                    onEditorChange={(value) =>
-                      setVideoEditor((current) => ({ ...current, value }))
-                    }
-                    onSave={() =>
-                      void saveVideoFromEditor({
-                        key: wordVideoKey,
-                        oldVideo: videoValue,
-                        onSuccess: ({ video, thumbnail }) =>
-                          updateWordVideoAt(index, { video, thumbnail }),
-                      })
-                    }
-                    onCancel={closeVideoEditor}
-                    onTriggerUpload={() => triggerVideoFilePicker(wordVideoKey)}
-                    onRemove={() =>
-                      void removeVideo({
-                        key: wordVideoKey,
-                        oldVideo: videoValue,
-                        onSuccess: () => removeWordVideoAt(index),
-                      })
-                    }
-                    fileInputRef={(element) => {
-                      if (element) {
-                        fileInputsRef.current[wordVideoKey] = element;
-                      }
-                    }}
-                    onFileChange={(event) => {
-                      const inputElement = event?.target;
-                      const file = inputElement?.files?.[0];
-
-                      if (inputElement) {
-                        inputElement.value = "";
-                      }
-
-                      void handleVideoFileSelected({
-                        key: wordVideoKey,
-                        file,
-                        scope: "word",
-                        oldVideo: videoValue,
-                        onSuccess: ({ video, thumbnail }) =>
-                          updateWordVideoAt(index, { video, thumbnail }),
-                      });
-                    }}
-                    uploadButtonText={videoValue ? "Trocar por upload" : "Enviar arquivo"}
-                  />
-                );
-              })}
-
-              <input
-                type="file"
-                accept="video/*"
-                className="hidden"
-                ref={(element) => {
-                  if (element) {
-                    fileInputsRef.current[NEW_WORD_VIDEO_KEY] = element;
+                  previewVariant="inline-right"
+                  inlineSize="wide"
+                  mobileCompact
+                  removeButtonMode="mobile-icon"
+                  layerIcon={<Clapperboard className="h-4 w-4" />}
+                  addButtonLabel="Adicionar vídeo geral"
+                  changeButtonLabel="Trocar vídeo geral"
+                  saveButtonLabel={
+                    currentWordVideoValue
+                      ? "Salvar vídeo geral"
+                      : "Anexar vídeo geral"
                   }
-                }}
-                onChange={(event) => {
-                  const inputElement = event?.target;
-                  const file = inputElement?.files?.[0];
-
-                  if (inputElement) {
-                    inputElement.value = "";
+                  helperText="Cole um vídeo por link/embed ou envie um arquivo para usar como vídeo padrão desta palavra/frase."
+                  onPlay={() => setActiveVideoPreviewKey(wordVideoKey)}
+                  onOpenEditor={() =>
+                    openVideoEditor(wordVideoKey, currentWordVideoValue)
                   }
+                  onEditorChange={(value) =>
+                    setVideoEditor((current) => ({ ...current, value }))
+                  }
+                  onSave={() =>
+                    void saveVideoFromEditor({
+                      key: wordVideoKey,
+                      oldVideo: currentWordVideoValue,
+                      onSuccess: ({ video, thumbnail }) =>
+                        currentWordVideoValue
+                          ? updateWordVideoAt(0, { video, thumbnail })
+                          : appendWordVideo({ video, thumbnail }),
+                    })
+                  }
+                  onCancel={closeVideoEditor}
+                  onTriggerUpload={() => triggerVideoFilePicker(wordVideoKey)}
+                  onRemove={
+                    currentWordVideoValue
+                      ? () =>
+                          void removeVideo({
+                            key: wordVideoKey,
+                            oldVideo: currentWordVideoValue,
+                            onSuccess: () => removeWordVideoAt(0),
+                          })
+                      : () => undefined
+                  }
+                  fileInputRef={(element) => {
+                    if (element) {
+                      fileInputsRef.current[wordVideoKey] = element;
+                    }
+                  }}
+                  onFileChange={(event) => {
+                    const inputElement = event?.target;
+                    const file = inputElement?.files?.[0];
 
-                  void handleVideoFileSelected({
-                    key: NEW_WORD_VIDEO_KEY,
-                    file,
-                    scope: "word",
-                    oldVideo: "",
-                    onSuccess: ({ video, thumbnail }) =>
-                      appendWordVideo({ video, thumbnail }),
-                  });
-                }}
-              />
+                    if (inputElement) {
+                      inputElement.value = "";
+                    }
 
-              <AppendVideoPanel
-                title="Adicionar vídeo geral"
-                description="Cole um vídeo por link/embed ou envie um arquivo para usar como vídeo padrão desta palavra/frase."
-                helperLabel="+ vídeo geral"
-                countLabel={`${wordVideos.length} anexado${wordVideos.length === 1 ? "" : "s"}`}
-                isEditing={videoEditor.key === NEW_WORD_VIDEO_KEY}
-                editorValue={videoEditor.value}
-                uploadError={newWordVideoUploadError}
-                isUploading={uploadingVideoKey === NEW_WORD_VIDEO_KEY}
-                isDeleting={deletingVideoKey === NEW_WORD_VIDEO_KEY}
-                onOpenEditor={() => openVideoEditor(NEW_WORD_VIDEO_KEY, "")}
-                onEditorChange={(value) =>
-                  setVideoEditor((current) => ({
-                    ...current,
-                    value,
-                  }))
-                }
-                onSave={() =>
-                  void saveVideoFromEditor({
-                    key: NEW_WORD_VIDEO_KEY,
-                    oldVideo: "",
-                    onSuccess: ({ video, thumbnail }) =>
-                      appendWordVideo({ video, thumbnail }),
-                  })
-                }
-                onCancel={closeVideoEditor}
-                onTriggerUpload={() => triggerVideoFilePicker(NEW_WORD_VIDEO_KEY)}
-                addButtonLabel="Adicionar vídeo geral por link"
-                uploadButtonLabel="Enviar vídeo geral"
-                saveButtonLabel="Anexar vídeo geral"
-              />
-            </div>
-          ) : null}
-          </section>
+                    void handleVideoFileSelected({
+                      key: wordVideoKey,
+                      file,
+                      scope: "word",
+                      oldVideo: currentWordVideoValue,
+                      onSuccess: ({ video, thumbnail }) =>
+                        currentWordVideoValue
+                          ? updateWordVideoAt(0, { video, thumbnail })
+                          : appendWordVideo({ video, thumbnail }),
+                    });
+                  }}
+                  uploadButtonText={
+                    currentWordVideoValue ? "Trocar por upload" : "Enviar arquivo"
+                  }
+                />
+              </section>
+            );
+          })()
         ) : null}
 
           <div className="order-5 pt-1 md:pt-2">
