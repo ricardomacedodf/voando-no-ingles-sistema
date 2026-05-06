@@ -18,7 +18,7 @@ export default function ModeSelector({ mode, setMode, variant = "default" }) {
               onClick={() => {
                 if (item.key !== mode) setMode(item.key);
               }}
-              className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-full px-2 text-xs font-medium leading-4 whitespace-nowrap transition-colors duration-200 md:px-4 md:text-sm md:leading-5 ${
+              className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-full px-2 text-xs font-medium leading-4 whitespace-nowrap outline-none transition-colors duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] md:px-4 md:text-sm md:leading-5 ${
                 mode === item.key
                   ? "bg-primary text-white"
                   : "text-muted-foreground hover:bg-muted"
@@ -41,7 +41,7 @@ export default function ModeSelector({ mode, setMode, variant = "default" }) {
           onClick={() => {
             if (item.key !== mode) setMode(item.key);
           }}
-          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+          className={`rounded-full px-4 py-1.5 text-xs font-semibold outline-none transition-colors duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] ${
             mode === item.key
               ? "bg-primary text-white"
               : "text-muted-foreground hover:text-foreground"

@@ -778,7 +778,7 @@ export default function Quiz() {
 
           <button
             onClick={handleNextRound}
-            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-primary/90 [-webkit-tap-highlight-color:transparent] sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
+            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors focus:outline-none md:hover:bg-primary/90 md:focus-visible:ring-2 md:focus-visible:ring-primary/25 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
           >
             {isLastRound ? "Recomecar" : "Proxima rodada"}
           </button>
@@ -795,7 +795,7 @@ export default function Quiz() {
         </div>
         <button
           onClick={toggleSound}
-          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
           title={soundEnabled ? "Desativar audio" : "Ativar audio"}
         >
           {soundEnabled ? (
@@ -811,7 +811,7 @@ export default function Quiz() {
           <h1 className="text-2xl font-bold text-foreground">Quiz</h1>
           <button
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
             title={soundEnabled ? "Desativar audio" : "Ativar audio"}
           >
             {soundEnabled ? (
@@ -939,7 +939,7 @@ export default function Quiz() {
               onPointerDown={() => handleOptionPointerDown(idx)}
               onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
-              className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-card px-4 py-3 text-left text-sm font-medium outline-none transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:h-[65px] md:max-w-none md:justify-self-stretch md:rounded-[10px] disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] ${classes} ${
+              className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-card px-4 py-3 text-left text-sm font-medium transition-all duration-200 md:h-[65px] md:max-w-none md:justify-self-stretch md:rounded-[10px] focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-2 md:focus-visible:ring-primary/25 disabled:cursor-not-allowed ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
             >
@@ -963,13 +963,15 @@ export default function Quiz() {
           expanded={showExamples}
           onClick={() => setShowExamples((prev) => !prev)}
           disabled={!answered || !card?.meanings?.length}
+          keepVisibleWhenExpanded
+          className={showExamples ? "-mb-px" : ""}
         />
 
         <button
           type="button"
           onClick={answered ? handleNext : handleConfirm}
           disabled={!answered && selected === null}
-          className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] ${
+          className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-all focus:outline-none ${
             answered
               ? "border-primary bg-primary text-primary-foreground shadow-[0_2px_0_rgba(37,177,95,0.26)] active:scale-[0.99]"
               : selected !== null
@@ -996,7 +998,7 @@ export default function Quiz() {
                 activeMeaning={activeMeaning?.meaning}
                 titleTerm={card?.term}
                 variant="flashcard"
-                panelScope="flashcards"
+                panelScope="quiz"
                 onClose={() => setShowExamples(false)}
               />
             </div>

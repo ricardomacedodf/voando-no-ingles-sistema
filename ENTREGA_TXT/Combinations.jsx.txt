@@ -751,7 +751,7 @@ export default function Combinations() {
 
           <button
             onClick={nextRound}
-            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-primary/90 [-webkit-tap-highlight-color:transparent] sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
+            className="h-14 rounded-2xl bg-primary px-10 text-[1.6rem] font-semibold text-primary-foreground transition-colors focus:outline-none md:hover:bg-primary/90 md:focus-visible:ring-2 md:focus-visible:ring-primary/25 sm:h-auto sm:rounded-xl sm:px-6 sm:py-2.5 sm:text-sm"
           >
             Proxima rodada
           </button>
@@ -769,7 +769,7 @@ export default function Combinations() {
 
         <button
           onClick={toggleSound}
-          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
           title={soundEnabled ? "Desativar audio" : "Ativar audio"}
         >
           {soundEnabled ? (
@@ -785,7 +785,7 @@ export default function Combinations() {
           <h1 className="text-2xl font-bold text-foreground">Combinações</h1>
           <button
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent transition-colors md:hover:bg-muted focus:outline-none md:focus-visible:outline-none md:focus-visible:ring-1 md:focus-visible:ring-ring"
             title={soundEnabled ? "Desativar audio" : "Ativar audio"}
           >
             {soundEnabled ? (
@@ -882,7 +882,7 @@ export default function Combinations() {
                 onPointerDown={() => handleLeftPointerDown(idx)}
                 onClick={(event) => handleLeftClick(idx, event)}
                 disabled={isMatched}
-                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium outline-none transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:h-[65px] md:rounded-[10px] [-webkit-tap-highlight-color:transparent] ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 focus:outline-none md:h-[65px] md:rounded-[10px] md:focus-visible:ring-2 md:focus-visible:ring-primary/25 ${cls}`}
               >
                 <span className="mx-auto max-w-[92%] break-words leading-snug">{item.text}</span>
                 {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
@@ -916,7 +916,7 @@ export default function Combinations() {
                 onPointerDown={() => handleRightPointerDown(idx)}
                 onClick={(event) => handleRightClick(idx, event)}
                 disabled={isMatched}
-                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium outline-none transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:h-[65px] md:rounded-[10px] [-webkit-tap-highlight-color:transparent] ${cls}`}
+                className={`relative flex h-[74px] w-full items-center justify-center gap-3 rounded-lg px-3 py-3 text-center text-sm font-medium transition-all duration-200 focus:outline-none md:h-[65px] md:rounded-[10px] md:focus-visible:ring-2 md:focus-visible:ring-primary/25 ${cls}`}
               >
                 <span className="mx-auto max-w-[92%] break-words leading-snug">{item.text}</span>
                 {isMatched ? <Check className="absolute right-3 h-4 w-4 shrink-0 text-primary" /> : null}
@@ -930,7 +930,7 @@ export default function Combinations() {
         <button
           type="button"
           onClick={handleConcludeRound}
-          className="sm:hidden flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-primary/90 [-webkit-tap-highlight-color:transparent]"
+          className="sm:hidden flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors focus:outline-none md:hover:bg-primary/90 md:focus-visible:ring-2 md:focus-visible:ring-primary/25"
         >
           Concluir rodada
         </button>

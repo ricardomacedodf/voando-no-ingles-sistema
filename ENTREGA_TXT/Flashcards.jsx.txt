@@ -872,7 +872,7 @@ export default function Flashcards() {
         <button
           type="button"
           onClick={toggleSound}
-          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted"
           title={soundEnabled ? "Desativar Ã¡udio" : "Ativar Ã¡udio"}
         >
           {soundEnabled ? (
@@ -889,7 +889,7 @@ export default function Flashcards() {
           <button
             type="button"
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted"
             title={soundEnabled ? "Desativar Ã¡udio" : "Ativar Ã¡udio"}
           >
             {soundEnabled ? (
@@ -1055,7 +1055,7 @@ export default function Flashcards() {
           onPointerDown={handleResponsePointerDown}
           onClick={(event) => handleResponse(false, event)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#EF4444] px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-[#DC2626] active:bg-[#B91C1C] disabled:cursor-not-allowed disabled:opacity-60 [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
+          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#EF4444] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#DC2626] active:bg-[#B91C1C] disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
           Não lembro
         </button>
@@ -1065,7 +1065,7 @@ export default function Flashcards() {
           onPointerDown={handleResponsePointerDown}
           onClick={(event) => handleResponse(true, event)}
           disabled={isSubmittingResponse}
-          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#25B15F] px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60 [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
+          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#25B15F] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60 sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
         >
           <Check className="mr-1 h-4 w-4" />
           Já sei

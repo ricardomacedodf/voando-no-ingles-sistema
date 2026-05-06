@@ -15,7 +15,7 @@ export default function FlashcardModeSelector({ mode, setMode }) {
             onClick={() => {
               if (item.key !== mode) setMode(item.key);
             }}
-            className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-full px-2 text-xs font-medium leading-4 whitespace-nowrap transition-colors duration-200 md:text-sm md:leading-5 ${
+            className={`flex h-full min-w-0 flex-1 items-center justify-center rounded-full px-2 text-xs font-medium leading-4 whitespace-nowrap outline-none transition-colors duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] md:text-sm md:leading-5 ${
               mode === item.key
                 ? "bg-primary text-white"
                 : "text-muted-foreground hover:bg-muted"

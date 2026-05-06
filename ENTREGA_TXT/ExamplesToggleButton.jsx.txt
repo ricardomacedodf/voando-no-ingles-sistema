@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { ChevronDown, Lightbulb } from "lucide-react";
+﻿import { useRef } from "react";
+import { ChevronRight, Lightbulb } from "lucide-react";
 import { playSound } from "../lib/gameState";
 import { SFX_EVENTS } from "../lib/sfx";
 
@@ -40,10 +40,10 @@ export default function ExamplesToggleButton({
     "cursor-not-allowed border-border bg-card text-foreground opacity-[0.44] dark:border-border dark:bg-card dark:text-foreground dark:opacity-[0.29]";
 
   const enabledCollapsedClasses =
-    "border-border bg-card text-foreground shadow-[0_2px_0_rgba(148,163,184,0.24)] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] md:hover:border-[#93c5fd] md:hover:bg-blue-50/30 dark:md:hover:border-sky-500/70 dark:md:hover:bg-sky-500/15";
+    "border-border bg-card text-foreground shadow-[0_2px_0_rgba(148,163,184,0.24)] active:scale-[0.99] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] md:hover:border-[#93c5fd] md:hover:bg-blue-50/30 dark:md:hover:border-sky-500/70 dark:md:hover:bg-sky-500/15";
 
   const enabledExpandedClasses =
-    "border-border bg-card text-foreground shadow-[0_2px_0_rgba(148,163,184,0.24)] dark:border-border dark:bg-card dark:text-foreground dark:shadow-[0_2px_0_rgba(2,6,23,0.45)]";
+    "border-border bg-card text-foreground shadow-[0_2px_0_rgba(148,163,184,0.24)] active:scale-[0.99] dark:border-border dark:bg-card dark:text-foreground dark:shadow-[0_2px_0_rgba(2,6,23,0.45)]";
 
   const resolvedStateClasses = disabled
     ? disabledClasses
@@ -77,7 +77,7 @@ export default function ExamplesToggleButton({
       onPointerDown={handlePointerDown}
       onClick={handleToggle}
       disabled={disabled}
-      className={`group relative flex h-[58px] w-full items-center border text-sm font-semibold outline-none transition-[background-color,border-color,color,box-shadow] duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:border-border dark:focus-visible:border-border [-webkit-tap-highlight-color:transparent] ${buttonShapeClasses} ${contentLayoutClasses} ${resolvedStateClasses} ${className}`}
+      className={`group relative flex h-[58px] w-full items-center border text-sm font-semibold transition-all focus:outline-none ${buttonShapeClasses} ${contentLayoutClasses} ${resolvedStateClasses} ${className}`}
     >
       <span className="inline-flex min-w-0 items-center gap-2">
         <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
@@ -96,12 +96,13 @@ export default function ExamplesToggleButton({
         }`}
         aria-hidden="true"
       >
-        <ChevronDown
+        <ChevronRight
           className={`h-[18px] w-[18px] stroke-[2.2] transition-transform duration-200 ${
-            expanded ? "rotate-180" : "rotate-0"
+            expanded ? "rotate-90" : "rotate-0"
           }`}
         />
       </span>
     </button>
   );
 }
+
