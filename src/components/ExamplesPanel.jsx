@@ -557,6 +557,122 @@ const getHighlightTermCandidates = (term) => {
   );
 };
 
+const buildHighlightWordVariants = (word) => {
+  const cleanWord = normalizeText(word).toLowerCase();
+
+  if (!cleanWord) return [];
+
+  const variants = new Set([cleanWord]);
+  const endsWithConsonantY = /[^aeiou]y$/i.test(cleanWord);
+  const endsWithSilentE = /e$/i.test(cleanWord);
+  const endsWithCvc =
+    cleanWord.length >= 3 &&
+    /[^aeiou][aeiou][^aeiouwxy]$/i.test(cleanWord);
+
+  variants.add(`${cleanWord}s`);
+
+  if (endsWithConsonantY) {
+    variants.add(`${cleanWord.slice(0, -1)}ies`);
+    variants.add(`${cleanWord.slice(0, -1)}ied`);
+  } else if (endsWithSilentE) {
+    variants.add(`${cleanWord}d`);
+  } else if (endsWithCvc) {
+    const doubledFinal = `${cleanWord}${cleanWord.slice(-1)}`;
+    variants.add(`${doubledFinal}ed`);
+    variants.add(`${doubledFinal}ing`);
+    variants.add(`${cleanWord}ed`);
+  } else {
+    variants.add(`${cleanWord}ed`);
+  }
+
+  if (endsWithConsonantY) {
+    variants.add(`${cleanWord.slice(0, -1)}ying`);
+  } else if (endsWithSilentE) {
+    variants.add(`${cleanWord.slice(0, -1)}ing`);
+  } else if (!endsWithCvc) {
+    variants.add(`${cleanWord}ing`);
+  }
+
+  variants.add(`${cleanWord}es`);
+  variants.add(`${cleanWord}'s`);
+
+  return Array.from(variants).filter(Boolean);
+};
+
+const findLooseHighlightRange = (text, term) => {
+  const safeText = typeof text === "string" ? text : "";
+  const cleanTerm = typeof term === "string" ? term.trim().toLowerCase() : "";
+  const termWords = cleanTerm.split(/\s+/).filter(Boolean);
+
+  if (!safeText || termWords.length !== 2) {
+    return null;
+  }
+
+  const [headWord, tailWord] = termWords;
+  const headVariants = new Set(buildHighlightWordVariants(headWord));
+  const sentenceWords = Array.from(
+    safeText.matchAll(/[A-Za-zÀ-ÿ]+(?:'[A-Za-zÀ-ÿ]+)*/g)
+  ).map((match) => ({
+    value: match[0],
+    lower: match[0].toLowerCase(),
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+
+  if (sentenceWords.length === 0) {
+    return null;
+  }
+
+  const maxGapWords = 3;
+
+  for (let startIndex = 0; startIndex < sentenceWords.length; startIndex += 1) {
+    const startWord = sentenceWords[startIndex];
+
+    if (!headVariants.has(startWord.lower)) {
+      continue;
+    }
+
+    for (
+      let endIndex = startIndex + 1;
+      endIndex < sentenceWords.length && endIndex <= startIndex + maxGapWords + 1;
+      endIndex += 1
+    ) {
+      const endWord = sentenceWords[endIndex];
+
+      if (endWord.lower !== tailWord) {
+        continue;
+      }
+
+      return {
+        start: startWord.start,
+        end: endWord.end,
+      };
+    }
+  }
+
+  return null;
+};
+
+const renderHighlightRange = (text, range, underlineColor) => {
+  if (!range) return text;
+
+  const beforeText = text.slice(0, range.start);
+  const matchedText = text.slice(range.start, range.end);
+  const afterText = text.slice(range.end);
+
+  return (
+    <>
+      {beforeText}
+      {renderUnderlineSequence(
+        matchedText,
+        `highlight-range-${range.start}-${range.end}`,
+        underlineColor
+      )}
+      {afterText}
+    </>
+  );
+};
+
 const renderHighlightedTerm = (
   text,
   term,
@@ -590,6 +706,12 @@ const renderHighlightedTerm = (
         </Fragment>
       );
     });
+  }
+
+  const looseHighlightRange = findLooseHighlightRange(safeText, term);
+
+  if (looseHighlightRange) {
+    return renderHighlightRange(safeText, looseHighlightRange, underlineColor);
   }
 
   return safeText;
@@ -1558,6 +1680,7 @@ export default function ExamplesPanel({
   }, [mobileVideo]);
 
   const isFlashcard = variant === "flashcard";
+  const isQuizPanelLayout = isFlashcard && panelScope === "quiz";
   const isFlashcardMobileLayout =
     isFlashcard && isMobile && panelScope === "flashcards";
   const { isDark: isDarkTheme } = useTheme();
@@ -1573,7 +1696,11 @@ export default function ExamplesPanel({
       )
   );
   const panelContainerClass = isFlashcard
-    ? isFlashcardMobileLayout
+    ? isQuizPanelLayout
+      ? shouldUseExpandedVideoHeaderSpacing
+        ? "mt-0 overflow-hidden rounded-[18px] border border-[#EDF0F3] bg-white px-4 pb-4 pt-3 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground sm:px-6 sm:pb-6 sm:pt-4"
+        : "mt-0 overflow-hidden rounded-[18px] border border-[#EDF0F3] bg-white p-4 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground sm:p-6"
+      : isFlashcardMobileLayout
       ? "mt-0 overflow-hidden rounded-b-[18px] rounded-t-none border border-t-0 border-[#EDF0F3] bg-white px-4 pb-4 pt-3 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground"
       : shouldUseExpandedVideoHeaderSpacing
       ? "mt-0 overflow-hidden rounded-b-[18px] rounded-t-none border border-t-0 border-[#EDF0F3] bg-white px-6 pb-6 pt-4 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground"
@@ -2320,6 +2447,7 @@ export default function ExamplesPanel({
     entry,
     groupKey,
     startFromFirstVideo = false,
+    desktopAutoPlayOnOpen = false,
   }) => {
     const safeVideos = Array.isArray(entry?.topVideos)
       ? entry.topVideos.filter(Boolean)
@@ -2342,7 +2470,7 @@ export default function ExamplesPanel({
       videos: safeVideos,
       index: currentIndex,
       autoPlayOnOpen: true,
-      desktopAutoPlayOnOpen: true,
+      desktopAutoPlayOnOpen: Boolean(desktopAutoPlayOnOpen),
     });
 
     return true;
@@ -2481,8 +2609,46 @@ export default function ExamplesPanel({
                 >
                 {!hideThumbnail && hasMeaningPreviewMedia ? (
                   <div
+                    role={!isMobile && hasMeaningVideo ? "button" : undefined}
+                    tabIndex={!isMobile && hasMeaningVideo ? 0 : undefined}
+                    aria-label={!isMobile && hasMeaningVideo ? `Reproduzir vídeo de ${meaningPreviewTitle}` : undefined}
+                    title={!isMobile && hasMeaningVideo ? `Reproduzir vídeo de ${meaningPreviewTitle}` : undefined}
+                    onClick={
+                      !isMobile && hasMeaningVideo
+                        ? (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            resetVideoGroupIndexToStart(groupKey);
+                            setExpandedMeaningVideoKey(groupKey);
+                            openMeaningPreviewVideoInline({
+                              entry,
+                              groupKey,
+                              startFromFirstVideo: true,
+                              desktopAutoPlayOnOpen: true,
+                            });
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      !isMobile && hasMeaningVideo
+                        ? (event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            resetVideoGroupIndexToStart(groupKey);
+                            setExpandedMeaningVideoKey(groupKey);
+                            openMeaningPreviewVideoInline({
+                              entry,
+                              groupKey,
+                              startFromFirstVideo: true,
+                              desktopAutoPlayOnOpen: true,
+                            });
+                          }
+                        : undefined
+                    }
                     className={[
                       "relative shrink-0 self-center overflow-hidden rounded-md border bg-black/10",
+                      !isMobile && hasMeaningVideo ? "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/45 focus-visible:ring-offset-2" : "",
                       isFlashcardMobileLayout ? "w-[128px]" : "w-[156px]",
                     ].join(" ")}
                     style={{ borderColor: meaningPalette.border }}
@@ -2670,6 +2836,7 @@ export default function ExamplesPanel({
                               entry,
                               groupKey,
                               startFromFirstVideo: true,
+                              desktopAutoPlayOnOpen: false,
                             });
                           }
                         }}

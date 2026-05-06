@@ -752,6 +752,29 @@ export default function Quiz() {
   const isLastRound = roundNumber >= MAX_ROUNDS;
   const roundBalanceText = `${roundXpBalance > 0 ? "+" : ""}${roundXpBalance}XP`;
 
+  const renderQuizActionButton = () => (
+    <button
+      type="button"
+      onClick={answered ? handleNext : handleConfirm}
+      disabled={!answered && selected === null}
+      className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] ${
+        answered
+          ? "border-primary bg-primary text-primary-foreground shadow-[0_2px_0_rgba(37,177,95,0.26)] active:scale-[0.99]"
+          : selected !== null
+            ? "border-muted-foreground/50 bg-card text-muted-foreground shadow-[0_2px_0_rgba(107,114,128,0.20)] active:scale-[0.99] dark:border-slate-500/70 dark:bg-card dark:text-slate-300 dark:shadow-[0_2px_0_rgba(148,163,184,0.16)]"
+            : "cursor-not-allowed border-border bg-card text-foreground opacity-[0.44] dark:border-border dark:bg-card dark:text-foreground dark:opacity-[0.29]"
+      }`}
+    >
+      {answered ? (
+        <>
+          {"Pr\u00f3ximo"} <ArrowRight className="h-4 w-4" />
+        </>
+      ) : (
+        "Confirmar"
+      )}
+    </button>
+  );
+
   if (roundDone) {
     return (
       <div className="flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
@@ -958,51 +981,58 @@ export default function Quiz() {
       </div>
       </div>
 
-      <div className="hide-on-mobile-video-expanded mx-auto grid w-full grid-cols-2 gap-3 md:max-w-[760px]">
-        <ExamplesToggleButton
-          expanded={showExamples}
-          onClick={() => setShowExamples((prev) => !prev)}
-          disabled={!answered || !card?.meanings?.length}
-        />
+      <div className="mx-auto w-full md:max-w-[760px]">
+        <div className="hide-on-mobile-video-expanded grid w-full grid-cols-2 items-start gap-x-3 gap-y-0 transition-[gap] duration-200">
+          <div
+            className={[
+              "min-w-0",
+              "[&>button]:!w-full [&_button]:!w-full",
+              "[&>button]:!px-4 [&_button]:!px-4",
+              showExamples
+                ? [
+                    "relative z-10 isolate",
+                    "[&>button]:!h-[58px] [&_button]:!h-[58px]",
+                    "[&>button]:!items-center [&_button]:!items-center",
+                    "[&>button]:!justify-center [&_button]:!justify-center",
+                    "[&>button]:!rounded-xl [&_button]:!rounded-xl",
+                    "[&>button]:!text-center [&_button]:!text-center",
+                  ].join(" ")
+                : [
+                    "[&>button]:!h-[58px] [&_button]:!h-[58px]",
+                    "[&>button]:!items-center [&_button]:!items-center",
+                    "[&>button]:!justify-center [&_button]:!justify-center",
+                    "[&>button]:!text-center [&_button]:!text-center",
+                  ].join(" "),
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            <ExamplesToggleButton
+              expanded={showExamples}
+              onClick={() => setShowExamples((prev) => !prev)}
+              disabled={!answered || !card?.meanings?.length}
+            />
+          </div>
 
-        <button
-          type="button"
-          onClick={answered ? handleNext : handleConfirm}
-          disabled={!answered && selected === null}
-          className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] ${
-            answered
-              ? "border-primary bg-primary text-primary-foreground shadow-[0_2px_0_rgba(37,177,95,0.26)] active:scale-[0.99]"
-              : selected !== null
-                ? "border-muted-foreground/50 bg-card text-muted-foreground shadow-[0_2px_0_rgba(107,114,128,0.20)] active:scale-[0.99] dark:border-slate-500/70 dark:bg-card dark:text-slate-300 dark:shadow-[0_2px_0_rgba(148,163,184,0.16)]"
-                : "cursor-not-allowed border-border bg-card text-foreground opacity-[0.44] dark:border-border dark:bg-card dark:text-foreground dark:opacity-[0.29]"
-          }`}
-        >
-          {answered ? (
-            <>
-              {"Pr\u00f3ximo"} <ArrowRight className="h-4 w-4" />
-            </>
-          ) : (
-            "Confirmar"
-          )}
-        </button>
-      </div>
-
-      {answered && card?.meanings?.length > 0 ? (
-        <div className="space-y-0">
-          {showExamples ? (
-            <div ref={examplesPanelRef} className="mx-auto w-full md:max-w-[760px]">
-              <ExamplesPanel
-                allMeanings={card?.meanings}
-                activeMeaning={activeMeaning?.meaning}
-                titleTerm={card?.term}
-                variant="flashcard"
-                panelScope="flashcards"
-                onClose={() => setShowExamples(false)}
-              />
-            </div>
-          ) : null}
+          <div className="min-w-0 self-start">{renderQuizActionButton()}</div>
         </div>
-      ) : null}
+
+        {answered && card?.meanings?.length > 0 && showExamples ? (
+          <div
+            ref={examplesPanelRef}
+            className="relative mx-auto mt-3 w-full overflow-visible"
+          >
+            <ExamplesPanel
+              allMeanings={card?.meanings}
+              activeMeaning={activeMeaning?.meaning}
+              titleTerm={card?.term}
+              variant="flashcard"
+              panelScope="quiz"
+              onClose={() => setShowExamples(false)}
+            />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
