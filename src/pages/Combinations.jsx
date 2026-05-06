@@ -23,6 +23,14 @@ import {
   normalizeVocabularyItem,
   updateStatsAfterReview,
 } from "../lib/learningEngine";
+import {
+  getPreferredStudyMode,
+  setPreferredStudyMode,
+} from "../lib/studyModePreference";
+import {
+  getCachedVocabularyRows,
+  setCachedVocabularyRows,
+} from "../lib/vocabularyCache";
 
 const PAIRS_PER_ROUND = 5;
 const CHECK_SYMBOL = "\u2713";
@@ -182,7 +190,7 @@ export default function Combinations() {
 
   const [allVocab, setAllVocab] = useState([]);
   const [pool, setPool] = useState([]);
-  const [mode, setMode] = useState("en_pt");
+  const [mode, setMode] = useState(() => getPreferredStudyMode("en_pt"));
   const [round, setRound] = useState(0);
   const [roundPairs, setRoundPairs] = useState([]);
   const [leftItems, setLeftItems] = useState([]);
@@ -226,10 +234,23 @@ export default function Combinations() {
     };
   }, []);
 
-  const fetchVocabulary = async () => {
-    if (!user?.id) return [];
+  const buildVocabularyFromRows = (rows) => {
     const reviewPreferences = loadReviewPreferences();
     const focus = new URLSearchParams(location.search).get("focus");
+    const normalizedItems = Array.isArray(rows)
+      ? rows.map((row) => mapVocabularyRow(row, reviewPreferences))
+      : [];
+
+    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    if (prioritized.length >= 2 || normalizedItems.length < 2) {
+      return prioritized;
+    }
+
+    return getStudyQueue(normalizedItems, reviewPreferences, REVIEW_FOCUS.ALL).items;
+  };
+
+  const fetchVocabularyRows = async () => {
+    if (!user?.id) return [];
 
     const { data, error } = await supabase
       .from("vocabulary")
@@ -241,46 +262,74 @@ export default function Combinations() {
       throw error;
     }
 
-    const normalizedItems = Array.isArray(data)
-      ? data.map((row) => mapVocabularyRow(row, reviewPreferences))
-      : [];
-
-    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
-    if (prioritized.length >= 2 || normalizedItems.length < 2) {
-      return prioritized;
-    }
-
-    return getStudyQueue(normalizedItems, reviewPreferences, REVIEW_FOCUS.ALL).items;
+    return Array.isArray(data) ? data : [];
   };
 
   useEffect(() => {
     let isMounted = true;
 
-    async function load() {
+    const applyVocabulary = (items) => {
+      const valid = items.filter((v) => v.term && v.meanings?.some((m) => m?.meaning));
+      if (!isMounted) return;
+
+      setAllVocab(valid);
+      setPool(buildPool(valid));
+      setRound(0);
+    };
+
+    async function refreshVocabulary({
+      showSpinner = true,
+      applyToState = true,
+    } = {}) {
       try {
-        setLoading(true);
+        if (showSpinner) {
+          setLoading(true);
+        }
 
-        const data = await fetchVocabulary();
-        const valid = data.filter((v) => v.term && v.meanings?.some((m) => m?.meaning));
+        const rows = await fetchVocabularyRows();
+        setCachedVocabularyRows(user.id, rows);
 
-        if (!isMounted) return;
+        if (!applyToState || !isMounted) return;
 
-        setAllVocab(valid);
-        setPool(buildPool(valid));
-        setRound(0);
+        const items = buildVocabularyFromRows(rows);
+        applyVocabulary(items);
       } catch (error) {
         console.error("Erro ao carregar vocabulario em Combinacoes:", error);
-        if (!isMounted) return;
+        if (!applyToState || !isMounted) return;
         setAllVocab([]);
         setPool([]);
       } finally {
-        if (isMounted) {
+        if (isMounted && (showSpinner || applyToState)) {
           setLoading(false);
         }
       }
     }
 
-    load();
+    if (!user?.id) {
+      setAllVocab([]);
+      setPool([]);
+      setRound(0);
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const cachedRows = getCachedVocabularyRows(user.id);
+    if (Array.isArray(cachedRows)) {
+      const cachedItems = buildVocabularyFromRows(cachedRows);
+      applyVocabulary(cachedItems);
+      setLoading(false);
+      refreshVocabulary({
+        showSpinner: false,
+        applyToState: false,
+      });
+    } else {
+      refreshVocabulary({
+        showSpinner: true,
+        applyToState: true,
+      });
+    }
 
     return () => {
       isMounted = false;
@@ -291,6 +340,10 @@ export default function Combinations() {
     if (pool.length === 0) return;
     setupRound();
   }, [round, pool, mode]);
+
+  useEffect(() => {
+    setPreferredStudyMode(mode);
+  }, [mode]);
 
   useEffect(() => {
     if (!showExamples) return;

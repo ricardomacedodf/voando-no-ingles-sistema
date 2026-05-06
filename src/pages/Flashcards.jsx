@@ -27,6 +27,14 @@ import {
   normalizeVocabularyItem,
   updateStatsAfterReview,
 } from "../lib/learningEngine";
+import {
+  getPreferredStudyMode,
+  setPreferredStudyMode,
+} from "../lib/studyModePreference";
+import {
+  getCachedVocabularyRows,
+  setCachedVocabularyRows,
+} from "../lib/vocabularyCache";
 
 const FLASHCARD_CARD_WIDTH = 671.2;
 const FLASHCARD_CARD_HEIGHT = 335.3;
@@ -256,7 +264,7 @@ export default function Flashcards() {
 
   const [baseVocab, setBaseVocab] = useState([]);
   const [vocab, setVocab] = useState([]);
-  const [mode, setMode] = useState("en_pt");
+  const [mode, setMode] = useState(() => getPreferredStudyMode("en_pt"));
   const [current, setCurrent] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
@@ -390,10 +398,18 @@ export default function Flashcards() {
     };
   }, []);
 
-  const fetchVocabulary = async () => {
-    if (!user?.id) return [];
+  const buildVocabularyFromRows = (rows) => {
     const reviewPreferences = loadReviewPreferences();
     const focus = new URLSearchParams(location.search).get("focus");
+    const normalizedItems = Array.isArray(rows)
+      ? rows.map((row) => normalizeVocabularyItem(row, reviewPreferences))
+      : [];
+
+    return getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+  };
+
+  const fetchVocabularyRows = async () => {
+    if (!user?.id) return [];
 
     const { data, error } = await supabase
       .from("vocabulary")
@@ -405,52 +421,99 @@ export default function Flashcards() {
       throw error;
     }
 
-    const normalizedItems = Array.isArray(data)
-      ? data.map((row) => normalizeVocabularyItem(row, reviewPreferences))
-      : [];
-
-    return getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    return Array.isArray(data) ? data : [];
   };
 
   useEffect(() => {
     let isMounted = true;
 
-    async function load() {
-      try {
-        setLoading(true);
+    const applyVocabulary = (items, { trackSession = false } = {}) => {
+      const prepared = mode === "random" ? shuffleArray(items) : items;
 
-        const data = await fetchVocabulary();
-        const prepared = mode === "random" ? shuffleArray(data) : data;
-
+      if (trackSession) {
         recordStudySession();
         updateStreak();
-        updateDominatedCount(prepared);
+      }
 
-        if (!isMounted) return;
+      updateDominatedCount(prepared);
 
-        setBaseVocab(data);
-        setVocab(prepared);
-        setCurrent(0);
-        setFlipped(false);
-        setShowExamples(false);
-        setSessionDone(false);
-        setIsSubmittingResponse(false);
-        setSuppressFlipResetTransition(false);
-        clearDiscardOverlays();
-        responseLockRef.current = false;
+      if (!isMounted) return;
+
+      setBaseVocab(items);
+      setVocab(prepared);
+      setCurrent(0);
+      setFlipped(false);
+      setShowExamples(false);
+      setSessionDone(false);
+      setIsSubmittingResponse(false);
+      setSuppressFlipResetTransition(false);
+      clearDiscardOverlays();
+      responseLockRef.current = false;
+    };
+
+    async function refreshVocabulary({
+      showSpinner = true,
+      applyToState = true,
+      trackSession = false,
+    } = {}) {
+      try {
+        if (showSpinner) {
+          setLoading(true);
+        }
+
+        const rows = await fetchVocabularyRows();
+        setCachedVocabularyRows(user.id, rows);
+
+        if (!applyToState || !isMounted) return;
+
+        const items = buildVocabularyFromRows(rows);
+        applyVocabulary(items, { trackSession });
       } catch (error) {
         console.error("Erro ao carregar vocabulÃ¡rio no Flashcards:", error);
-        if (!isMounted) return;
+        if (!applyToState || !isMounted) return;
         setBaseVocab([]);
         setVocab([]);
       } finally {
-        if (isMounted) {
+        if (isMounted && (showSpinner || applyToState)) {
           setLoading(false);
         }
       }
     }
 
-    load();
+    if (!user?.id) {
+      setBaseVocab([]);
+      setVocab([]);
+      setCurrent(0);
+      setFlipped(false);
+      setShowExamples(false);
+      setSessionDone(false);
+      setIsSubmittingResponse(false);
+      setSuppressFlipResetTransition(false);
+      clearDiscardOverlays();
+      responseLockRef.current = false;
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const cachedRows = getCachedVocabularyRows(user.id);
+    if (Array.isArray(cachedRows)) {
+      const cachedItems = buildVocabularyFromRows(cachedRows);
+      applyVocabulary(cachedItems, { trackSession: true });
+      setLoading(false);
+      refreshVocabulary({
+        showSpinner: false,
+        applyToState: false,
+        trackSession: false,
+      });
+    } else {
+      refreshVocabulary({
+        showSpinner: true,
+        applyToState: true,
+        trackSession: true,
+      });
+    }
 
     return () => {
       isMounted = false;
@@ -475,6 +538,10 @@ export default function Flashcards() {
     responseLockRef.current = false;
     updateDominatedCount(prepared);
   }, [mode, baseVocab, loading]);
+
+  useEffect(() => {
+    setPreferredStudyMode(mode);
+  }, [mode]);
 
   useEffect(() => {
     if (!suppressFlipResetTransition) return;
@@ -1024,4 +1091,3 @@ export default function Flashcards() {
     </div>
   );
 }
-

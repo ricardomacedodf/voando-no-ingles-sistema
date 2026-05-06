@@ -26,6 +26,14 @@ import {
   normalizeVocabularyItem,
   updateStatsAfterReview,
 } from "../lib/learningEngine";
+import {
+  getPreferredStudyMode,
+  setPreferredStudyMode,
+} from "../lib/studyModePreference";
+import {
+  getCachedVocabularyRows,
+  setCachedVocabularyRows,
+} from "../lib/vocabularyCache";
 
 const QUESTIONS_PER_ROUND = 10;
 const MAX_ROUNDS = 20;
@@ -303,7 +311,7 @@ export default function Quiz() {
 
   const [allVocab, setAllVocab] = useState([]);
   const [queue, setQueue] = useState([]);
-  const [mode, setMode] = useState("en_pt");
+  const [mode, setMode] = useState(() => getPreferredStudyMode("en_pt"));
   const [current, setCurrent] = useState(0);
   const [roundNumber, setRoundNumber] = useState(1);
   const [roundDone, setRoundDone] = useState(false);
@@ -349,10 +357,25 @@ export default function Quiz() {
     };
   }, []);
 
-  const fetchVocabulary = async () => {
-    if (!user?.id) return [];
+  const buildVocabularyFromRows = (rows) => {
     const reviewPreferences = loadReviewPreferences();
     const focus = new URLSearchParams(location.search).get("focus");
+    const normalizedItems = Array.isArray(rows)
+      ? rows
+          .map(mapVocabularyRow)
+          .map((row) => normalizeVocabularyItem(row, reviewPreferences))
+      : [];
+
+    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    if (prioritized.length >= 4 || normalizedItems.length < 4) {
+      return prioritized;
+    }
+
+    return getStudyQueue(normalizedItems, reviewPreferences, REVIEW_FOCUS.ALL).items;
+  };
+
+  const fetchVocabularyRows = async () => {
+    if (!user?.id) return [];
 
     const { data, error } = await supabase
       .from("vocabulary")
@@ -364,18 +387,7 @@ export default function Quiz() {
       throw error;
     }
 
-    const normalizedItems = Array.isArray(data)
-      ? data
-          .map(mapVocabularyRow)
-          .map((row) => normalizeVocabularyItem(row, reviewPreferences))
-      : [];
-
-    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
-    if (prioritized.length >= 4 || normalizedItems.length < 4) {
-      return prioritized;
-    }
-
-    return getStudyQueue(normalizedItems, reviewPreferences, REVIEW_FOCUS.ALL).items;
+    return Array.isArray(data) ? data : [];
   };
 
   const startRound = (nextRoundNumber, sourceVocab = allVocab) => {
@@ -399,42 +411,90 @@ export default function Quiz() {
   useEffect(() => {
     let isMounted = true;
 
-    async function load() {
+    const applyVocabulary = (items) => {
+      if (!isMounted) return;
+
+      setAllVocab(items);
+      setQueue(buildRoundQueue(items));
+      setCurrent(0);
+      setRoundNumber(1);
+      setRoundDone(false);
+      setAnswered(false);
+      setSelected(null);
+      setShowExamples(false);
+      setXpFeedback(null);
+      setActiveMeaning(null);
+      setOptions([]);
+      setRoundCorrectCount(0);
+      setRoundIncorrectCount(0);
+      setRoundXpBalance(0);
+      updateDominatedCount(items);
+    };
+
+    async function refreshVocabulary({
+      showSpinner = true,
+      applyToState = true,
+    } = {}) {
       try {
-        setLoading(true);
+        if (showSpinner) {
+          setLoading(true);
+        }
 
-        const data = await fetchVocabulary();
+        const rows = await fetchVocabularyRows();
+        setCachedVocabularyRows(user.id, rows);
 
-        if (!isMounted) return;
+        if (!applyToState || !isMounted) return;
 
-        setAllVocab(data);
-        setQueue(buildRoundQueue(data));
-        setCurrent(0);
-        setRoundNumber(1);
-        setRoundDone(false);
-        setAnswered(false);
-        setSelected(null);
-        setShowExamples(false);
-        setXpFeedback(null);
-        setActiveMeaning(null);
-        setOptions([]);
-        setRoundCorrectCount(0);
-        setRoundIncorrectCount(0);
-        setRoundXpBalance(0);
-        updateDominatedCount(data);
+        const items = buildVocabularyFromRows(rows);
+        applyVocabulary(items);
       } catch (error) {
         console.error("Erro ao carregar vocabulario no Quiz:", error);
-        if (!isMounted) return;
+        if (!applyToState || !isMounted) return;
         setAllVocab([]);
         setQueue([]);
       } finally {
-        if (isMounted) {
+        if (isMounted && (showSpinner || applyToState)) {
           setLoading(false);
         }
       }
     }
 
-    load();
+    if (!user?.id) {
+      setAllVocab([]);
+      setQueue([]);
+      setCurrent(0);
+      setRoundNumber(1);
+      setRoundDone(false);
+      setAnswered(false);
+      setSelected(null);
+      setShowExamples(false);
+      setXpFeedback(null);
+      setActiveMeaning(null);
+      setOptions([]);
+      setRoundCorrectCount(0);
+      setRoundIncorrectCount(0);
+      setRoundXpBalance(0);
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const cachedRows = getCachedVocabularyRows(user.id);
+    if (Array.isArray(cachedRows)) {
+      const cachedItems = buildVocabularyFromRows(cachedRows);
+      applyVocabulary(cachedItems);
+      setLoading(false);
+      refreshVocabulary({
+        showSpinner: false,
+        applyToState: false,
+      });
+    } else {
+      refreshVocabulary({
+        showSpinner: true,
+        applyToState: true,
+      });
+    }
 
     return () => {
       isMounted = false;
@@ -448,6 +508,10 @@ export default function Quiz() {
     prevModeRef.current = mode;
     startRound(1, allVocab);
   }, [mode, allVocab, loading]);
+
+  useEffect(() => {
+    setPreferredStudyMode(mode);
+  }, [mode]);
 
   useEffect(() => {
     if (queue.length === 0 || !queue[current]) return;

@@ -19,7 +19,6 @@ import {
   Play,
   Plus,
   Save,
-  ShieldCheck,
   Trash2,
   Upload,
   Volume2,
@@ -1120,18 +1119,52 @@ function ExampleLanguageLabel({ flag, code }) {
   );
 }
 
+function VideoAttachmentGlyph({ className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 1024 1024"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M200 760H565M200 760C145 760 110 725 110 670V280C110 225 145 190 200 190H760C815 190 850 225 850 280V475"
+        stroke="currentColor"
+        strokeWidth="32"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M430 385C430 366 451 355 467 365L620 460C636 470 636 494 620 504L467 599C451 609 430 598 430 579Z"
+        stroke="currentColor"
+        strokeWidth="32"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M685 790L847 628C892 583 965 615 965 679C965 699 957 718 943 732L777 898C716 959 615 916 615 829C615 798 627 768 649 746L788 607C822 573 880 597 880 645C880 660 874 675 863 686L731 818"
+        stroke="currentColor"
+        strokeWidth="32"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function VideoAttachedBadge({ className = "" }) {
   return (
     <span
       className={[
-        "inline-flex shrink-0 items-center gap-1 rounded-full border border-[#D6E8FA] bg-[#F5FAFF] px-2 py-0.5 text-[10px] font-semibold text-[#0066CC] dark:border-[#244B72] dark:bg-[#102235] dark:text-[#66B7FF]",
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center text-[#2E2E2D] transition-colors dark:text-[#D1D1D6]",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
+      aria-label="Vídeo anexado"
     >
-      <CheckCircle2 className="h-3 w-3" />
-      Vídeo anexado
+      <VideoAttachmentGlyph className="h-4 w-4" />
+      <span className="sr-only">Vídeo anexado</span>
     </span>
   );
 }
@@ -1707,6 +1740,7 @@ function VideoControlCard({
   isContextExpanded = true,
   onToggleContext,
   promoteRemoveToHeader = false,
+  showHeaderVideoAttachedIndicator = true,
   children,
 }) {
   const hasVideo = Boolean(video);
@@ -1788,10 +1822,25 @@ function VideoControlCard({
   ) : isUploading || isDeleting ? (
     <Loader2 className="h-3.5 w-3.5 animate-spin" />
   ) : hasVideo ? (
-    <CheckCircle2 className="h-3.5 w-3.5" />
+    <VideoAttachmentGlyph className="h-3.5 w-3.5" />
   ) : (
     <FileVideo className="h-3.5 w-3.5" />
   );
+  const shouldUseVideoAttachedIndicator =
+    showHeaderVideoAttachedIndicator &&
+    hasVideo &&
+    !uploadError &&
+    !isUploading &&
+    !isDeleting &&
+    !isEditing;
+  const shouldHideAttachedHeaderStatus =
+    !showHeaderVideoAttachedIndicator &&
+    hasVideo &&
+    !uploadError &&
+    !isUploading &&
+    !isDeleting &&
+    !isEditing;
+  const shouldShowHeaderStatus = !shouldHideAttachedHeaderStatus;
   const statusLabel = uploadError
     ? "Precisa de atenção"
     : isUploading
@@ -1801,7 +1850,7 @@ function VideoControlCard({
     : isEditing
     ? "Editando"
     : hasVideo
-    ? "Vídeo anexado"
+    ? "Anexado"
     : emptyLabel;
   const mainActionLabel = hasVideo ? changeButtonLabel : addButtonLabel;
   const nextSaveLabel =
@@ -1895,9 +1944,13 @@ function VideoControlCard({
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:justify-end">
-              <StatusPill tone={statusTone} icon={statusIcon}>
-                {statusLabel}
-              </StatusPill>
+              {shouldUseVideoAttachedIndicator ? (
+                <VideoAttachedBadge className="h-7 w-7" />
+              ) : shouldShowHeaderStatus ? (
+                <StatusPill tone={statusTone} icon={statusIcon}>
+                  {statusLabel}
+                </StatusPill>
+              ) : null}
 
               {isContextCollapsible ? (
                 <button
@@ -1919,16 +1972,6 @@ function VideoControlCard({
 
           {shouldShowContextContent ? (
             <>
-              {hasVideo && !isEditing ? (
-                <p
-                  title={getExampleVideoDisplayLabel(video)}
-                  className="flex min-w-0 items-center gap-1.5 truncate rounded-[14px] bg-[#F5F5F7] px-3 py-2 text-[11px] font-medium text-[#6E6E73] dark:bg-[#2C2C2E] dark:text-[#A1A1A6]"
-                >
-                  <Link2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{getExampleVideoDisplayLabel(video)}</span>
-                </p>
-              ) : null}
-
               {helperText && !hasVideo && !isEditing ? (
                 <p className="rounded-[14px] bg-[#F5F5F7] px-3 py-2 text-[11px] leading-relaxed text-[#6E6E73] dark:bg-[#2C2C2E] dark:text-[#A1A1A6]">
                   {helperText}
@@ -2080,6 +2123,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const { user } = useAuth();
   const { isDark: isDarkTheme } = useTheme();
   const fileInputsRef = useRef({});
+  const meaningCardRefs = useRef({});
+  const exampleCardRefs = useRef({});
 
   const [term, setTerm] = useState(item?.term || "");
   const [pronunciation, setPronunciation] = useState(item?.pronunciation || "");
@@ -2150,6 +2195,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     initialDraftSignatureRef.current
   );
   const [pendingNewMeanings, setPendingNewMeanings] = useState({});
+  const [recentlyAddedMeaningIndex, setRecentlyAddedMeaningIndex] = useState(null);
+  const [recentlyAddedExampleKey, setRecentlyAddedExampleKey] = useState(null);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [isWordVideoSectionExpanded, setIsWordVideoSectionExpanded] = useState(
     () => normalizeWordVideos(item).length > 0
@@ -2162,7 +2209,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       );
     }
 
-    return { 0: true };
+    return { 0: false };
   });
 
   const [expandedExamples, setExpandedExamples] = useState(() => {
@@ -2182,7 +2229,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     }
 
     return {
-      [getExampleKey(0, 0)]: true,
+      [getExampleKey(0, 0)]: false,
     };
   });
 
@@ -2672,6 +2719,34 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     }
   }, [hasUnsavedFormChanges, showUnsavedChangesModal]);
 
+  useEffect(() => {
+    if (recentlyAddedMeaningIndex === null || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setRecentlyAddedMeaningIndex(null);
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [recentlyAddedMeaningIndex]);
+
+  useEffect(() => {
+    if (recentlyAddedExampleKey === null || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setRecentlyAddedExampleKey(null);
+    }, 1100);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [recentlyAddedExampleKey]);
+
   const canUseVideoLayer = (key) => {
     const conflictMessage = getVideoLayerConflictMessage(key);
 
@@ -2685,7 +2760,147 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     return true;
   };
 
+  const getEditorScrollTopOffset = () => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      return 88;
+    }
+
+    return 112;
+  };
+
+  const scrollCardIntoComfortableView = (cardElement) => {
+    if (typeof window === "undefined" || !cardElement) return;
+
+    const cardRect = cardElement.getBoundingClientRect();
+    const targetTop = Math.max(
+      0,
+      window.scrollY + cardRect.top - getEditorScrollTopOffset()
+    );
+
+    window.scrollTo({
+      top: targetTop,
+      behavior: "smooth",
+    });
+  };
+
+  const focusFirstEditableField = (
+    cardElement,
+    preferredSelectors = [],
+    focusDelay = 220
+  ) => {
+    if (!cardElement || typeof cardElement.querySelector !== "function") {
+      return false;
+    }
+
+    const fallbackSelectors = [
+      'input:not([type="hidden"]):not([disabled])',
+      "textarea:not([disabled])",
+      "select:not([disabled])",
+    ];
+    const selectors = [...preferredSelectors, ...fallbackSelectors];
+    const targetField = selectors.reduce((current, selector) => {
+      if (current) return current;
+      return cardElement.querySelector(selector);
+    }, null);
+
+    if (!targetField || typeof targetField.focus !== "function") {
+      return false;
+    }
+
+    window.setTimeout(() => {
+      try {
+        targetField.focus({ preventScroll: true });
+      } catch {
+        targetField.focus();
+      }
+    }, focusDelay);
+
+    return true;
+  };
+
+  const revealMeaningCardForEditing = (
+    meaningIndex,
+    options = { shouldHighlight: false }
+  ) => {
+    const { shouldHighlight = false } = options;
+
+    if (shouldHighlight) {
+      setRecentlyAddedMeaningIndex(meaningIndex);
+    }
+
+    const ensureVisible = (attempt = 0) => {
+      const meaningCard = meaningCardRefs.current[meaningIndex];
+
+      if (meaningCard) {
+        scrollCardIntoComfortableView(meaningCard);
+        const didFocus = focusFirstEditableField(meaningCard, [
+          `input[name="meaning-field-${meaningIndex}"]`,
+        ]);
+
+        if (didFocus || attempt >= 12 || typeof window === "undefined") {
+          return;
+        }
+      }
+
+      if (attempt < 12 && typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          ensureVisible(attempt + 1);
+        });
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        ensureVisible();
+      });
+    }
+  };
+
+  const revealExampleCardForEditing = (
+    meaningIndex,
+    exampleIndex,
+    options = { shouldHighlight: false }
+  ) => {
+    const exampleKey = getExampleKey(meaningIndex, exampleIndex);
+    const { shouldHighlight = false } = options;
+
+    if (shouldHighlight) {
+      setRecentlyAddedExampleKey(exampleKey);
+    }
+
+    const ensureVisible = (attempt = 0) => {
+      const exampleCard = exampleCardRefs.current[exampleKey];
+
+      if (exampleCard) {
+        scrollCardIntoComfortableView(exampleCard);
+        const didFocus = focusFirstEditableField(exampleCard, [
+          `input[name="example-sentence-field-${meaningIndex}-${exampleIndex}"]`,
+        ]);
+
+        if (didFocus || attempt >= 12 || typeof window === "undefined") {
+          return;
+        }
+      }
+
+      if (attempt < 12 && typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          ensureVisible(attempt + 1);
+        });
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        ensureVisible();
+      });
+    }
+  };
+
   const toggleMeaningExpanded = (idx) => {
+    const shouldExpandMeaning = !expandedMeanings[idx];
     resetActiveVideoPreview();
 
     setExpandedMeanings((current) => {
@@ -2711,12 +2926,21 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
       return { ...current, [idx]: !current[idx] };
     });
+
+    if (shouldExpandMeaning) {
+      revealMeaningCardForEditing(idx);
+    }
   };
 
   const toggleExampleExpanded = (mIdx, eIdx) => {
     const key = getExampleKey(mIdx, eIdx);
+    const shouldExpandExample = !expandedExamples[key];
     resetActiveVideoPreview();
     setExpandedExamples((current) => ({ ...current, [key]: !current[key] }));
+
+    if (shouldExpandExample) {
+      revealExampleCardForEditing(mIdx, eIdx);
+    }
   };
 
   const updateMeaning = (idx, field, value) => {
@@ -2757,12 +2981,21 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     setMeanings(updated);
   };
 
+  const isExampleDraftEmpty = (example = {}) =>
+    !normalizeExampleText(example?.sentence) &&
+    !normalizeExampleText(example?.translation) &&
+    normalizeExampleVideos(example).length === 0;
+
   const addMeaning = () => {
     const nextIndex = meanings.length;
+    const firstExampleKey = getExampleKey(nextIndex, 0);
+
     resetActiveVideoPreview();
-    setMeanings([...meanings, { ...emptyMeaning, examples: [] }]);
-    setExpandedMeanings((current) => ({ ...current, [nextIndex]: false }));
+    setMeanings([...meanings, { ...emptyMeaning, examples: [{ ...emptyExample }] }]);
+    setExpandedMeanings((current) => ({ ...current, [nextIndex]: true }));
+    setExpandedExamples((current) => ({ ...current, [firstExampleKey]: false }));
     setPendingNewMeanings((current) => ({ ...current, [nextIndex]: true }));
+    revealMeaningCardForEditing(nextIndex, { shouldHighlight: true });
   };
 
   const removeMeaning = async (idx) => {
@@ -2831,13 +3064,31 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const addExample = (mIdx) => {
     const updated = [...meanings];
-    const nextExampleIndex = updated[mIdx].examples.length;
+    const currentExamples = updated[mIdx]?.examples || [];
+    const reusableEmptyExampleIndex = currentExamples.findIndex((example, index) => {
+      const exampleKey = getExampleKey(mIdx, index);
+      return isExampleDraftEmpty(example) && !expandedExamples[exampleKey];
+    });
 
     resetActiveVideoPreview();
 
+    if (reusableEmptyExampleIndex >= 0) {
+      setExpandedExamples((current) => ({
+        ...current,
+        [getExampleKey(mIdx, reusableEmptyExampleIndex)]: true,
+      }));
+
+      revealExampleCardForEditing(mIdx, reusableEmptyExampleIndex, {
+        shouldHighlight: true,
+      });
+      return;
+    }
+
+    const nextExampleIndex = currentExamples.length;
+
     updated[mIdx] = {
       ...updated[mIdx],
-      examples: [...updated[mIdx].examples, { ...emptyExample }],
+      examples: [...currentExamples, { ...emptyExample }],
     };
 
     setMeanings(updated);
@@ -2846,6 +3097,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       ...current,
       [getExampleKey(mIdx, nextExampleIndex)]: true,
     }));
+
+    revealExampleCardForEditing(mIdx, nextExampleIndex, {
+      shouldHighlight: true,
+    });
   };
 
   const removeExample = async (mIdx, eIdx) => {
@@ -2863,10 +3118,13 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       }
 
       const updated = [...meanings];
+      const remainingExamples = updated[mIdx].examples.filter(
+        (_, index) => index !== eIdx
+      );
 
       updated[mIdx] = {
         ...updated[mIdx],
-        examples: updated[mIdx].examples.filter((_, index) => index !== eIdx),
+        examples: remainingExamples.length > 0 ? remainingExamples : [{ ...emptyExample }],
       };
 
       setMeanings(updated);
@@ -3048,7 +3306,12 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   };
 
   const handleSave = async () => {
-    if (!term.trim() || !hasPendingChanges) return;
+    if (!hasPendingChanges) return;
+
+    if (!term.trim()) {
+      alert("Preencha a palavra ou frase em inglês antes de salvar.");
+      return;
+    }
 
     if (!user?.id) {
       alert("Usuário não identificado.");
@@ -3177,7 +3440,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const newWordVideoUploadError = videoUploadErrors[NEW_WORD_VIDEO_KEY] || "";
   const totalExamples = meanings.reduce(
-    (total, meaningItem) => total + (meaningItem.examples?.length || 0),
+    (total, meaningItem) =>
+      total +
+      (meaningItem.examples || []).filter((example) => !isExampleDraftEmpty(example))
+        .length,
     0
   );
   const meaningVideoCount = meanings.reduce(
@@ -3199,45 +3465,29 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const completedMeanings = meanings.filter((meaningItem) =>
     normalizeText(meaningItem.meaning)
   ).length;
-  const saveStatusTone = saving
-    ? "warning"
-    : !term.trim()
-    ? "danger"
-    : hasPendingChanges
-    ? "warning"
-    : "success";
-  const saveStatusLabel = saving
-    ? "Salvando"
-    : !term.trim()
-    ? "Informe a palavra/frase"
-    : hasPendingChanges
-    ? "Alterações pendentes"
-    : "Tudo salvo";
-  const saveStatusIcon = saving ? (
-    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-  ) : !term.trim() ? (
-    <AlertTriangle className="h-3.5 w-3.5" />
-  ) : hasPendingChanges ? (
-    <PencilLine className="h-3.5 w-3.5" />
-  ) : (
-    <ShieldCheck className="h-3.5 w-3.5" />
+  const hasAnyMeaningContent = meanings.some(
+    (meaningItem) =>
+      normalizeText(meaningItem.meaning) ||
+      normalizeText(meaningItem.tip) ||
+      normalizeMeaningVideos(meaningItem).length > 0 ||
+      (meaningItem.examples || []).some((example) => !isExampleDraftEmpty(example))
   );
 
   return (
     <>
-      <div className="mx-auto w-full max-w-6xl pb-10 md:pb-8">
-      <div className="mb-8 px-1 py-2">
+      <div className="manager-form-editor-shell mx-auto w-full max-w-6xl overflow-x-hidden overscroll-x-none touch-pan-y pb-10 md:pb-8 md:pl-12 lg:pl-14">
+      <div className="mb-5 px-2 py-1 md:mb-8 md:px-1 md:py-2">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <button
               type="button"
               onClick={handleBackClick}
-              className="mb-5 inline-flex min-h-[40px] touch-manipulation items-center gap-2 rounded-full border border-transparent px-2.5 text-sm font-semibold text-[#0066CC] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:text-[#66B7FF] dark:hover:bg-[#2C2C2E]"
+              className="mb-3 inline-flex min-h-[40px] touch-manipulation items-center gap-2 rounded-full border border-transparent px-2.5 text-sm font-semibold text-[#0066CC] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:text-[#66B7FF] dark:hover:bg-[#2C2C2E] md:mb-5"
             >
               <ArrowLeft className="h-4 w-4" /> Voltar
             </button>
 
-            <h1 className="mt-4 text-3xl font-semibold tracking-[-0.015em] text-[#1D1D1F] dark:text-[#F5F5F7] md:text-4xl">
+            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.015em] text-[#1D1D1F] dark:text-[#F5F5F7] md:mt-4 md:text-4xl">
               {item ? "Editar palavra ou frase" : "Nova palavra ou frase"}
             </h1>
             <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[#6E6E73] dark:text-[#A1A1A6]">
@@ -3276,7 +3526,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-8">
+      <div className="flex min-w-0 flex-col gap-6 md:gap-8">
         <section className="order-1 rounded-[28px] border border-[#E5E5EA] bg-white p-5 shadow-none ring-1 ring-black/[0.025] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05] md:p-6">
           <SectionHeader
             eyebrow="Camada 1"
@@ -3316,7 +3566,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </div>
         </section>
 
-        <section className="order-2 space-y-4">
+        <section className="order-2 space-y-4 px-2 sm:px-0">
           <SectionHeader
             eyebrow="Camada 2"
             title="Significados, dicas e exemplos"
@@ -3331,7 +3581,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               <button
                 type="button"
                 onClick={addMeaning}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#0071E3] px-4 py-2 text-sm font-semibold text-white shadow-none transition-colors hover:bg-[#0077ED] active:bg-[#006EDB] dark:bg-[#0A84FF] dark:hover:bg-[#2290FF]"
+                className={`min-h-10 items-center justify-center gap-2 rounded-full bg-[#0071E3] px-4 py-2 text-sm font-semibold text-white shadow-none transition-colors hover:bg-[#0077ED] active:bg-[#006EDB] dark:bg-[#0A84FF] dark:hover:bg-[#2290FF] ${
+                  hasAnyMeaningContent ? "inline-flex" : "hidden md:inline-flex"
+                }`}
               >
                 <Plus className="h-4 w-4" /> Adicionar significado
               </button>
@@ -3345,9 +3597,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               const isMeaningEmpty = !meaningTitle;
               const isPendingNewMeaning = Boolean(pendingNewMeanings[mIdx]);
               const shouldUseEmptyMeaningAccent =
-                isPendingNewMeaning && isMeaningEmpty;
-              const meaningDisplayTitle =
-                meaningTitle || "adicionar aqui novo significado";
+                (isPendingNewMeaning || !hasAnyMeaningContent) && isMeaningEmpty;
+              const meaningDisplayTitle = meaningTitle || "Adicionar significado";
               const accentIndex =
                 meaningAccentIndexes[mIdx] ??
                 (mIdx % activeMeaningAccentPalette.length);
@@ -3368,26 +3619,46 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               const newMeaningVideoKey = getNewMeaningVideoKey(mIdx);
               const newMeaningVideoUploadError =
                 videoUploadErrors[newMeaningVideoKey] || "";
-              const meaningExamplesLabel = `${meaningItem.examples.length} ${
-                meaningItem.examples.length === 1 ? "exemplo" : "exemplos"
+              const filledExamplesCount = meaningItem.examples.filter(
+                (example) => !isExampleDraftEmpty(example)
+              ).length;
+              const meaningExamplesLabel = `${filledExamplesCount} ${
+                filledExamplesCount === 1 ? "exemplo" : "exemplos"
               }`;
               const meaningCardClassName = shouldUseEmptyMeaningAccent
-                ? "border-[#F2D7D5] dark:border-[#5A2521]"
+                ? "border-[#E5E5EA] dark:border-[#2C2C2E]"
                 : isExpanded
                   ? "border-[#D6E8FA] shadow-[0_14px_36px_rgba(15,23,42,0.08)] dark:border-[#244B72] dark:shadow-[0_18px_38px_rgba(0,0,0,0.28)]"
                   : "border-[#E5E5EA] dark:border-[#2C2C2E]";
-              const meaningHeaderClassName = isExpanded
-                ? "border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
-                : "border-[#E5E5EA] bg-[#FBFBFD] hover:bg-white dark:border-[#2C2C2E] dark:bg-[#1A1C20] dark:hover:bg-[#20242B]";
+              const meaningHeaderClassName = shouldUseEmptyMeaningAccent
+                ? isExpanded
+                  ? "border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
+                  : "border-transparent bg-[#FBFBFD] hover:bg-white dark:bg-[#1A1C20] dark:hover:bg-[#20242B]"
+                : isExpanded
+                  ? "border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
+                  : "border-[#E5E5EA] bg-[#FBFBFD] hover:bg-white dark:border-[#2C2C2E] dark:bg-[#1A1C20] dark:hover:bg-[#20242B]";
               const meaningIndexClassName = isExpanded
                 ? "border-[#0071E3] bg-[#0071E3] text-white shadow-[0_8px_18px_rgba(0,113,227,0.22)] dark:border-[#0A84FF] dark:bg-[#0A84FF] dark:shadow-[0_10px_20px_rgba(10,132,255,0.28)]"
                 : "border-[#E5E5EA] bg-[#F5F5F7] text-[#6E6E73] dark:border-[#3A3A3C] dark:bg-[#2A2D33] dark:text-[#D1D1D6]";
+              const emptyMeaningIndexClassName = isExpanded
+                ? "border-[#0071E3] bg-[#0071E3] text-white shadow-[0_8px_18px_rgba(0,113,227,0.22)] dark:border-[#0A84FF] dark:bg-[#0A84FF] dark:shadow-[0_10px_20px_rgba(10,132,255,0.28)]"
+                : "border-[#D6E8FA] bg-[#F5FAFF] text-[#0071E3] dark:border-[#244B72] dark:bg-[#102235] dark:text-[#66B7FF]";
 
               return (
                 <div
                   key={mIdx}
-                  className={`overflow-hidden rounded-[28px] border bg-white ring-1 ring-black/[0.025] transition-all duration-200 dark:bg-[#17181C] dark:ring-white/[0.05] ${meaningCardClassName}`}
-                  style={shouldUseEmptyMeaningAccent ? { borderColor: emptyMeaningAccent.border } : undefined}
+                  ref={(element) => {
+                    if (element) {
+                      meaningCardRefs.current[mIdx] = element;
+                    } else {
+                      delete meaningCardRefs.current[mIdx];
+                    }
+                  }}
+                  className={`overflow-hidden rounded-[28px] border bg-white ring-1 ring-black/[0.025] transition-all duration-200 dark:bg-[#17181C] dark:ring-white/[0.05] ${meaningCardClassName} ${
+                    recentlyAddedMeaningIndex === mIdx
+                      ? "manager-form-editor-card-created"
+                      : ""
+                  }`}
                 >
                   <div
                     role="button"
@@ -3405,15 +3676,24 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                     <div className="min-w-0 flex flex-1 items-center gap-3 text-left">
                       <span className="min-w-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 leading-snug">
                         {shouldUseEmptyMeaningAccent ? (
-                          <span
-                            className="min-w-0 break-words text-sm font-normal leading-snug"
-                            style={{
-                              color: emptyMeaningAccent.bar,
-                              overflowWrap: "anywhere",
-                            }}
-                          >
-                            {meaningDisplayTitle}
-                          </span>
+                          <>
+                            <span
+                              className={`inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full border px-2 text-xs font-semibold transition-all duration-200 ${emptyMeaningIndexClassName}`}
+                              aria-hidden="true"
+                            >
+                              <Plus className="h-4 w-4 stroke-[2.2]" />
+                            </span>
+                            <span
+                              className={`min-w-0 break-words text-base font-semibold leading-snug transition-colors ${
+                                isExpanded
+                                  ? "text-[#111827] dark:text-[#F5F5F7]"
+                                  : "text-[#1D1D1F] dark:text-[#F2F4F8]"
+                              }`}
+                              style={{ overflowWrap: "anywhere" }}
+                            >
+                              {meaningDisplayTitle}
+                            </span>
+                          </>
                         ) : (
                           <>
                             <span
@@ -3441,13 +3721,13 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-center">
                       <StatusPill
                         tone="neutral"
-                        className="min-h-8 border-[#E5E5EA] bg-[#FFFFFF]/88 px-3 text-[11px] text-[#51545B] dark:border-[#343943] dark:bg-[#20242B] dark:text-[#C8CDD5]"
+                        className="hidden min-h-8 border-[#E5E5EA] bg-[#FFFFFF]/88 px-3 text-[11px] text-[#51545B] dark:border-[#343943] dark:bg-[#20242B] dark:text-[#C8CDD5] md:inline-flex"
                       >
                         {meaningExamplesLabel}
                       </StatusPill>
 
                       {hasAnyVideoInsideMeaning ? (
-                        <VideoAttachedBadge className="min-h-8 border-[#D6E8FA] bg-[#F8FBFF] px-3 text-[11px] dark:border-[#21476E] dark:bg-[#122338] dark:text-[#79BDFF]" />
+                        <VideoAttachedBadge className="h-8 w-8" />
                       ) : null}
 
                       {meanings.length > 1 ? (
@@ -3479,10 +3759,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                   </div>
 
                   {isExpanded ? (
-                    <div className="space-y-5 p-4 md:p-5">
-                      <div className="space-y-4 border-b border-[#E5E5EA] pb-5 dark:border-[#2C2C2E]">
+                    <div className="flex flex-col gap-5 p-4 md:p-5">
+                      <div className="order-1 border-b border-[#E5E5EA] pb-5 dark:border-[#2C2C2E]">
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-                          <div>
+                          <div className="hidden md:block">
                             <MeaningLanguageLabel />
                             <input
                               type="text"
@@ -3532,41 +3812,25 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                           </div>
                         </div>
 
-                        <div className="rounded-[22px] border border-[#E5E5EA] bg-[#FAFAFC] p-4 dark:border-[#2C2C2E] dark:bg-[#111113]">
-                          <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
-                            <Lightbulb className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
-                            Dica de uso
-                          </label>
-
-                          <input
-                            type="text"
-                            value={meaningItem.tip}
-                            onChange={(e) =>
-                              updateMeaning(mIdx, "tip", e.target.value)
-                            }
-                            placeholder="Explique quando usar este significado"
-                            className="min-h-11 w-full rounded-[16px] border border-[#D2D2D7] bg-white px-3.5 py-2 text-sm italic text-[#424245] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#1C1C1E] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
-                          />
-                        </div>
-
-
                       </div>
 
-                      <div>
+                      <div className="order-3 md:order-2">
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
                             <BookOpenText className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
                             <span>Exemplos</span>
                           </span>
 
-                          <button
-                            type="button"
-                            onClick={() => addExample(mIdx)}
-                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
-                          >
-                            <Plus className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
-                            Adicionar exemplo
-                          </button>
+                          {filledExamplesCount > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => addExample(mIdx)}
+                              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                            >
+                              <Plus className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
+                              Adicionar exemplo
+                            </button>
+                          ) : null}
                         </div>
 
                         <div className="space-y-3">
@@ -3602,6 +3866,20 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             const isExampleExpanded = Boolean(
                               expandedExamples[exampleKey]
                             );
+                            const isExampleEmptyDraft = isExampleDraftEmpty(example);
+                            const shouldShowEmptyExamplePlaceholder =
+                              filledExamplesCount === 0 &&
+                              isExampleEmptyDraft &&
+                              !isExampleExpanded;
+                            const shouldShowExampleCard =
+                              !isExampleEmptyDraft ||
+                              isExampleExpanded ||
+                              shouldShowEmptyExamplePlaceholder;
+
+                            if (!shouldShowExampleCard) {
+                              return null;
+                            }
+
                             const isDeletingExample =
                               deletingVideoKey === exampleKey;
                             const exampleSentence = normalizeExampleText(
@@ -3611,8 +3889,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               example?.translation
                             );
                             const exampleTitle =
-                              exampleTranslation || exampleSentence || "adicione aqui exemplo";
-                            const isExampleEmpty = !exampleTranslation && !exampleSentence;
+                              exampleTranslation || exampleSentence || "Adicionar exemplo";
+                            const isExampleEmpty = isExampleEmptyDraft;
                             const newExampleVideoKey = getNewExampleVideoKey(
                               mIdx,
                               eIdx
@@ -3621,11 +3899,28 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               videoEditor.key === newExampleVideoKey;
                             const newExampleVideoUploadError =
                               videoUploadErrors[newExampleVideoKey] || "";
+                            const exampleCardClassName = shouldShowEmptyExamplePlaceholder
+                              ? "border-[#E5E5EA] bg-[#FBFBFD] dark:border-[#2C2C2E] dark:bg-[#1A1C20]"
+                              : "border-[#E5E5EA] bg-white dark:border-[#2C2C2E] dark:bg-[#1C1C1E]";
+                            const exampleHeaderClassName = shouldShowEmptyExamplePlaceholder
+                              ? "group flex cursor-pointer items-stretch justify-between gap-3 border-b-0 bg-[#FBFBFD] px-4 py-4 transition-colors hover:bg-white dark:bg-[#1A1C20] dark:hover:bg-[#20242B]"
+                              : "group flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-3 transition-colors hover:bg-[#FAFAFC] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#2C2C2E]";
 
                             return (
                               <div
                                 key={exampleKey}
-                                className="overflow-hidden rounded-[22px] border border-[#E5E5EA] bg-white shadow-none dark:border-[#2C2C2E] dark:bg-[#1C1C1E]"
+                                ref={(element) => {
+                                  if (element) {
+                                    exampleCardRefs.current[exampleKey] = element;
+                                  } else {
+                                    delete exampleCardRefs.current[exampleKey];
+                                  }
+                                }}
+                                className={`overflow-hidden rounded-[22px] border shadow-none ${exampleCardClassName} ${
+                                  recentlyAddedExampleKey === exampleKey
+                                    ? "manager-form-editor-card-created"
+                                    : ""
+                                }`}
                               >
                                 <div
                                   role="button"
@@ -3642,16 +3937,16 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                       toggleExampleExpanded(mIdx, eIdx);
                                     }
                                   }}
-                                  className="group flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-3 transition-colors hover:bg-[#FAFAFC] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#2C2C2E]"
+                                  className={exampleHeaderClassName}
                                   aria-expanded={isExampleExpanded}
                                 >
                                   <div className="min-w-0 flex flex-1 items-center gap-2 text-left">
                                     {isExampleEmpty ? (
                                       <span
-                                        className="min-w-0 truncate text-sm font-normal"
-                                        style={{ color: emptyMeaningAccent.bar }}
+                                        className="inline-flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-[#6E6E73] dark:text-[#D1D1D6]"
                                         title={exampleTitle}
                                       >
+                                        <Plus className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
                                         {exampleTitle}
                                       </span>
                                     ) : (
@@ -3679,20 +3974,24 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                   </div>
 
                                   <div className="flex shrink-0 items-center gap-1.5 self-center">
-                                    {hasVideo ? <VideoAttachedBadge /> : null}
+                                    {hasVideo ? (
+                                      <VideoAttachedBadge className="h-7 w-7" />
+                                    ) : null}
 
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        void removeExample(mIdx, eIdx);
-                                      }}
-                                      disabled={isDeletingExample}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#86868B] transition-colors hover:bg-[#FFF7F6] hover:text-[#B42318] dark:text-[#A1A1A6] dark:hover:bg-[#2B1513] dark:hover:text-[#FF9F95] disabled:opacity-50"
-                                      aria-label={`Remover exemplo ${eIdx + 1}`}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
+                                    {!shouldShowEmptyExamplePlaceholder ? (
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          void removeExample(mIdx, eIdx);
+                                        }}
+                                        disabled={isDeletingExample}
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#86868B] transition-colors hover:bg-[#FFF7F6] hover:text-[#B42318] dark:text-[#A1A1A6] dark:hover:bg-[#2B1513] dark:hover:text-[#FF9F95] disabled:opacity-50"
+                                        aria-label={`Remover exemplo ${eIdx + 1}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    ) : null}
 
                                     <span
                                       className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-[#6E6E73] transition-colors duration-200 group-hover:text-[#1D1D1F] dark:text-[#A1A1A6] dark:group-hover:text-[#F5F5F7]"
@@ -3737,6 +4036,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                               placeholder={`Exemplo ${
                                                 eIdx + 1
                                               } em inglês`}
+                                              name={`example-sentence-field-${mIdx}-${eIdx}`}
                                               className="w-full rounded-[16px] border border-[#D2D2D7] bg-white px-3.5 py-2 text-sm text-[#1D1D1F] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
                                             />
                                           </div>
@@ -3757,6 +4057,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                                   e.target.value
                                                 )
                                               }
+                                              name={`example-translation-field-${mIdx}-${eIdx}`}
                                               placeholder="Tradução em português"
                                               className="w-full rounded-[16px] border border-[#D2D2D7] bg-white px-3.5 py-2 text-sm text-[#1D1D1F] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
                                             />
@@ -3837,6 +4138,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                             }
                                             isPreviewActive={isCurrentPreviewActive}
                                             showPreview={false}
+                                            showHeaderVideoAttachedIndicator={false}
                                             removeButtonMode="mobile-icon"
                                             promoteRemoveToHeader
                                             layerIcon={<Clapperboard className="h-4 w-4" />}
@@ -4083,6 +4385,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         </div>
                       </div>
 
+                      <div className="order-4 md:order-3">
                         {hasWordLevelVideos ? (
                           <LayerRuleNotice>
                             Este significado está usando o vídeo geral da palavra/frase. Para anexar vídeo aqui, remova primeiro o vídeo geral.
@@ -4360,6 +4663,54 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             </div>
                           )}
                         </div>
+                      </div>
+
+                      <div className="order-5 md:hidden">
+                        <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#6E6E73] dark:text-[#A1A1A6]">
+                          <Hash className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
+                          <span>Tag</span>
+                        </label>
+
+                        <div className="relative">
+                          <select
+                            value={meaningItem.category}
+                            onChange={(e) =>
+                              updateMeaning(mIdx, "category", e.target.value)
+                            }
+                            className="w-full appearance-none rounded-[16px] border border-[#D2D2D7] bg-white py-2.5 pl-3 pr-11 text-sm font-semibold text-[#1D1D1F] transition-all focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
+                          >
+                            {categories.map((category) => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ))}
+                          </select>
+
+                          <span
+                            className="pointer-events-none absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-[#6E6E73] transition-colors dark:text-[#D1D1D6]"
+                            aria-hidden="true"
+                          >
+                            <ChevronDown className="h-4 w-4 stroke-[2.2]" />
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="order-6 rounded-[22px] border border-[#E5E5EA] bg-[#FAFAFC] p-4 dark:border-[#2C2C2E] dark:bg-[#111113] md:order-4">
+                        <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
+                          <Lightbulb className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
+                          Dica de uso
+                        </label>
+
+                        <input
+                          type="text"
+                          value={meaningItem.tip}
+                          onChange={(e) =>
+                            updateMeaning(mIdx, "tip", e.target.value)
+                          }
+                          placeholder="Explique quando usar este significado"
+                          className="min-h-11 w-full rounded-[16px] border border-[#D2D2D7] bg-white px-3.5 py-2 text-sm italic text-[#424245] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#1C1C1E] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
+                        />
+                      </div>
 
                     </div>
                   ) : null}
@@ -4582,25 +4933,26 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           </section>
         ) : null}
 
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canSave}
-            className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#0071E3] px-5 py-2.5 text-sm font-semibold text-white shadow-none transition-colors dark:bg-[#0A84FF] ${
-              canSave
-                ? "hover:bg-[#0077ED] active:bg-[#006EDB] dark:hover:bg-[#2290FF]"
-                : "cursor-not-allowed opacity-55 shadow-none"
-            }`}
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {saving ? "Salvando..." : "Salvar alterações"}
-          </button>
-        </div>
+          <div className="order-5 pt-1 md:pt-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#0071E3] px-5 py-2.5 text-sm font-semibold text-white shadow-none transition-colors dark:bg-[#0A84FF] ${
+                canSave
+                  ? "hover:bg-[#0077ED] active:bg-[#006EDB] dark:hover:bg-[#2290FF]"
+                  : "cursor-not-allowed opacity-55 shadow-none"
+              }`}
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {saving ? "Salvando..." : "Salvar alterações"}
+            </button>
+          </div>
+
       </div>
 
     </div>
@@ -4613,3 +4965,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     </>
   );
 }
+
+
+
+
+
+
+
+

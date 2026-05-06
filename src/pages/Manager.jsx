@@ -14,6 +14,10 @@ import ManagerForm from "../components/ManagerForm";
 import ManagerImport from "../components/ManagerImport";
 import { createInitialStats, normalizeVocabularyItem } from "../lib/learningEngine";
 import {
+  getCachedVocabularyRows,
+  setCachedVocabularyRows,
+} from "../lib/vocabularyCache";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -445,15 +449,19 @@ export default function Manager() {
   const [deletingItemId, setDeletingItemId] = useState(null);
   const [deletingAll, setDeletingAll] = useState(false);
 
-  const loadVocab = async () => {
+  const loadVocab = async ({ showSpinner = true } = {}) => {
     if (!user?.id) {
       setVocab([]);
       setLoading(false);
       return;
     }
 
+    const hasCachedVocab = Array.isArray(getCachedVocabularyRows(user.id));
+
     try {
-      setLoading(true);
+      if (showSpinner || !hasCachedVocab) {
+        setLoading(true);
+      }
 
       const { data, error } = await supabase
         .from("vocabulary")
@@ -465,16 +473,36 @@ export default function Manager() {
         throw error;
       }
 
-      setVocab(Array.isArray(data) ? data.map(mapVocabularyRow) : []);
+      const rows = Array.isArray(data) ? data : [];
+      const normalizedData = rows.map(mapVocabularyRow);
+      setVocab(normalizedData);
+      setCachedVocabularyRows(user.id, rows);
     } catch (error) {
       console.error("Erro ao carregar vocabulário no Supabase:", error);
-      setVocab([]);
+      if (!hasCachedVocab) {
+        setVocab([]);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    if (!user?.id) {
+      setVocab([]);
+      setLoading(false);
+      return;
+    }
+
+    const cachedVocab = getCachedVocabularyRows(user.id);
+
+    if (Array.isArray(cachedVocab)) {
+      setVocab(cachedVocab.map(mapVocabularyRow));
+      setLoading(false);
+      loadVocab({ showSpinner: false });
+      return;
+    }
+
     loadVocab();
   }, [user?.id]);
 
@@ -499,7 +527,17 @@ export default function Manager() {
         throw error;
       }
 
-      setVocab((current) => current.filter((item) => item.id !== id));
+      setVocab((current) => {
+        const nextVocab = current.filter((item) => item.id !== id);
+        const cachedRows = getCachedVocabularyRows(user.id);
+        if (Array.isArray(cachedRows)) {
+          setCachedVocabularyRows(
+            user.id,
+            cachedRows.filter((item) => item?.id !== id)
+          );
+        }
+        return nextVocab;
+      });
       setItemToConfirmDelete(null);
     } catch (error) {
       console.error("Erro ao apagar item:", error);
@@ -548,6 +586,7 @@ export default function Manager() {
         throw error;
       }
 
+      setCachedVocabularyRows(user.id, []);
       setShowDeleteAll(false);
       loadVocab();
     } catch (error) {
