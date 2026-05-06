@@ -15,7 +15,6 @@ import {
   Lightbulb,
   Link2,
   Loader2,
-  PencilLine,
   Play,
   Plus,
   Save,
@@ -463,7 +462,7 @@ const normalizeExampleVideos = (example) => {
     ...normalizeVideoList(example?.exampleVideos, fallbackThumbnail),
     ...normalizeVideoList(example?.example_videos, fallbackThumbnail),
     ...normalizeVideoList(normalizeExampleVideo(example), fallbackThumbnail),
-  ]);
+  ]).slice(0, 1);
 };
 
 const extractIframeSrc = (value) => {
@@ -1094,7 +1093,7 @@ function FieldLabel({ children, icon }) {
   );
 }
 
-function MeaningLanguageLabel() {
+function MeaningLanguageLabel({ compact = false }) {
   return (
     <label
       className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold tracking-normal text-[#6E6E73] dark:text-[#A1A1A6]"
@@ -1102,19 +1101,25 @@ function MeaningLanguageLabel() {
     >
       <Languages className="h-4 w-4 text-[#0071E3] dark:text-[#0A84FF]" />
       <BrFlagIcon />
-      <span>Palavra ou frase em português</span>
+      <span>{compact ? "Sig. PT-BR" : "Significado de palavra ou frase em português"}</span>
       <span className="sr-only">Significado em português</span>
     </label>
   );
 }
 
 function ExampleLanguageLabel({ flag, code }) {
+  const isPortuguese = code === "PT-BR";
+  const fullLabel = isPortuguese
+    ? "Exemplo de frase em português"
+    : "Exemplo de frase em inglês";
+  const compactLabel = `Exemplo: ${code}`;
+
   return (
     <label className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold tracking-normal text-[#6E6E73] dark:text-[#A1A1A6]">
+      <Languages className="h-4 w-4 text-[#0071E3] dark:text-[#0A84FF]" />
       {flag}
-      <span>Sig.</span>
-      <span className="font-normal text-[#8E8E93] dark:text-[#8E8E93]">—</span>
-      <span>{code}</span>
+      <span className="hidden md:inline">{fullLabel}</span>
+      <span className="md:hidden">{compactLabel}</span>
     </label>
   );
 }
@@ -1313,6 +1318,7 @@ function AppendVideoPanel({
   onToggleContext,
   promoteRemoveToHeader = false,
   isEmbeddedInContext = false,
+  compactInfoHeader = false,
 }) {
   const shouldShowContextContent =
     !isContextCollapsible ||
@@ -1330,22 +1336,37 @@ function AppendVideoPanel({
           : "rounded-[22px] border border-[#E5E5EA] bg-[#FAFAFC] p-4 shadow-none dark:border-[#2C2C2E] dark:bg-[#1C1C1E]"
       }
     >
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className={compactInfoHeader ? "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" : "flex flex-col gap-3 md:flex-row md:items-start md:justify-between"}>
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
-              {title}
-            </span>
-            {countLabel ? (
-              <StatusPill tone="neutral">{countLabel}</StatusPill>
-            ) : null}
-          </div>
+          {compactInfoHeader ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
+                {title}
+              </span>
+              {description ? (
+                <span className="text-muted-foreground">
+                  {description}
+                </span>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
+                  {title}
+                </span>
+                {countLabel ? (
+                  <StatusPill tone="neutral">{countLabel}</StatusPill>
+                ) : null}
+              </div>
 
-          {description ? (
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
+              {description ? (
+                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  {description}
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
 
         {isContextCollapsible ? (
@@ -1362,6 +1383,14 @@ function AppendVideoPanel({
               <ChevronDown className="h-3.5 w-3.5" />
             )}
           </button>
+        ) : compactInfoHeader && countLabel ? (
+          <StatusPill
+            tone="neutral"
+            icon={<VideoAttachmentGlyph className="h-3.5 w-3.5" />}
+            className="shrink-0"
+          >
+            {countLabel}
+          </StatusPill>
         ) : !isEditing && helperLabel ? (
           <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6E6E73] ring-1 ring-black/[0.04] dark:bg-[#2C2C2E] dark:text-[#A1A1A6] dark:ring-white/[0.06]">
             {helperLabel}
@@ -1741,6 +1770,7 @@ function VideoControlCard({
   onToggleContext,
   promoteRemoveToHeader = false,
   showHeaderVideoAttachedIndicator = true,
+  mobileMinimalControls = false,
   children,
 }) {
   const hasVideo = Boolean(video);
@@ -1855,13 +1885,21 @@ function VideoControlCard({
   const mainActionLabel = hasVideo ? changeButtonLabel : addButtonLabel;
   const nextSaveLabel =
     saveButtonLabel || (hasVideo ? "Salvar troca" : "Anexar vídeo");
-  const actionGridClass = mobileCompact
+  const actionGridClass = mobileMinimalControls
+    ? "grid grid-cols-2 gap-2 max-md:items-center sm:flex sm:flex-wrap"
+    : mobileCompact
     ? showRemoveInlineIcon
       ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] items-center gap-2 sm:flex sm:flex-wrap"
       : "grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
     : "flex flex-wrap gap-2";
-  const secondaryButtonClass =
-    "inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[#D2D2D7] bg-white px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] focus:outline-none focus-visible:border-[#C7C7CC] focus-visible:ring-2 focus-visible:ring-black/[0.08] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C] dark:focus-visible:border-[#48484A] dark:focus-visible:ring-white/[0.1]";
+  const secondaryButtonClass = [
+    "inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[#D2D2D7] bg-white px-3.5 py-2 text-xs font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] focus:outline-none focus-visible:border-[#C7C7CC] focus-visible:ring-2 focus-visible:ring-black/[0.08] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C] dark:focus-visible:border-[#48484A] dark:focus-visible:ring-white/[0.1]",
+    mobileMinimalControls
+      ? "max-md:min-h-8 max-md:px-3 max-md:py-1.5 max-md:text-[11px]"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const primaryButtonClass =
     "inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#0071E3] px-4 py-2 text-xs font-semibold text-white shadow-none transition-colors hover:bg-[#0077ED] active:bg-[#006EDB] focus:outline-none focus-visible:ring-2 focus-visible:ring-black/[0.08] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-55 dark:bg-[#0A84FF] dark:hover:bg-[#2290FF] dark:focus-visible:ring-white/[0.1]";
   const dangerButtonClass =
@@ -1871,7 +1909,16 @@ function VideoControlCard({
   const neutralActionIconClass = "h-3.5 w-3.5 text-[#6E6E73] dark:text-[#A1A1A6]";
 
   return (
-    <div className="relative rounded-[22px] border border-[#E5E5EA] bg-white p-4 shadow-none ring-1 ring-black/[0.025] transition-colors dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05]">
+    <div
+      className={[
+        "relative rounded-[22px] border border-[#E5E5EA] bg-white p-4 shadow-none ring-1 ring-black/[0.025] transition-colors dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05]",
+        mobileMinimalControls
+          ? "max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:ring-0 max-md:dark:bg-transparent"
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {showRemoveIcon ? (
         <button
           type="button"
@@ -1894,12 +1941,51 @@ function VideoControlCard({
 
       <div className={contentLayoutClass}>
         <div className="min-w-0 space-y-3">
+          {mobileMinimalControls && hasVideo && !isEditing ? (
+            <div className="hidden max-md:grid max-md:grid-cols-2 max-md:items-center max-md:gap-3">
+              {isContextCollapsible ? (
+                <button
+                  type="button"
+                  onClick={onToggleContext}
+                  className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-4 py-1.5 text-[11px] font-semibold text-[#6E6E73] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#D1D1D6] dark:hover:bg-[#3A3A3C]"
+                  aria-expanded={shouldShowContextContent}
+                >
+                  {shouldShowContextContent ? "Ocultar" : "Mostrar"}
+                  {shouldShowContextContent ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              ) : null}
+
+              {showPromotedRemoveButton ? (
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  disabled={isDeleting}
+                  className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-full border border-[#F2D7D5] px-4 py-1.5 text-[11px] font-semibold text-[#B42318] transition-colors hover:bg-[#FFF7F6] active:bg-[#FCEDEA] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#5A2521] dark:text-[#FF9F95] dark:hover:bg-[#2B1513]"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  {isDeleting ? "Removendo" : "Remover"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           <div
-            className={
+            className={[
               promoteRemoveToHeader
                 ? "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                : "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
-            }
+                : "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+              mobileMinimalControls ? "max-md:hidden" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
             <div
               className={
@@ -1908,13 +1994,27 @@ function VideoControlCard({
                   : "flex min-w-0 gap-3"
               }
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F5F5F7] text-[#0071E3] ring-1 ring-black/[0.035] dark:bg-[#2C2C2E] dark:text-[#0A84FF] dark:ring-white/[0.06]">
+              <span
+                className={[
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F5F5F7] text-[#0071E3] ring-1 ring-black/[0.035] dark:bg-[#2C2C2E] dark:text-[#0A84FF] dark:ring-white/[0.06]",
+                  mobileMinimalControls ? "max-md:hidden" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
                 {layerIcon || <FileVideo className="h-4 w-4" />}
               </span>
 
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]">
+                  <span
+                    className={[
+                      "block text-[11px] font-semibold uppercase tracking-[0.1em] text-[#424245] dark:text-[#D1D1D6]",
+                      mobileMinimalControls ? "max-md:hidden" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
                     {title}
                   </span>
 
@@ -1936,7 +2036,14 @@ function VideoControlCard({
                 </div>
 
                 {description ? (
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  <p
+                    className={[
+                      "mt-1 text-xs leading-relaxed text-muted-foreground",
+                      mobileMinimalControls ? "max-md:hidden" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
                     {description}
                   </p>
                 ) : null}
@@ -2027,8 +2134,15 @@ function VideoControlCard({
                     disabled={isDeleting}
                     className={secondaryButtonClass}
                   >
-                    <PencilLine className={neutralActionIconClass} />
-                    {mainActionLabel}
+                    <Link2 className={neutralActionIconClass} />
+                    {mobileMinimalControls ? (
+                      <>
+                        <span className="md:hidden">Trocar vídeo</span>
+                        <span className="hidden md:inline">{mainActionLabel}</span>
+                      </>
+                    ) : (
+                      mainActionLabel
+                    )}
                   </button>
 
                   <button
@@ -2042,7 +2156,16 @@ function VideoControlCard({
                     ) : (
                       <Upload className="h-3.5 w-3.5" />
                     )}
-                    {isUploading ? "Enviando..." : uploadButtonText}
+                    {isUploading ? (
+                      "Enviando..."
+                    ) : mobileMinimalControls ? (
+                      <>
+                        <span className="md:hidden">Upload</span>
+                        <span className="hidden md:inline">{uploadButtonText}</span>
+                      </>
+                    ) : (
+                      uploadButtonText
+                    )}
                   </button>
 
                   {showRemoveInlineIcon ? (
@@ -2439,7 +2562,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           thumbnail: entry?.video ? normalizeText(entry?.thumbnail) : "",
         }))
         .filter((entry) => entry.video)
-    );
+    ).slice(0, 1);
     const firstExampleVideo = cleanExampleVideos[0] || {
       video: "",
       thumbnail: "",
@@ -2468,11 +2591,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
       if (!currentMeaning || !currentExample) return current;
 
-      const currentExampleVideos = normalizeExampleVideos(currentExample);
       const nextExamples = [...currentMeaning.examples];
 
       nextExamples[exampleIndex] = syncExampleVideoFields(currentExample, [
-        ...currentExampleVideos,
         {
           video: cleanVideo,
           thumbnail: normalizeText(thumbnail),
@@ -2509,7 +2630,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       const nextExampleVideos = [...currentExampleVideos];
       const nextExamples = [...currentMeaning.examples];
 
-      nextExampleVideos[videoIndex] = {
+      nextExampleVideos[0] = {
         video: cleanVideo,
         thumbnail: normalizeText(thumbnail),
       };
@@ -3567,17 +3688,27 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         </section>
 
         <section className="order-2 space-y-4 px-2 sm:px-0">
-          <SectionHeader
-            eyebrow="Camada 2"
-            title="Significados, dicas e exemplos"
-            description="Cada significado funciona como uma camada própria. Dentro dele você pode adicionar dica, vídeo do significado e exemplos com vídeo específico."
-            icon={<Layers3 className="h-3.5 w-3.5" />}
-            meta={
+          <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,720px)_auto] md:items-end md:justify-between md:gap-x-8">
+            <div className="min-w-0">
+              <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#86868B] dark:text-[#8E8E93]">
+                <Layers3 className="h-3.5 w-3.5" />
+                <span>Camada 2</span>
+              </div>
+
+              <h2 className="text-xl font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F5F5F7] md:text-2xl">
+                Significados, dicas e exemplos
+              </h2>
+
+              <p className="mt-1 max-w-full text-sm leading-relaxed text-muted-foreground md:max-w-[680px]">
+                Cada significado funciona como uma camada própria. Dentro dele você pode adicionar dica, vídeo do significado e exemplos com vídeo específico.
+              </p>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2 md:translate-y-1">
               <StatusPill tone="neutral">
                 {meanings.length} significado{meanings.length === 1 ? "" : "s"}
               </StatusPill>
-            }
-            action={
+
               <button
                 type="button"
                 onClick={addMeaning}
@@ -3587,8 +3718,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
               >
                 <Plus className="h-4 w-4" /> Adicionar significado
               </button>
-            }
-          />
+            </div>
+          </div>
 
           <div className="space-y-4">
             {meanings.map((meaningItem, mIdx) => {
@@ -3781,7 +3912,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             />
                           </div>
 
-                          <div>
+                          <div className="hidden md:block">
                             <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#6E6E73] dark:text-[#A1A1A6]">
                               <Hash className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
                               <span>Tag</span>
@@ -3812,6 +3943,25 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                           </div>
                         </div>
 
+                      </div>
+
+                      <div className="order-2 border-b border-[#E5E5EA] pb-5 dark:border-[#2C2C2E] md:hidden">
+                        <MeaningLanguageLabel compact />
+                        <input
+                          type="text"
+                          value={meaningItem.meaning}
+                          onChange={(e) =>
+                            updateMeaning(mIdx, "meaning", e.target.value)
+                          }
+                          placeholder="Significado em português"
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          name={`meaning-field-mobile-${mIdx}`}
+                          inputMode="text"
+                          className="w-full rounded-[16px] border border-[#D2D2D7] bg-white px-4 py-2.5 text-sm font-semibold text-[#1D1D1F] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
+                        />
                       </div>
 
                       <div className="order-3 md:order-2">
@@ -3890,6 +4040,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                             );
                             const exampleTitle =
                               exampleTranslation || exampleSentence || "Adicionar exemplo";
+                            const isExampleIncomplete =
+                              !shouldShowEmptyExamplePlaceholder &&
+                              (!exampleSentence || !exampleTranslation);
                             const isExampleEmpty = isExampleEmptyDraft;
                             const newExampleVideoKey = getNewExampleVideoKey(
                               mIdx,
@@ -3901,9 +4054,13 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               videoUploadErrors[newExampleVideoKey] || "";
                             const exampleCardClassName = shouldShowEmptyExamplePlaceholder
                               ? "border-[#E5E5EA] bg-[#FBFBFD] dark:border-[#2C2C2E] dark:bg-[#1A1C20]"
+                              : isExampleIncomplete
+                              ? "border-[#D6E8FA] bg-white shadow-[0_14px_36px_rgba(15,23,42,0.08)] dark:border-[#244B72] dark:bg-[#1C1C1E] dark:shadow-[0_18px_38px_rgba(0,0,0,0.28)]"
                               : "border-[#E5E5EA] bg-white dark:border-[#2C2C2E] dark:bg-[#1C1C1E]";
                             const exampleHeaderClassName = shouldShowEmptyExamplePlaceholder
                               ? "group flex cursor-pointer items-stretch justify-between gap-3 border-b-0 bg-[#FBFBFD] px-4 py-4 transition-colors hover:bg-white dark:bg-[#1A1C20] dark:hover:bg-[#20242B]"
+                              : isExampleIncomplete
+                              ? "group flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] px-4 py-3 transition-colors hover:bg-[#FAFAFC] dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)] dark:hover:bg-[#20242B]"
                               : "group flex cursor-pointer items-stretch justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-3 transition-colors hover:bg-[#FAFAFC] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#2C2C2E]";
 
                             return (
@@ -3916,8 +4073,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     delete exampleCardRefs.current[exampleKey];
                                   }
                                 }}
-                                className={`overflow-hidden rounded-[22px] border shadow-none ${exampleCardClassName} ${
-                                  recentlyAddedExampleKey === exampleKey
+                                className={`overflow-hidden rounded-[22px] border shadow-none transition-colors duration-200 ${exampleCardClassName} ${
+                                  recentlyAddedExampleKey === exampleKey && !isExampleIncomplete
                                     ? "manager-form-editor-card-created"
                                     : ""
                                 }`}
@@ -4139,6 +4296,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                             isPreviewActive={isCurrentPreviewActive}
                                             showPreview={false}
                                             showHeaderVideoAttachedIndicator={false}
+                                            mobileMinimalControls
                                             removeButtonMode="mobile-icon"
                                             promoteRemoveToHeader
                                             layerIcon={<Clapperboard className="h-4 w-4" />}
@@ -4226,108 +4384,51 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                               });
                                             }}
                                             uploadButtonText="Trocar por upload"
-                                          >
-                                            {videoIndex === exampleVideoEntries.length - 1 ? (
-                                              <>
-                                      <input
-                                        type="file"
-                                        accept="video/*"
-                                        className="hidden"
-                                        ref={(element) => {
-                                          if (element) {
-                                            fileInputsRef.current[newExampleVideoKey] =
-                                              element;
-                                          }
-                                        }}
-                                        onChange={(event) => {
-                                          const inputElement = event?.target;
-                                          const file = inputElement?.files?.[0];
-
-                                          if (inputElement) {
-                                            inputElement.value = "";
-                                          }
-
-                                          void handleVideoFileSelected({
-                                            key: newExampleVideoKey,
-                                            file,
-                                            scope: "example",
-                                            oldVideo: "",
-                                            onSuccess: ({ video, thumbnail }) =>
-                                              appendExampleVideo(mIdx, eIdx, {
-                                                video,
-                                                thumbnail,
-                                              }),
-                                          });
-                                        }}
-                                      />
-
-                                      <AppendVideoPanel
-                                        title="Adicionar vídeo ao exemplo"
-                                        description="Este vídeo será usado somente neste exemplo."
-                                        helperLabel="+ vídeo do exemplo"
-                                        countLabel={`${exampleVideoEntries.length} anexado${exampleVideoEntries.length === 1 ? "" : "s"}`}
-                                        isEmbeddedInContext
-                                        isEditing={isNewExampleVideoEditing}
-                                        editorValue={videoEditor.value}
-                                        uploadError={newExampleVideoUploadError}
-                                        isUploading={
-                                          uploadingVideoKey ===
-                                          newExampleVideoKey
-                                        }
-                                        isDeleting={
-                                          deletingVideoKey ===
-                                          newExampleVideoKey
-                                        }
-                                        onOpenEditor={() =>
-                                          openVideoEditor(
-                                            newExampleVideoKey,
-                                            ""
-                                          )
-                                        }
-                                        onEditorChange={(value) =>
-                                          setVideoEditor((current) => ({
-                                            ...current,
-                                            value,
-                                          }))
-                                        }
-                                        onSave={() =>
-                                          void saveVideoFromEditor({
-                                            key: newExampleVideoKey,
-                                            oldVideo: "",
-                                            onSuccess: ({
-                                              video,
-                                              thumbnail,
-                                            }) =>
-                                              appendExampleVideo(mIdx, eIdx, {
-                                                video,
-                                                thumbnail,
-                                              }),
-                                          })
-                                        }
-                                        onCancel={closeVideoEditor}
-                                        onTriggerUpload={() =>
-                                          triggerVideoFilePicker(
-                                            newExampleVideoKey
-                                          )
-                                        }
-                                        addButtonLabel="Adicionar por link"
-                                        uploadButtonLabel="Enviar arquivo"
-                                        saveButtonLabel="Anexar ao exemplo"
-                                      />
-                                              </>
-                                            ) : null}
-                                          </VideoControlCard>
+                                          />
                                         );
                                       })}
 
 
 
                                       {exampleVideoEntries.length === 0 ? (
-                                        <AppendVideoPanel
+                                        <>
+                                          <input
+                                            type="file"
+                                            accept="video/*"
+                                            className="hidden"
+                                            ref={(element) => {
+                                              if (element) {
+                                                fileInputsRef.current[newExampleVideoKey] =
+                                                  element;
+                                              }
+                                            }}
+                                            onChange={(event) => {
+                                              const inputElement = event?.target;
+                                              const file = inputElement?.files?.[0];
+
+                                              if (inputElement) {
+                                                inputElement.value = "";
+                                              }
+
+                                              void handleVideoFileSelected({
+                                                key: newExampleVideoKey,
+                                                file,
+                                                scope: "example",
+                                                oldVideo: "",
+                                                onSuccess: ({ video, thumbnail }) =>
+                                                  appendExampleVideo(mIdx, eIdx, {
+                                                    video,
+                                                    thumbnail,
+                                                  }),
+                                              });
+                                            }}
+                                          />
+
+                                          <AppendVideoPanel
                                           title="Adicionar vídeo ao exemplo"
                                           description="Este vídeo será usado somente neste exemplo."
-                                          helperLabel="+ vídeo do exemplo"
-                                          countLabel="0 anexados"
+                                          helperLabel=""
+                                          countLabel="0 vídeo anexado"
                                           isEditing={isNewExampleVideoEditing}
                                           editorValue={videoEditor.value}
                                           uploadError={newExampleVideoUploadError}
@@ -4374,7 +4475,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                           addButtonLabel="Adicionar por link"
                                           uploadButtonLabel="Enviar arquivo"
                                           saveButtonLabel="Anexar ao exemplo"
+                                          compactInfoHeader
                                         />
+                                        </>
                                       ) : null}
                                     </div>
                                   </div>
@@ -4385,8 +4488,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         </div>
                       </div>
 
-                      <div className="order-4 md:order-3">
-                        {hasWordLevelVideos ? (
+                      {!hasExampleVideoInsideMeaning ? (
+                        <div className="order-4 md:order-3">
+                          {hasWordLevelVideos ? (
                           <LayerRuleNotice>
                             Este significado está usando o vídeo geral da palavra/frase. Para anexar vídeo aqui, remova primeiro o vídeo geral.
                           </LayerRuleNotice>
@@ -4662,8 +4766,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               />
                             </div>
                           )}
+                          </div>
                         </div>
-                      </div>
+                      ) : null}
 
                       <div className="order-5 md:hidden">
                         <label className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-[#6E6E73] dark:text-[#A1A1A6]">
@@ -4965,11 +5070,3 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     </>
   );
 }
-
-
-
-
-
-
-
-
