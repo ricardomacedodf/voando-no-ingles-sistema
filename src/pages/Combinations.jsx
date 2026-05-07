@@ -42,6 +42,11 @@ const COMBINATIONS_POINTER_SFX_GUARD_MS = 700;
 const COMBINATIONS_MATCH_RESULT_GUARD_MS = 250;
 const COMBINATIONS_MOBILE_BREAKPOINT = 767;
 
+const NON_SELECTABLE_UI_STYLE = {
+  userSelect: "none",
+  WebkitUserSelect: "none",
+};
+
 function isMobileCombinationsViewport() {
   return (
     typeof window !== "undefined" &&
@@ -726,7 +731,7 @@ export default function Combinations() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
+      <div className="flex min-h-[400px] items-center justify-center" style={NON_SELECTABLE_UI_STYLE}>
         <div className="h-7 w-7 animate-spin rounded-full border-3 border-border border-t-primary" />
       </div>
     );
@@ -734,7 +739,7 @@ export default function Combinations() {
 
   if (allVocab.length < 2) {
     return (
-      <div className="py-20 text-center">
+      <div className="py-20 text-center" style={NON_SELECTABLE_UI_STYLE}>
         <p className="text-muted-foreground">
           Cadastre pelo menos 2 palavras para usar Combinações.
         </p>
@@ -758,7 +763,7 @@ export default function Combinations() {
 
   if (shouldShowRoundSummary) {
     return (
-      <div className="study-ui-controls flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
+      <div className="study-ui-controls flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0" style={NON_SELECTABLE_UI_STYLE}>
         <div className="w-full max-w-md text-center">
           <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 sm:h-16 sm:w-16">
             <Check className="h-10 w-10 text-primary sm:h-8 sm:w-8" />
@@ -791,7 +796,7 @@ export default function Combinations() {
 
   return (
     <div className="study-ui-controls mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:overflow-x-visible sm:space-y-6">
-      <div className="relative flex items-center justify-center sm:hidden">
+      <div className="relative flex items-center justify-center sm:hidden" style={NON_SELECTABLE_UI_STYLE}>
         <div className="min-w-0">
           <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
         </div>
@@ -809,7 +814,7 @@ export default function Combinations() {
         </button>
       </div>
 
-      <div className="hidden flex-wrap items-center justify-between gap-3 sm:flex">
+      <div className="hidden flex-wrap items-center justify-between gap-3 sm:flex" style={NON_SELECTABLE_UI_STYLE}>
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Combinações</h1>
           <button
@@ -829,7 +834,7 @@ export default function Combinations() {
         </div>
       </div>
 
-      <div className="sm:hidden">
+      <div className="sm:hidden" style={NON_SELECTABLE_UI_STYLE}>
         <div className="flex items-center gap-2 text-[11px] font-medium">
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">
             {progressCurrent} de {PAIRS_PER_ROUND}
@@ -857,7 +862,7 @@ export default function Combinations() {
         </div>
       </div>
 
-      <div className="hidden sm:block">
+      <div className="hidden sm:block" style={NON_SELECTABLE_UI_STYLE}>
         <div className="flex items-center gap-3 text-sm font-medium">
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">
             {progressCurrent} de {PAIRS_PER_ROUND}
@@ -885,7 +890,7 @@ export default function Combinations() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-[11px] sm:gap-[11px]">
+      <div className="grid grid-cols-2 gap-[11px] sm:gap-[11px]" style={NON_SELECTABLE_UI_STYLE}>
         <div className="space-y-[9px] sm:space-y-[10px]">
           {leftItems.map((item, idx) => {
             const isMatched = matched.has(`l${idx}`);
@@ -960,6 +965,7 @@ export default function Combinations() {
           type="button"
           onClick={handleConcludeRound}
           className="sm:hidden flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:hover:bg-primary/90 [-webkit-tap-highlight-color:transparent]"
+          style={NON_SELECTABLE_UI_STYLE}
         >
           Concluir rodada
         </button>
@@ -973,7 +979,7 @@ export default function Combinations() {
             variant="flashcard"
             disabled={!hasFocusedExamples || !canUseExamples}
             examplesPanelRef={examplesPanelRef}
-            className="hide-on-mobile-video-expanded"
+            className="hide-on-mobile-video-expanded select-none"
           />
 
           {showExamples ? (

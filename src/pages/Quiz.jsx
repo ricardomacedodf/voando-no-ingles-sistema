@@ -55,6 +55,16 @@ const QUIZ_SINGLE_LINE_LARGE_REDUCTION_MOBILE = 0.9;
 const QUIZ_MOBILE_SINGLE_LINE_FONT_SIZE = 32;
 const QUIZ_MOBILE_MULTI_LINE_FONT_SIZE = 28;
 
+const NON_SELECTABLE_UI_STYLE = {
+  userSelect: "none",
+  WebkitUserSelect: "none",
+};
+
+const SELECTABLE_STUDY_TEXT_STYLE = {
+  userSelect: "text",
+  WebkitUserSelect: "text",
+};
+
 function isMobileQuizViewport() {
   return (
     typeof window !== "undefined" &&
@@ -781,7 +791,7 @@ export default function Quiz() {
 
   if (allVocab.length < 4) {
     return (
-      <div className="py-20 text-center">
+      <div className="py-20 text-center" style={NON_SELECTABLE_UI_STYLE}>
         <p className="text-muted-foreground">Cadastre pelo menos 4 palavras para usar o Quiz.</p>
       </div>
     );
@@ -795,6 +805,7 @@ export default function Quiz() {
       type="button"
       onClick={answered ? handleNext : handleConfirm}
       disabled={!answered && selected === null}
+      style={NON_SELECTABLE_UI_STYLE}
       className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] ${
         answered
           ? "border-primary bg-primary text-primary-foreground shadow-[0_2px_0_rgba(37,177,95,0.26)] active:scale-[0.99]"
@@ -815,7 +826,7 @@ export default function Quiz() {
 
   if (roundDone) {
     return (
-      <div className="study-ui-controls flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
+      <div className="study-ui-controls flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0" style={NON_SELECTABLE_UI_STYLE}>
         <div className="w-full max-w-md text-center">
           <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 sm:h-16 sm:w-16">
             <Check className="h-10 w-10 text-primary sm:h-8 sm:w-8" />
@@ -850,7 +861,7 @@ export default function Quiz() {
 
   return (
     <div className="study-ui-controls mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:overflow-visible sm:space-y-6">
-      <div className="relative flex items-center justify-center sm:hidden">
+      <div className="relative flex items-center justify-center sm:hidden" style={NON_SELECTABLE_UI_STYLE}>
         <div className="min-w-0">
           <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
         </div>
@@ -867,7 +878,7 @@ export default function Quiz() {
         </button>
       </div>
 
-      <div className="hidden mx-auto w-full max-w-[760px] flex-wrap items-center justify-between gap-3 sm:flex">
+      <div className="hidden mx-auto w-full max-w-[760px] flex-wrap items-center justify-between gap-3 sm:flex" style={NON_SELECTABLE_UI_STYLE}>
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-foreground">Quiz</h1>
           <button
@@ -887,7 +898,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="sm:hidden">
+      <div className="sm:hidden" style={NON_SELECTABLE_UI_STYLE}>
         <div className="flex items-center gap-2 text-[11px] font-medium">
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">
             {progressCurrent} de {QUESTIONS_PER_ROUND}
@@ -915,7 +926,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="hidden mx-auto w-full max-w-[760px] sm:block">
+      <div className="hidden mx-auto w-full max-w-[760px] sm:block" style={NON_SELECTABLE_UI_STYLE}>
         <div className="flex items-center gap-3 text-sm font-medium">
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">
             {progressCurrent} de {QUESTIONS_PER_ROUND}
@@ -944,14 +955,14 @@ export default function Quiz() {
       </div>
 
       <div className="mx-auto w-full max-w-[760px] space-y-5 md:overflow-visible">
-        <div className="mx-auto w-full max-w-[671.2px] md:max-w-[760px] !rounded-[12.5px] border border-border bg-card p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] sm:!rounded-2xl sm:p-8">
+        <div className="mx-auto w-full max-w-[671.2px] md:max-w-[760px] !rounded-[12.5px] border border-border bg-card p-5 text-center shadow-[0_2px_0_rgba(148,163,184,0.24)] dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] sm:!rounded-2xl sm:p-8" style={NON_SELECTABLE_UI_STYLE}>
         <div
           ref={questionTextSlotRef}
           className="mx-auto flex h-[136px] min-h-[136px] w-full items-center justify-center overflow-hidden px-2 md:h-[132px] md:min-h-[132px]"
         >
           <p
             ref={questionTextRef}
-            className="m-0 mx-auto w-full break-words text-center font-bold leading-tight text-foreground [text-wrap:balance]"
+            className="m-0 mx-auto w-full select-text break-words text-center font-bold leading-tight text-foreground [text-wrap:balance]"
             style={{
               fontSize: `${questionTextStyle.fontSize}px`,
               lineHeight: `${questionTextStyle.lineHeight}px`,
@@ -961,6 +972,7 @@ export default function Quiz() {
               overflowWrap: questionTextStyle.overflowWrap,
               wordBreak: questionTextStyle.wordBreak,
               hyphens: questionTextStyle.hyphens,
+              ...SELECTABLE_STUDY_TEXT_STYLE,
             }}
           >
             {questionText}
@@ -968,7 +980,7 @@ export default function Quiz() {
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[671.2px] grid-cols-1 gap-2 md:max-w-[760px] md:grid-cols-2 md:gap-4">
+      <div className="mx-auto grid w-full max-w-[671.2px] grid-cols-1 gap-2 md:max-w-[760px] md:grid-cols-2 md:gap-4" style={NON_SELECTABLE_UI_STYLE}>
         {options.map((opt, idx) => {
           let classes =
             "bg-card border border-border text-[#4B5563] shadow-[0_2px_0_rgba(148,163,184,0.24)] md:hover:border-[#93c5fd] md:hover:bg-blue-50/30 dark:text-slate-300 dark:shadow-[0_2px_0_rgba(2,6,23,0.45)] dark:md:hover:border-sky-500/70 dark:md:hover:bg-sky-500/15";
@@ -1000,6 +1012,7 @@ export default function Quiz() {
               onPointerDown={() => handleOptionPointerDown(idx)}
               onClick={(event) => handleSelect(idx, event)}
               disabled={answered}
+              style={NON_SELECTABLE_UI_STYLE}
               className={`flex h-[clamp(59px,8.36svh,72px)] w-full items-center gap-3 rounded-[13px] border bg-card px-4 py-3 text-left text-sm font-medium outline-none transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 md:h-[65px] md:max-w-none md:justify-self-stretch md:rounded-[10px] disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] ${classes} ${
                 isWrongSelection ? "shake-top" : ""
               }`}
@@ -1020,7 +1033,7 @@ export default function Quiz() {
       </div>
 
       <div className="mx-auto w-full md:max-w-[760px]">
-        <div className="hide-on-mobile-video-expanded grid w-full grid-cols-2 items-start gap-x-3 gap-y-0 transition-[gap] duration-200">
+        <div className="hide-on-mobile-video-expanded grid w-full grid-cols-2 items-start gap-x-3 gap-y-0 transition-[gap] duration-200" style={NON_SELECTABLE_UI_STYLE}>
           <div
             className={[
               "min-w-0",

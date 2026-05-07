@@ -426,29 +426,39 @@ const getImmediateEmbedPlayback = (value) => {
 const isClipCafeEmbed = (value) =>
   normalizeVideoValue(value).toLowerCase().includes("clip.cafe");
 
-const getClipCafeFrameStyle = ({ isMobileLayout }) => {
-  // No mobile o iframe precisa obedecer exatamente o tamanho do wrapper.
-  // Usar transform/medidas em dvw/dvh aqui fazia o ClipCafe manter o layout
-  // interno antigo em alguns navegadores, principalmente Safari, gerando corte.
-  if (isMobileLayout) return undefined;
+const getBaseEmbedFrameStyle = ({ isMobileLayout }) => ({
+  // Overscan mínimo para eliminar filetes pretos de subpixel sem deformar.
+  left: "50%",
+  top: "50%",
+  width: isMobileLayout ? "102.4%" : "102%",
+  height: isMobileLayout ? "102.4%" : "102%",
+  transform: "translate(-50%, -50%)",
+  transformOrigin: "center center",
+  // Clampa micro-vazamentos de antialiasing nas bordas do iframe.
+  clipPath: "inset(1px)",
+  WebkitClipPath: "inset(1px)",
+});
 
+const getClipCafeFrameStyle = ({ isMobileLayout }) => {
+  // ClipCafe costuma renderizar com um pequeno gutter interno.
+  // Um overscan um pouco maior remove sobras sem achatamento.
   return {
-    left: "51%",
-    top: "50%",
-    width: "107%",
-    height: "107%",
-    transform: "translate(-50%, -50%) scale(0.95)",
-    transformOrigin: "center center",
-    clipPath: "inset(0.5px)",
+    width: isMobileLayout ? "103.8%" : "104.5%",
+    height: isMobileLayout ? "103.8%" : "104.5%",
   };
 };
 
 const getEmbedFrameStyle = ({ embedSrc, isMobileLayout, isMobileLandscape }) => {
+  const baseStyle = getBaseEmbedFrameStyle({ isMobileLayout, isMobileLandscape });
+
   if (isClipCafeEmbed(embedSrc)) {
-    return getClipCafeFrameStyle({ isMobileLayout, isMobileLandscape });
+    return {
+      ...baseStyle,
+      ...getClipCafeFrameStyle({ isMobileLayout, isMobileLandscape }),
+    };
   }
 
-  return undefined;
+  return baseStyle;
 };
 
 export default function ExampleVideoPlayer({
@@ -1085,6 +1095,10 @@ export default function ExampleVideoPlayer({
 
   const progressStyle = {
     background: `linear-gradient(to right, #ff1744 0%, #ff1744 ${progressPercent}%, rgba(255,255,255,0.58) ${progressPercent}%, rgba(255,255,255,0.58) ${bufferedPercent}%, rgba(255,255,255,0.28) ${bufferedPercent}%, rgba(255,255,255,0.28) 100%)`,
+  };
+  const mediaEdgeClampStyle = {
+    clipPath: "inset(0.6px)",
+    WebkitClipPath: "inset(0.6px)",
   };
 
   const volumePercent = isMuted ? 0 : Math.round(volume * 100);
@@ -1901,6 +1915,7 @@ export default function ExampleVideoPlayer({
       isMobileLayout: isMobilePlayerLayout,
       isMobileLandscape,
     });
+    const shouldUseCustomEmbedFramePosition = Boolean(embedFrameStyle);
     return (
       <div
         ref={wrapperRef}
@@ -1918,12 +1933,23 @@ export default function ExampleVideoPlayer({
           src={iframeSrc}
           title={title}
           className={[
-            "absolute border-0 bg-black",
-            "inset-0 h-full w-full",
+            "absolute block border-0 bg-black",
+            shouldUseCustomEmbedFramePosition ? "" : "inset-0 h-full w-full",
           ].join(" ")}
-          style={embedFrameStyle}
+          style={
+            shouldUseCustomEmbedFramePosition
+              ? {
+                  ...embedFrameStyle,
+                  right: "auto",
+                  bottom: "auto",
+                }
+              : undefined
+          }
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
           allowFullScreen
+          frameBorder="0"
+          marginWidth="0"
+          marginHeight="0"
           loading="eager"
           referrerPolicy="strict-origin-when-cross-origin"
           scrolling="no"
@@ -2003,6 +2029,7 @@ export default function ExampleVideoPlayer({
             ? "absolute inset-0 h-full w-full bg-black object-cover object-center"
             : "absolute inset-0 h-full w-full bg-black object-contain object-center"
         }
+        style={mediaEdgeClampStyle}
         onClick={handleVideoClick}
         onLoadedMetadata={(event) => {
           const player = event.currentTarget;

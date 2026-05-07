@@ -826,6 +826,45 @@ export default function Flashcards() {
     playSound(SFX_EVENTS.FLASHCARD_DISCARD);
   };
 
+  const getSelectionElement = (node) => {
+    if (!node || typeof Node === "undefined") return null;
+
+    return node.nodeType === Node.ELEMENT_NODE
+      ? node
+      : node.parentElement || null;
+  };
+
+  const isSelectionInsideAllowedCopyArea = () => {
+    if (typeof window === "undefined") return true;
+
+    const selection = window.getSelection();
+
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      return true;
+    }
+
+    const anchorElement = getSelectionElement(selection.anchorNode);
+    const focusElement = getSelectionElement(selection.focusNode);
+
+    if (!anchorElement || !focusElement) return false;
+
+    const isAllowedElement = (element) =>
+      Boolean(
+        element.closest?.(
+          '[data-flashcard-main-text="true"], [data-study-copy-allowed="true"]'
+        )
+      );
+
+    return isAllowedElement(anchorElement) && isAllowedElement(focusElement);
+  };
+
+  const handleStudyUiCopy = (event) => {
+    if (isSelectionInsideAllowedCopyArea()) return;
+
+    event.preventDefault();
+    event.clipboardData?.setData("text/plain", "");
+  };
+
   useEffect(() => {
     if (!card?.id) return;
     cardStartTimeRef.current = Date.now();
@@ -833,7 +872,7 @@ export default function Flashcards() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] select-none items-center justify-center">
         <div className="w-7 h-7 border-3 border-border border-t-primary rounded-full animate-spin" />
       </div>
     );
@@ -841,7 +880,7 @@ export default function Flashcards() {
 
   if (vocab.length === 0) {
     return (
-      <div className="py-20 text-center">
+      <div className="select-none py-20 text-center">
         <p className="text-muted-foreground">Nenhuma palavra cadastrada ainda.</p>
         <p className="mt-1 text-sm text-muted-foreground">
           Acesse o Gerenciador para adicionar vocabulÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio.
@@ -852,7 +891,7 @@ export default function Flashcards() {
 
   if (sessionDone) {
     return (
-      <div className="study-ui-controls py-20 text-center">
+      <div className="study-ui-controls select-none py-20 text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <Check className="h-8 w-8 text-primary" />
         </div>
@@ -893,16 +932,17 @@ export default function Flashcards() {
     <div
       className="study-ui-controls mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:overflow-x-visible sm:space-y-6"
       style={{ touchAction: "pan-y" }}
+      onCopy={handleStudyUiCopy}
     >
-      <div className="relative flex items-center justify-center sm:hidden">
-        <div className="min-w-0">
+      <div className="relative flex select-none items-center justify-center sm:hidden">
+        <div className="min-w-0 select-none">
           <FlashcardModeSelector mode={mode} setMode={setMode} />
         </div>
 
         <button
           type="button"
           onClick={toggleSound}
-          className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+          className="absolute right-0 top-1/2 inline-flex h-8 w-8 select-none -translate-y-1/2 items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
           title={soundEnabled ? "Desativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio" : "Ativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio"}
         >
           {soundEnabled ? (
@@ -913,13 +953,13 @@ export default function Flashcards() {
         </button>
       </div>
 
-      <div className="hidden items-center justify-between gap-4 sm:flex">
-        <h1 className="flex min-w-0 items-center gap-2 text-2xl font-bold text-foreground">
+      <div className="hidden select-none items-center justify-between gap-4 sm:flex">
+        <h1 className="flex min-w-0 select-none items-center gap-2 text-2xl font-bold text-foreground">
           Flashcards
           <button
             type="button"
             onClick={toggleSound}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
+            className="inline-flex h-9 w-9 select-none items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
             title={soundEnabled ? "Desativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio" : "Ativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio"}
           >
             {soundEnabled ? (
@@ -930,13 +970,13 @@ export default function Flashcards() {
           </button>
         </h1>
 
-        <div className="min-w-0 shrink-0">
+        <div className="min-w-0 shrink-0 select-none">
           <FlashcardModeSelector mode={mode} setMode={setMode} />
         </div>
       </div>
 
-      <div className="sm:hidden">
-        <div className="flex items-center gap-2 text-[11px] font-medium">
+      <div className="select-none sm:hidden">
+        <div className="flex select-none items-center gap-2 text-[11px] font-medium">
           <span className="shrink-0 whitespace-nowrap text-muted-foreground">
             {current + 1} de {vocab.length}
           </span>
@@ -959,7 +999,7 @@ export default function Flashcards() {
         </div>
       </div>
 
-      <div className="hidden items-center gap-4 text-sm font-medium sm:flex">
+      <div className="hidden select-none items-center gap-4 text-sm font-medium sm:flex">
         <span className="text-muted-foreground">{current + 1} de {vocab.length}</span>
         <div className="h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-muted">
           <div
@@ -994,6 +1034,8 @@ export default function Flashcards() {
             maxWidth: `${FLASHCARD_CARD_WIDTH}px`,
             aspectRatio: `${FLASHCARD_CARD_WIDTH} / ${FLASHCARD_CARD_HEIGHT}`,
             touchAction: "pan-y",
+            userSelect: "none",
+            WebkitUserSelect: "none",
           }}
           onPointerDown={handleFlipPointerDown}
           onClick={handleFlip}
@@ -1003,7 +1045,7 @@ export default function Flashcards() {
               suppressFlipResetTransition ? "!transition-none" : ""
             }`}
           >
-            <div className="flip-card-front flashcard-context-box absolute inset-0 !rounded-[16.25px] border border-border bg-card text-center sm:!rounded-2xl">
+            <div className="flip-card-front flashcard-context-box absolute inset-0 select-none !rounded-[16.25px] border border-border bg-card text-center sm:!rounded-2xl">
               <div
                 ref={frontTextSlotRef}
                 className="flashcard-main-text-slot"
@@ -1016,6 +1058,7 @@ export default function Flashcards() {
               >
                 <p
                   ref={frontTextRef}
+                  data-flashcard-main-text="true"
                   className="flashcard-main-text select-text text-center font-bold text-foreground"
                   style={{
                     fontSize: `${frontTextStyle.fontSize}px`,
@@ -1026,20 +1069,22 @@ export default function Flashcards() {
                     overflowWrap: frontTextStyle.overflowWrap,
                     wordBreak: frontTextStyle.wordBreak,
                     hyphens: frontTextStyle.hyphens,
+                    userSelect: "text",
+                    WebkitUserSelect: "text",
                   }}
                 >
                   {front}
                 </p>
               </div>
               <p
-                className="flashcard-reveal-hint text-xs text-muted-foreground"
+                className="flashcard-reveal-hint select-none text-xs text-muted-foreground"
                 style={revealHintMobileStyle}
               >
                 Clique para revelar
               </p>
             </div>
 
-            <div className="flip-card-back flashcard-context-box absolute inset-0 !rounded-[16.25px] border border-border bg-card text-center sm:!rounded-2xl">
+            <div className="flip-card-back flashcard-context-box absolute inset-0 select-none !rounded-[16.25px] border border-border bg-card text-center sm:!rounded-2xl">
               <div
                 ref={backTextSlotRef}
                 className="flashcard-main-text-slot"
@@ -1052,6 +1097,7 @@ export default function Flashcards() {
               >
                 <p
                   ref={backTextRef}
+                  data-flashcard-main-text="true"
                   className="flashcard-main-text select-text text-center font-bold text-foreground"
                   style={{
                     fontSize: `${backTextStyle.fontSize}px`,
@@ -1062,6 +1108,8 @@ export default function Flashcards() {
                     overflowWrap: backTextStyle.overflowWrap,
                     wordBreak: backTextStyle.wordBreak,
                     hyphens: backTextStyle.hyphens,
+                    userSelect: "text",
+                    WebkitUserSelect: "text",
                   }}
                 >
                   {back}
@@ -1069,7 +1117,7 @@ export default function Flashcards() {
               </div>
               <p
                 aria-hidden="true"
-                className="flashcard-reveal-hint flashcard-reveal-hint-placeholder text-xs text-muted-foreground"
+                className="flashcard-reveal-hint flashcard-reveal-hint-placeholder select-none text-xs text-muted-foreground"
                 style={revealHintMobileStyle}
               >
                 Clique para revelar
@@ -1079,12 +1127,12 @@ export default function Flashcards() {
         </div>
       </div>
 
-      <div className="relative z-10 mt-1 grid grid-cols-2 gap-3 sm:mt-0 sm:gap-4">
+      <div className="relative z-10 mt-1 grid select-none grid-cols-2 gap-3 sm:mt-0 sm:gap-4">
         <button
           type="button"
           onPointerDown={handleResponsePointerDown}
           onClick={(event) => handleResponse(false, event)}
-          className={`flashcard-response-button inline-flex h-[58px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium ${
+          className={`flashcard-response-button inline-flex h-[58px] select-none items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium ${
             isSubmittingResponse && activeResponseButton === "incorrect"
               ? "bg-[#EF4444]"
               : "bg-[#EF4444] hover:bg-[#DC2626] active:bg-[#B91C1C] dark:bg-[#B91C1C] dark:hover:bg-[#DC2626] dark:active:bg-[#EF4444]"
@@ -1097,7 +1145,7 @@ export default function Flashcards() {
           type="button"
           onPointerDown={handleResponsePointerDown}
           onClick={(event) => handleResponse(true, event)}
-          className={`flashcard-response-button inline-flex h-[58px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium ${
+          className={`flashcard-response-button inline-flex h-[58px] select-none items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium ${
             isSubmittingResponse && activeResponseButton === "correct"
               ? "bg-[#25B15F]"
               : "bg-[#25B15F] hover:bg-[#1E9A4F] active:bg-[#187A3D] dark:bg-[#1E9A4F] dark:hover:bg-[#25B15F] dark:active:bg-[#25B15F]"
@@ -1120,7 +1168,11 @@ export default function Flashcards() {
           />
 
           {showExamples ? (
-            <div ref={examplesPanelRef} className="study-example-panel-desktop-shell">
+            <div
+              ref={examplesPanelRef}
+              data-study-copy-allowed="true"
+              className="study-example-panel-desktop-shell"
+            >
               <ExamplesPanel
                 allMeanings={card.meanings}
                 activeMeaning={activeMeaning?.meaning}

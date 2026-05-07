@@ -30,9 +30,51 @@ const VIDEO_SWIPE_DISTANCE_PX = 42;
 const VIDEO_SWIPE_DIRECTION_RATIO = 1.15;
 const MOBILE_VIDEO_EXPERIENCE_MAX_SHORT_SIDE_PX = 767;
 const MOBILE_VIDEO_EXPERIENCE_MAX_LONG_SIDE_PX = 1024;
+const EMBED_PREVIEW_VISUAL_SCALE = 0.65;
+
+const EXAMPLE_PANEL_VIDEO_FIT_CLASS = "examples-panel-video-fit-shell";
+const EXAMPLE_PANEL_VIDEO_FIT_STYLE = `
+  .examples-panel-video-fit-shell {
+    position: relative;
+    overflow: hidden;
+    background: #000;
+    contain: layout paint;
+  }
+
+  .examples-panel-video-fit-shell > div,
+  .examples-panel-video-fit-shell .example-video-player-shell {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+  }
+
+  .examples-panel-video-fit-shell iframe {
+    position: absolute !important;
+    left: calc(50% + var(--examples-panel-embed-offset-x, 0%)) !important;
+    top: 50% !important;
+    width: var(--examples-panel-embed-render-size, calc(100% + 4px)) !important;
+    height: var(--examples-panel-embed-render-size, calc(100% + 4px)) !important;
+    min-width: var(--examples-panel-embed-render-size, calc(100% + 4px)) !important;
+    min-height: var(--examples-panel-embed-render-size, calc(100% + 4px)) !important;
+    border: 0 !important;
+    background: #000 !important;
+    transform: translate(-50%, -50%) scale(var(--examples-panel-embed-visual-scale, 1.012)) !important;
+    transform-origin: center center !important;
+    clip-path: inset(1px) !important;
+  }
+
+  .examples-panel-video-fit-shell video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: center center !important;
+    background: #000 !important;
+  }
+`;
 
 const VIDEO_FRAME_CLASS =
-  "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-contain";
+  `${EXAMPLE_PANEL_VIDEO_FIT_CLASS} overflow-hidden bg-black [&_iframe]:absolute [&_iframe]:border-0`;
 
 const videoThumbnailCache = new Map();
 const thirdPartyThumbnailCache = new Map();
@@ -42,6 +84,16 @@ const DESCENDER_CHAR_REGEX = /[gjpqy]/;
 const normalizeVideoValue = (value) =>
   typeof value === "string" ? value.trim() : "";
 
+const extractIframeSrc = (value) => {
+  const cleanValue = normalizeVideoValue(value);
+
+  if (!cleanValue) return "";
+
+  const match = cleanValue.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+
+  return normalizeVideoValue(match?.[1] || "");
+};
+
 const isLikelyThirdPartyEmbedValue = (value) => {
   const cleanValue = normalizeVideoValue(value);
   if (!cleanValue) return false;
@@ -49,7 +101,7 @@ const isLikelyThirdPartyEmbedValue = (value) => {
   return (
     /<iframe/i.test(cleanValue) ||
     /\[iframe/i.test(cleanValue) ||
-    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co/i.test(
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co|y\.yarn\.co/i.test(
       cleanValue
     )
   );
@@ -286,6 +338,9 @@ const shouldUseLandscapeMobileVideoExperience = () => {
     longSide <= MOBILE_VIDEO_EXPERIENCE_MAX_LONG_SIDE_PX
   );
 };
+
+const isMeaningVideoGroupKey = (groupKey) =>
+  typeof groupKey === "string" && groupKey.startsWith("meaning-video-group-");
 
 const normalizePronunciationValue = (source) => {
   if (!source || typeof source !== "object") return "";
@@ -838,10 +893,101 @@ const isThirdPartyEmbeddedVideo = (value) => {
   return (
     /<iframe/i.test(cleanValue) ||
     /\[iframe/i.test(cleanValue) ||
-    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co/i.test(
+    /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly|tiktok\.com|instagram\.com|facebook\.com\/plugins\/video|player\.twitch\.tv|clip\.cafe|playphrase\.me|yarn\.co|y\.yarn\.co/i.test(
       cleanValue
     )
   );
+};
+
+const getThirdPartyEmbedSrc = (value) => {
+  const cleanValue = normalizeText(value);
+
+  if (!cleanValue) return "";
+
+  const iframeSrc = extractIframeSrc(cleanValue);
+
+  if (iframeSrc) return iframeSrc;
+
+  const youtubeId = getYouTubeVideoId(cleanValue);
+
+  if (youtubeId) {
+    return `https://www.youtube.com/embed/${youtubeId}`;
+  }
+
+  const vimeoId = getVimeoVideoId(cleanValue);
+
+  if (vimeoId) {
+    return `https://player.vimeo.com/video/${vimeoId}`;
+  }
+
+  const dailymotionId = getDailymotionVideoId(cleanValue);
+
+  if (dailymotionId) {
+    return `https://www.dailymotion.com/embed/video/${dailymotionId}`;
+  }
+
+  if (/clip\.cafe|playphrase\.me|yarn\.co|y\.yarn\.co/i.test(cleanValue)) {
+    const firstUrl = cleanValue.match(/https?:\/\/[^\s"'<>[\]]+/i)?.[0] || "";
+    return normalizeText(firstUrl);
+  }
+
+  return "";
+};
+
+const getEmbedPreviewTuning = (embedSrc) => {
+  const cleanSrc = normalizeText(embedSrc);
+
+  if (!cleanSrc) {
+    return {
+      visualScale: 1.012,
+      containerOffsetXPercent: 0,
+    };
+  }
+
+  try {
+    const base =
+      typeof window !== "undefined" ? window.location.origin : "https://local";
+    const url = new URL(cleanSrc, base);
+    const host = normalizeText(url.hostname).toLowerCase();
+
+    if (/clip\.cafe/.test(host)) {
+      return {
+        visualScale: 0.525,
+        containerOffsetXPercent: 1.5,
+      };
+    }
+
+    if (/youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|dai\.ly/.test(host)) {
+      return {
+        visualScale: EMBED_PREVIEW_VISUAL_SCALE,
+        containerOffsetXPercent: 0,
+      };
+    }
+  } catch {
+    // Mantém o fallback visual para embeds sem hostname legível.
+  }
+
+  return {
+    visualScale: 0.82,
+    containerOffsetXPercent: 2,
+  };
+};
+
+const getExamplePanelVideoFitStyle = (video) => {
+  const cleanVideo = normalizeText(video);
+
+  if (!cleanVideo || !isThirdPartyEmbeddedVideo(cleanVideo)) return undefined;
+
+  const embedSrc = getThirdPartyEmbedSrc(cleanVideo) || cleanVideo;
+  const tuning = getEmbedPreviewTuning(embedSrc);
+  const visualScale = Number(tuning.visualScale) || 1.012;
+  const renderScale = 1 / visualScale;
+
+  return {
+    "--examples-panel-embed-render-size": `${renderScale * 100}%`,
+    "--examples-panel-embed-visual-scale": String(visualScale),
+    "--examples-panel-embed-offset-x": `${tuning.containerOffsetXPercent || 0}%`,
+  };
 };
 
 const getPlatformThumbnailCandidates = (value) => {
@@ -1391,6 +1537,13 @@ export default function ExamplesPanel({
     );
   const shouldUseMobileVideoExperience =
     isMobile || isForcedMobileVideoViewport;
+  const shouldUseMobileVideoExperienceRuntime = (() => {
+    if (shouldUseMobileVideoExperience) return true;
+    if (typeof window === "undefined") return false;
+
+    const shortSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
+    return shortSide > 0 && shortSide <= MOBILE_VIDEO_EXPERIENCE_MAX_SHORT_SIDE_PX;
+  })();
   const { user } = useAuth();
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
@@ -1718,7 +1871,7 @@ export default function ExamplesPanel({
   const hasExpandedTip = Object.values(expandedTipKeys).some(Boolean);
 
   useEffect(() => {
-    if (!hasExpandedTip || typeof document === "undefined") {
+    if (!hasExpandedTip || isMobile || typeof document === "undefined") {
       return undefined;
     }
 
@@ -1741,7 +1894,7 @@ export default function ExamplesPanel({
     return () => {
       document.removeEventListener("pointerdown", handlePointerDownOutsideTip, true);
     };
-  }, [hasExpandedTip]);
+  }, [hasExpandedTip, isMobile]);
 
   useEffect(() => {
     if (!shouldUseMeaningVideoCollapse) {
@@ -1871,6 +2024,9 @@ export default function ExamplesPanel({
   const isCurrentMobileVideoThirdPartyEmbed =
     isLikelyThirdPartyEmbedValue(currentMobileVideoValue) ||
     isThirdPartyEmbeddedVideo(currentMobileVideoValue);
+  const currentMobileVideoFitStyle = getExamplePanelVideoFitStyle(
+    currentMobileVideoValue
+  );
   const shouldUseCenteredEmbeddedMobileLayout =
     isCurrentMobileVideoThirdPartyEmbed && isMobileLandscapeVideoLayout;
   const mobileLandscapeViewportWidth = mobileVideoViewportSize.width || 0;
@@ -1978,7 +2134,7 @@ export default function ExamplesPanel({
     const nextOpenToken = videoPlaybackOpenTokenRef.current + 1;
     videoPlaybackOpenTokenRef.current = nextOpenToken;
 
-    if (shouldUseMobileVideoExperience) {
+    if (shouldUseMobileVideoExperienceRuntime) {
       const isThirdPartyMobileVideo =
         isLikelyThirdPartyEmbedValue(video) || isThirdPartyEmbeddedVideo(video);
       const isInsideCloseReopenGuard =
@@ -2037,7 +2193,10 @@ export default function ExamplesPanel({
       [groupKey]: safeIndex,
     }));
 
-    if (shouldUseMobileVideoExperience && mobileVideo?.groupKey === groupKey) {
+    if (
+      shouldUseMobileVideoExperienceRuntime &&
+      mobileVideo?.groupKey === groupKey
+    ) {
       setMobileVideo({
         video: nextVideo.video,
         key: nextVideo.key,
@@ -2051,7 +2210,7 @@ export default function ExamplesPanel({
       return;
     }
 
-    if (!shouldUseMobileVideoExperience && desktopAutoPlayOnNavigate) {
+    if (!shouldUseMobileVideoExperienceRuntime && desktopAutoPlayOnNavigate) {
       const nextOpenToken = videoPlaybackOpenTokenRef.current + 1;
       videoPlaybackOpenTokenRef.current = nextOpenToken;
 
@@ -2167,33 +2326,39 @@ export default function ExamplesPanel({
 
     if (!currentVideo?.video) return null;
 
-    const isCurrentVideoThirdParty = isThirdPartyEmbeddedVideo(
-      currentVideo.video
+    const isCurrentVideoThirdParty = isThirdPartyEmbeddedVideo(currentVideo.video);
+    const currentVideoFitStyle = getExamplePanelVideoFitStyle(currentVideo.video);
+    const isMeaningVideoGroup = isMeaningVideoGroupKey(groupKey);
+    const shouldForceMobileExpandedMeaningPlayback = Boolean(
+      shouldUseMobileVideoExperienceRuntime && isMeaningVideoGroup
     );
     const shouldRenderThirdPartyInline =
-      !shouldUseMobileVideoExperience && isCurrentVideoThirdParty;
+      !shouldUseMobileVideoExperienceRuntime && isCurrentVideoThirdParty;
     // No mobile, embeds usam o preview original do provider como miniatura,
     // mas esse preview é desmontado/ocultado enquanto o overlay está aberto
     // para evitar tela preta ou iframe travado por trás do player expandido.
     const shouldRenderMobileThirdPartyPreview =
-      shouldUseMobileVideoExperience && isCurrentVideoThirdParty;
+      shouldUseMobileVideoExperienceRuntime &&
+      isCurrentVideoThirdParty &&
+      !shouldForceMobileExpandedMeaningPlayback;
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
     const shouldAutoPlayDesktopVideo =
       isVideoOpen &&
       Boolean(desktopAutoplayByGroup[groupKey]);
     const shouldRenderInlineOpenedVideo =
+      !shouldForceMobileExpandedMeaningPlayback &&
       isVideoOpen &&
-      (!shouldUseMobileVideoExperience || shouldAutoPlayDesktopVideo);
+      (!shouldUseMobileVideoExperienceRuntime || shouldAutoPlayDesktopVideo);
     const shouldRenderPlayerDirectly =
       shouldRenderThirdPartyInline ||
-      (shouldUseMobileVideoExperience && isCurrentVideoThirdParty) ||
+      shouldRenderMobileThirdPartyPreview ||
       shouldRenderInlineOpenedVideo;
     const canNavigateBetweenVideos = safeVideos.length > 1;
     const shouldEnableThumbnailSwipe =
       canNavigateBetweenVideos &&
       (groupKey === "global-word-video-group" || shouldUseMobileVideoExperience);
     const shouldEnableMobileInlineSwipe =
-      shouldUseMobileVideoExperience && canNavigateBetweenVideos;
+      shouldUseMobileVideoExperienceRuntime && canNavigateBetweenVideos;
     const shouldShowAttachedChip = false;
     const attachedChipPalette = meaningPalette
       ? {
@@ -2209,7 +2374,7 @@ export default function ExamplesPanel({
           dotColor: "#ED9A0A",
         };
     const shouldHideSourceThumbnailOnMobile =
-      shouldUseMobileVideoExperience &&
+      shouldUseMobileVideoExperienceRuntime &&
       Boolean(mobileVideo?.key) &&
       mobileVideo.key === currentVideo.key;
     const isIntegratedGlobalSurface =
@@ -2217,7 +2382,7 @@ export default function ExamplesPanel({
     const isSpecificExpandedVideoSurface =
       !isIntegratedGlobalSurface && Boolean(meaningPalette);
     const shouldSuppressMobileExpandedVideoOutline = Boolean(
-      shouldUseMobileVideoExperience &&
+      shouldUseMobileVideoExperienceRuntime &&
         isSpecificExpandedVideoSurface &&
         shouldRenderPlayerDirectly
     );
@@ -2299,7 +2464,9 @@ export default function ExamplesPanel({
           borderBottomRightRadius: integratedSurfaceCornerRadius,
         }
       : undefined;
-    const integratedFrameStyle = integratedVideoRadiusStyle;
+    const integratedFrameStyle = isIntegratedGlobalSurface
+      ? integratedVideoRadiusStyle
+      : { borderRadius: "inherit" };
     const integratedThumbnailStyle = isIntegratedGlobalSurface
       ? {
           ...integratedVideoRadiusStyle,
@@ -2412,14 +2579,11 @@ export default function ExamplesPanel({
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                style={
-                  mobileExpandedVideoOutlineResetStyle
-                    ? {
-                        ...(integratedFrameStyle || {}),
-                        ...mobileExpandedVideoOutlineResetStyle,
-                      }
-                    : integratedFrameStyle
-                }
+                style={{
+                  ...(integratedFrameStyle || {}),
+                  ...(currentVideoFitStyle || {}),
+                  ...(mobileExpandedVideoOutlineResetStyle || {}),
+                }}
               >
                 <ExampleVideoPlayer
                   key={`${currentVideo.key}-${currentVideo.video}-${currentPlaybackOpenToken}`}
@@ -2798,24 +2962,16 @@ export default function ExamplesPanel({
 
     if (!currentVideo?.video) return false;
 
-    if (shouldUseMobileVideoExperience && mobileInlinePlaybackOnOpen) {
-      const nextOpenToken = videoPlaybackOpenTokenRef.current + 1;
-      videoPlaybackOpenTokenRef.current = nextOpenToken;
-
-      setMobileVideo(null);
-      setIsMobileEmbedOpening(false);
-      setVideoIndexes((current) => ({
-        ...current,
-        [groupKey]: currentIndex,
-      }));
-      setOpenDesktopVideos({
-        [groupKey]: true,
-      });
-      setDesktopAutoplayByGroup({
-        [groupKey]: Boolean(mobileInlineAutoPlayOnOpen),
-      });
-      setVideoPlaybackOpenTokens({
-        [groupKey]: nextOpenToken,
+    if (shouldUseMobileVideoExperienceRuntime && mobileInlinePlaybackOnOpen) {
+      openVideo({
+        video: currentVideo.video,
+        videoKey: currentVideo.key,
+        videoTitle: currentVideo.title,
+        groupKey,
+        videos: safeVideos,
+        index: currentIndex,
+        autoPlayOnOpen: Boolean(mobileInlineAutoPlayOnOpen),
+        desktopAutoPlayOnOpen: false,
       });
 
       return true;
@@ -2839,6 +2995,8 @@ export default function ExamplesPanel({
 
   return (
     <>
+      <style>{EXAMPLE_PANEL_VIDEO_FIT_STYLE}</style>
+
       <div
         className={`${panelContainerClass} study-ui-controls`}
       >
@@ -2950,8 +3108,7 @@ export default function ExamplesPanel({
               (index === 0 ||
                 (activeMeaningText && entry.meaning === activeMeaningText));
             const shouldAlignExpandedSpecificVideoSurface = Boolean(
-              shouldUseMeaningCollapse &&
-                isMeaningExpanded &&
+              isMeaningExpanded &&
                 hasMeaningVideo &&
                 !shouldRenderMeaningAttachedToGlobalVideo
             );
@@ -2996,7 +3153,7 @@ export default function ExamplesPanel({
                               groupKey,
                               startFromFirstVideo: true,
                               desktopAutoPlayOnOpen: true,
-                              mobileInlinePlaybackOnOpen: true,
+                              mobileInlinePlaybackOnOpen: false,
                             });
                           }
                         : undefined
@@ -3014,7 +3171,7 @@ export default function ExamplesPanel({
                               groupKey,
                               startFromFirstVideo: true,
                               desktopAutoPlayOnOpen: true,
-                              mobileInlinePlaybackOnOpen: true,
+                              mobileInlinePlaybackOnOpen: false,
                             });
                           }
                         : undefined
@@ -3207,14 +3364,16 @@ export default function ExamplesPanel({
                           setExpandedMeaningVideoKey(groupKey);
 
                           if (hasMeaningVideo) {
-                            openMeaningPreviewVideoInline({
-                              entry,
-                              groupKey,
-                              startFromFirstVideo: true,
-                              desktopAutoPlayOnOpen: false,
-                              mobileInlinePlaybackOnOpen: shouldUseMobileVideoExperience,
-                              mobileInlineAutoPlayOnOpen: false,
-                            });
+                            if (!shouldUseMobileVideoExperienceRuntime) {
+                              openMeaningPreviewVideoInline({
+                                entry,
+                                groupKey,
+                                startFromFirstVideo: true,
+                                desktopAutoPlayOnOpen: false,
+                                mobileInlinePlaybackOnOpen: false,
+                                mobileInlineAutoPlayOnOpen: false,
+                              });
+                            }
                           }
                         }}
                         className={[
@@ -3481,7 +3640,10 @@ export default function ExamplesPanel({
                   .filter(Boolean)
                   .join(" ")
               }
-              style={mobileLandscapeEmbedFrameStyle}
+              style={{
+                ...(mobileLandscapeEmbedFrameStyle || {}),
+                ...(currentMobileVideoFitStyle || {}),
+              }}
               onClick={(event) => event.stopPropagation()}
               onPointerDown={handleExpandedVideoPointerDown}
               onPointerUp={handleExpandedVideoPointerUp}
@@ -3492,7 +3654,7 @@ export default function ExamplesPanel({
                   [
                     "h-full w-full transform-gpu transition-opacity duration-150 ease-out",
                     isCurrentMobileVideoThirdPartyEmbed
-                      ? "[&>div]:bg-transparent [&_iframe]:bg-transparent"
+                      ? `${EXAMPLE_PANEL_VIDEO_FIT_CLASS} [&>div]:bg-transparent [&_iframe]:bg-transparent`
                       : "",
                     isCurrentMobileVideoThirdPartyEmbed && isMobileEmbedOpening
                       ? "opacity-0"
