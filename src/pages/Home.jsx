@@ -5,6 +5,10 @@ import WelcomeCard from "../components/WelcomeCard";
 import StatsGrid from "../components/StatsGrid";
 import ActivityCards from "../components/ActivityCards";
 import { updateStreak, checkStreakMedals } from "../lib/gameState";
+import {
+  getCachedVocabularyRows,
+  setCachedVocabularyRows,
+} from "../lib/vocabularyCache";
 
 export default function Home() {
   const { user, navigateToLogin } = useAuth();
@@ -15,73 +19,160 @@ export default function Home() {
     dominated: 0,
     level: 1,
   });
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
+    let isMounted = true;
+    let warmCacheSchedule = null;
+    const statsAbortController =
+      typeof AbortController !== "undefined" ? new AbortController() : null;
+    const warmCacheAbortController =
+      typeof AbortController !== "undefined" ? new AbortController() : null;
+
+    const game = updateStreak();
+    checkStreakMedals();
+
+    const clearWarmCacheSchedule = () => {
+      if (!warmCacheSchedule || typeof window === "undefined") return;
+
+      if (
+        warmCacheSchedule.kind === "idle" &&
+        typeof window.cancelIdleCallback === "function"
+      ) {
+        window.cancelIdleCallback(warmCacheSchedule.handle);
+      } else {
+        window.clearTimeout(warmCacheSchedule.handle);
+      }
+
+      warmCacheSchedule = null;
+    };
+
+    const getCounters = (rows) => {
+      const safeRows = Array.isArray(rows) ? rows : [];
+      const dominated = safeRows.reduce(
+        (count, row) =>
+          row?.stats?.status === "dominada" ? count + 1 : count,
+        0
+      );
+
+      return {
+        totalCards: safeRows.length,
+        dominated,
+      };
+    };
+
+    const applyStats = ({ totalCards, dominated }) => {
+      if (!isMounted) return;
+
+      setStats({
+        streak: game.streak,
+        totalCards,
+        dominated,
+        level: game.level,
+      });
+    };
+
+    if (!user?.id) {
+      applyStats({
+        totalCards: 0,
+        dominated: 0,
+      });
+
+      return () => {
+        isMounted = false;
+        statsAbortController?.abort();
+        warmCacheAbortController?.abort();
+        clearWarmCacheSchedule();
+      };
+    }
+
+    const cachedRows = getCachedVocabularyRows(user.id);
+    if (Array.isArray(cachedRows)) {
+      applyStats(getCounters(cachedRows));
+    } else {
+      applyStats({
+        totalCards: 0,
+        dominated: 0,
+      });
+    }
+
+    const refreshStats = async () => {
       try {
-        const game = updateStreak();
-        checkStreakMedals();
-
-        if (!user?.id) {
-          setStats({
-            streak: game.streak,
-            totalCards: 0,
-            dominated: 0,
-            level: game.level,
-          });
-          setLoading(false);
-          return;
-        }
-
-        const { data, error } = await supabase
+        let query = supabase
           .from("vocabulary")
           .select("id, stats")
           .eq("user_id", user.id);
-
-        if (error) {
-          throw error;
+        if (statsAbortController) {
+          query = query.abortSignal(statsAbortController.signal);
         }
 
-        const safeVocab = Array.isArray(data) ? data : [];
-        const totalCards = safeVocab.length;
-        const dominated = safeVocab.filter(
-          (v) => v.stats?.status === "dominada"
-        ).length;
+        const { data, error } = await query;
 
-        setStats({
-          streak: game.streak,
-          totalCards,
-          dominated,
-          level: game.level,
-        });
+        if (error) throw error;
+        if (!isMounted) return;
+
+        applyStats(getCounters(data));
       } catch (error) {
         console.error("Erro ao carregar dados da Home:", error);
 
-        const game = updateStreak();
-        checkStreakMedals();
-
-        setStats({
-          streak: game.streak,
-          totalCards: 0,
-          dominated: 0,
-          level: game.level,
-        });
-      } finally {
-        setLoading(false);
+        if (!Array.isArray(cachedRows)) {
+          applyStats({
+            totalCards: 0,
+            dominated: 0,
+          });
+        }
       }
+    };
+
+    const warmVocabularyCache = async () => {
+      if (!isMounted || Array.isArray(cachedRows)) return;
+
+      try {
+        let query = supabase
+          .from("vocabulary")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false });
+        if (warmCacheAbortController) {
+          query = query.abortSignal(warmCacheAbortController.signal);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        if (!isMounted) return;
+
+        const safeVocab = Array.isArray(data) ? data : [];
+        setCachedVocabularyRows(user.id, safeVocab, {
+          deferPersist: true,
+        });
+      } catch (error) {
+        console.error("Erro ao pré-carregar vocabulário na Home:", error);
+      }
+    };
+
+    refreshStats();
+
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(() => {
+        warmVocabularyCache();
+      }, { timeout: 850 });
+      warmCacheSchedule = { kind: "idle", handle };
+    } else if (typeof window !== "undefined") {
+      const handle = window.setTimeout(() => {
+        warmVocabularyCache();
+      }, 220);
+      warmCacheSchedule = { kind: "timeout", handle };
+    } else {
+      warmVocabularyCache();
     }
 
-    load();
+    return () => {
+      isMounted = false;
+      statsAbortController?.abort();
+      warmCacheAbortController?.abort();
+      clearWarmCacheSchedule();
+    };
   }, [user?.id]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-7 h-7 border-2 border-border border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   if (!user) {
     return (

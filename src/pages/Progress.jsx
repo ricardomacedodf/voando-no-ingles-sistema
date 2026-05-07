@@ -20,6 +20,10 @@ import {
   normalizeVocabularyItem,
   saveReviewPreferences,
 } from "../lib/learningEngine";
+import {
+  clearCachedVocabularyRows,
+  markVocabularyCacheForRefresh,
+} from "../lib/vocabularyCache";
 
 const EMPTY_PROGRESS = Object.freeze(
   getProgressSummary([], { pace: REVIEW_PACE.EQUILIBRADO })
@@ -270,12 +274,18 @@ export default function Progress() {
         throw error;
       }
 
+      clearCachedVocabularyRows(user.id);
+      markVocabularyCacheForRefresh(user.id);
+
       const result = resetStudyHistory();
       if (!result.success) {
         alert("Nao foi possivel resetar o progresso.");
         return;
       }
 
+      setVocabItems([]);
+      setProgress(EMPTY_PROGRESS);
+      setNotifications(getInternalNotifications([], reviewPreferences));
       await loadProgress();
       setShowResetConfirm(false);
     } catch (error) {

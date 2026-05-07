@@ -28,6 +28,8 @@ const THUMBNAIL_CAPTURE_TIME_SECONDS = 1;
 const THUMBNAIL_END_GUARD_SECONDS = 0.05;
 const VIDEO_SWIPE_DISTANCE_PX = 42;
 const VIDEO_SWIPE_DIRECTION_RATIO = 1.15;
+const MOBILE_VIDEO_EXPERIENCE_MAX_SHORT_SIDE_PX = 767;
+const MOBILE_VIDEO_EXPERIENCE_MAX_LONG_SIDE_PX = 1024;
 
 const VIDEO_FRAME_CLASS =
   "overflow-hidden rounded-lg bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full [&_iframe]:border-0 [&_video]:absolute [&_video]:inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-contain";
@@ -234,6 +236,56 @@ const normalizeText = (value) =>
 
 const normalizeExampleText = (value) =>
   typeof value === "string" ? value.trim() : "";
+
+const readCurrentViewportSize = () => {
+  if (typeof window === "undefined") {
+    return { width: 0, height: 0 };
+  }
+
+  const visualViewport = window.visualViewport;
+  const width = Math.round(
+    visualViewport?.width ||
+      window.innerWidth ||
+      document.documentElement?.clientWidth ||
+      0
+  );
+  const height = Math.round(
+    visualViewport?.height ||
+      window.innerHeight ||
+      document.documentElement?.clientHeight ||
+      0
+  );
+
+  return { width, height };
+};
+
+const isLikelyMobileTouchDevice = () => {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return false;
+  }
+
+  const hasCoarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches;
+  const hasNoHover = window.matchMedia?.("(hover: none)")?.matches;
+  const hasTouchPoints = Number(navigator.maxTouchPoints || 0) > 0;
+
+  return Boolean(hasCoarsePointer || hasNoHover || hasTouchPoints);
+};
+
+const shouldUseLandscapeMobileVideoExperience = () => {
+  if (!isLikelyMobileTouchDevice()) return false;
+
+  const { width, height } = readCurrentViewportSize();
+
+  if (!width || !height) return false;
+
+  const shortSide = Math.min(width, height);
+  const longSide = Math.max(width, height);
+
+  return (
+    shortSide <= MOBILE_VIDEO_EXPERIENCE_MAX_SHORT_SIDE_PX &&
+    longSide <= MOBILE_VIDEO_EXPERIENCE_MAX_LONG_SIDE_PX
+  );
+};
 
 const normalizePronunciationValue = (source) => {
   if (!source || typeof source !== "object") return "";
@@ -1327,9 +1379,18 @@ export default function ExamplesPanel({
   pronunciation = "",
   item,
   vocabularyItem,
+  forceMobileVideoExperience = false,
 }) {
   const lastMobileVideoCloseAtRef = useRef(0);
   const isMobile = useIsMobile();
+  const [isForcedMobileVideoViewport, setIsForcedMobileVideoViewport] =
+    useState(() =>
+      forceMobileVideoExperience
+        ? shouldUseLandscapeMobileVideoExperience()
+        : false
+    );
+  const shouldUseMobileVideoExperience =
+    isMobile || isForcedMobileVideoViewport;
   const { user } = useAuth();
   const [openDesktopVideos, setOpenDesktopVideos] = useState({});
   const [desktopAutoplayByGroup, setDesktopAutoplayByGroup] = useState({});
@@ -1355,7 +1416,32 @@ export default function ExamplesPanel({
   });
 
   useEffect(() => {
-    if (!isMobile) {
+    if (!forceMobileVideoExperience || typeof window === "undefined") {
+      setIsForcedMobileVideoViewport(false);
+      return undefined;
+    }
+
+    const syncForcedMobileViewport = () => {
+      setIsForcedMobileVideoViewport(shouldUseLandscapeMobileVideoExperience());
+    };
+
+    syncForcedMobileViewport();
+    window.addEventListener("resize", syncForcedMobileViewport);
+    window.addEventListener("orientationchange", syncForcedMobileViewport);
+    window.visualViewport?.addEventListener("resize", syncForcedMobileViewport);
+
+    return () => {
+      window.removeEventListener("resize", syncForcedMobileViewport);
+      window.removeEventListener("orientationchange", syncForcedMobileViewport);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        syncForcedMobileViewport
+      );
+    };
+  }, [forceMobileVideoExperience]);
+
+  useEffect(() => {
+    if (!shouldUseMobileVideoExperience) {
       setIsMobileLandscapeVideoLayout(false);
       setMobileVideoViewportSize({ width: 0, height: 0 });
       return;
@@ -1430,7 +1516,7 @@ export default function ExamplesPanel({
         checkMobileLandscapeVideoLayout
       );
     };
-  }, [isMobile]);
+  }, [shouldUseMobileVideoExperience]);
 
   const rawMeanings = allMeanings || (examples ? [{ meaning, examples }] : []);
   const lookupPronunciationTerm = normalizeText(titleTerm);
@@ -1698,13 +1784,13 @@ export default function ExamplesPanel({
   const panelContainerClass = isFlashcard
     ? isQuizPanelLayout
       ? shouldUseExpandedVideoHeaderSpacing
-        ? "mt-0 overflow-hidden rounded-[18px] border border-[#EDF0F3] bg-white px-4 pb-4 pt-3 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground sm:px-6 sm:pb-6 sm:pt-4"
-        : "mt-0 overflow-hidden rounded-[18px] border border-[#EDF0F3] bg-white p-4 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground sm:p-6"
+        ? "mt-0 overflow-hidden rounded-[18px] border border-[#EDF0F3] bg-white px-4 pb-4 pt-3 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground sm:px-6 sm:pb-6 sm:pt-4 md:px-1 md:pb-4 md:pt-3"
+        : "mt-0 overflow-hidden rounded-[18px] border border-[#EDF0F3] bg-white p-4 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground sm:p-6 md:p-2"
       : isFlashcardMobileLayout
       ? "mt-0 overflow-hidden rounded-b-[18px] rounded-t-none border border-t-0 border-[#EDF0F3] bg-white px-4 pb-4 pt-3 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground"
       : shouldUseExpandedVideoHeaderSpacing
-      ? "mt-0 overflow-hidden rounded-b-[18px] rounded-t-none border border-t-0 border-[#EDF0F3] bg-white px-6 pb-6 pt-4 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground"
-      : "mt-0 overflow-hidden rounded-b-[18px] rounded-t-none border border-t-0 border-[#EDF0F3] bg-white p-6 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground"
+      ? "mt-0 overflow-hidden rounded-b-[18px] rounded-t-none border border-t-0 border-[#EDF0F3] bg-white px-1 pb-4 pt-3 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground"
+      : "mt-0 overflow-hidden rounded-b-[18px] rounded-t-none border border-t-0 border-[#EDF0F3] bg-white p-2 text-[#1A1A1A] animate-in fade-in-0 slide-in-from-top-1 duration-150 dark:border-border dark:bg-card dark:text-foreground"
     : shouldUseExpandedVideoHeaderSpacing
     ? "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] px-5 pb-5 pt-3 animate-in fade-in slide-in-from-top-2 duration-200 dark:bg-card"
     : "mt-4 rounded-2xl border border-border/70 bg-[#F9FAFB] p-5 animate-in fade-in slide-in-from-top-2 duration-200 dark:bg-card";
@@ -1759,7 +1845,7 @@ export default function ExamplesPanel({
     : isFlashcardMobileLayout
     ? "pt-1.5"
     : "pt-1.5";
-  const panelHeaderInsetClass = "px-3.5";
+  const panelHeaderInsetClass = isFlashcardMobileLayout ? "px-3.5" : "px-2";
   const isExpandedGlobalWordVideo =
     mobileVideo?.groupKey === "global-word-video-group";
   const currentMobileVideoValue = mobileVideo?.video || "";
@@ -1807,7 +1893,11 @@ export default function ExamplesPanel({
       : "bg-black";
 
   useEffect(() => {
-    if (!isMobile || !mobileVideo?.video || !isCurrentMobileVideoThirdPartyEmbed) {
+    if (
+      !shouldUseMobileVideoExperience ||
+      !mobileVideo?.video ||
+      !isCurrentMobileVideoThirdPartyEmbed
+    ) {
       setIsMobileEmbedOpening(false);
       return;
     }
@@ -1821,20 +1911,26 @@ export default function ExamplesPanel({
     return () => {
       window.clearTimeout(openingTimer);
     };
-  }, [isMobile, mobileVideoPlayerKey, isCurrentMobileVideoThirdPartyEmbed]);
+  }, [
+    shouldUseMobileVideoExperience,
+    mobileVideoPlayerKey,
+    isCurrentMobileVideoThirdPartyEmbed,
+  ]);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
 
     const className = "examples-mobile-video-expanded";
-    const shouldSetClass = Boolean(isMobile && mobileVideo?.video);
+    const shouldSetClass = Boolean(
+      shouldUseMobileVideoExperience && mobileVideo?.video
+    );
 
     document.body.classList.toggle(className, shouldSetClass);
 
     return () => {
       document.body.classList.remove(className);
     };
-  }, [isMobile, mobileVideo?.video]);
+  }, [shouldUseMobileVideoExperience, mobileVideo?.video]);
 
   const closeMobileVideo = () => {
     lastMobileVideoCloseAtRef.current = Date.now();
@@ -1863,7 +1959,7 @@ export default function ExamplesPanel({
     const nextOpenToken = videoPlaybackOpenTokenRef.current + 1;
     videoPlaybackOpenTokenRef.current = nextOpenToken;
 
-    if (isMobile) {
+    if (shouldUseMobileVideoExperience) {
       const isThirdPartyMobileVideo =
         isLikelyThirdPartyEmbedValue(video) || isThirdPartyEmbeddedVideo(video);
       const isInsideCloseReopenGuard =
@@ -1900,7 +1996,12 @@ export default function ExamplesPanel({
     });
   };
 
-  const goToVideoIndex = ({ groupKey, videos, nextIndex }) => {
+  const goToVideoIndex = ({
+    groupKey,
+    videos,
+    nextIndex,
+    desktopAutoPlayOnNavigate = false,
+  }) => {
     if (!Array.isArray(videos) || videos.length === 0) return;
 
     const safeIndex =
@@ -1917,7 +2018,7 @@ export default function ExamplesPanel({
       [groupKey]: safeIndex,
     }));
 
-    if (isMobile && mobileVideo?.groupKey === groupKey) {
+    if (shouldUseMobileVideoExperience && mobileVideo?.groupKey === groupKey) {
       setMobileVideo({
         video: nextVideo.video,
         key: nextVideo.key,
@@ -1927,6 +2028,22 @@ export default function ExamplesPanel({
         index: safeIndex,
         autoPlay: false,
         openToken: mobileVideo.openToken || 0,
+      });
+      return;
+    }
+
+    if (!shouldUseMobileVideoExperience && desktopAutoPlayOnNavigate) {
+      const nextOpenToken = videoPlaybackOpenTokenRef.current + 1;
+      videoPlaybackOpenTokenRef.current = nextOpenToken;
+
+      setOpenDesktopVideos({
+        [groupKey]: true,
+      });
+      setDesktopAutoplayByGroup({
+        [groupKey]: true,
+      });
+      setVideoPlaybackOpenTokens({
+        [groupKey]: nextOpenToken,
       });
     }
   };
@@ -1971,6 +2088,7 @@ export default function ExamplesPanel({
               groupKey,
               videos,
               nextIndex: currentIndex - 1,
+              desktopAutoPlayOnNavigate: true,
             });
           }}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00] dark:border-border dark:bg-card dark:text-slate-300 dark:hover:bg-[#ED9A0A]/20 dark:hover:text-[#F4BA53]"
@@ -1992,6 +2110,7 @@ export default function ExamplesPanel({
               groupKey,
               videos,
               nextIndex: currentIndex + 1,
+              desktopAutoPlayOnNavigate: true,
             });
           }}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[#D9E2EC] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#64748B] shadow-sm transition-colors hover:border-[#ED9A0A]/60 hover:bg-[#FFF8ED] hover:text-[#B86F00] dark:border-border dark:bg-card dark:text-slate-300 dark:hover:bg-[#ED9A0A]/20 dark:hover:text-[#F4BA53]"
@@ -2026,19 +2145,21 @@ export default function ExamplesPanel({
     const isCurrentVideoThirdParty = isThirdPartyEmbeddedVideo(
       currentVideo.video
     );
-    const shouldRenderThirdPartyInline = !isMobile && isCurrentVideoThirdParty;
+    const shouldRenderThirdPartyInline =
+      !shouldUseMobileVideoExperience && isCurrentVideoThirdParty;
     // No mobile, embeds usam o preview original do provider como miniatura,
     // mas esse preview é desmontado/ocultado enquanto o overlay está aberto
     // para evitar tela preta ou iframe travado por trás do player expandido.
-    const shouldRenderMobileThirdPartyPreview = isMobile && isCurrentVideoThirdParty;
+    const shouldRenderMobileThirdPartyPreview =
+      shouldUseMobileVideoExperience && isCurrentVideoThirdParty;
     const isVideoOpen = Boolean(openDesktopVideos[groupKey]);
     const shouldAutoPlayDesktopVideo =
       isVideoOpen &&
       Boolean(desktopAutoplayByGroup[groupKey]);
     const shouldRenderPlayerDirectly =
       shouldRenderThirdPartyInline ||
-      (isMobile && isCurrentVideoThirdParty) ||
-      (isVideoOpen && !isMobile);
+      (shouldUseMobileVideoExperience && isCurrentVideoThirdParty) ||
+      (isVideoOpen && !shouldUseMobileVideoExperience);
     const shouldShowAttachedChip = false;
     const attachedChipPalette = meaningPalette
       ? {
@@ -2054,7 +2175,7 @@ export default function ExamplesPanel({
           dotColor: "#ED9A0A",
         };
     const shouldHideSourceThumbnailOnMobile =
-      isMobile &&
+      shouldUseMobileVideoExperience &&
       Boolean(mobileVideo?.key) &&
       mobileVideo.key === currentVideo.key;
     const isIntegratedGlobalSurface =
@@ -2259,7 +2380,7 @@ export default function ExamplesPanel({
                 thumbnail={currentVideo.thumbnail}
                 title={currentVideo.title}
                 isOpen={isVideoOpen}
-                isMobile={isMobile}
+                isMobile={shouldUseMobileVideoExperience}
                 onSwipeLeft={
                   groupKey === "global-word-video-group" && safeVideos.length > 1
                     ? (event) => {
@@ -2268,7 +2389,7 @@ export default function ExamplesPanel({
                         goToVideoIndex({
                           groupKey,
                           videos: safeVideos,
-                          nextIndex: currentIndex + 1,
+                          nextIndex: currentIndex - 1,
                         });
                       }
                     : undefined
@@ -2281,7 +2402,7 @@ export default function ExamplesPanel({
                         goToVideoIndex({
                           groupKey,
                           videos: safeVideos,
-                          nextIndex: currentIndex - 1,
+                          nextIndex: currentIndex + 1,
                         });
                       }
                     : undefined
@@ -2402,7 +2523,7 @@ export default function ExamplesPanel({
 
     if (!isHorizontalSwipe) return;
 
-    if (deltaX < 0) {
+    if (deltaX > 0) {
       goMobileVideoToIndex(mobileVideo.index + 1);
     } else {
       goMobileVideoToIndex(mobileVideo.index - 1);
@@ -2481,7 +2602,7 @@ export default function ExamplesPanel({
   return (
     <>
       <div
-        className={panelContainerClass}
+        className={`${panelContainerClass} study-ui-controls`}
       >
         <div className={[panelHeaderClass, panelHeaderOffsetClass, panelHeaderInsetClass].join(" ")}>
           <div className="flex w-full items-center rounded-[14px] py-1 text-left">
@@ -2506,8 +2627,12 @@ export default function ExamplesPanel({
           </div>
         </div>
         {shouldRenderPanelHeaderDivider ? (
-          <div className="mx-3.5">
-            <div className={`ml-2 mr-2 h-px ${panelHeaderDividerToneClass}`} />
+          <div className={isFlashcardMobileLayout ? "mx-3.5" : "mx-2"}>
+            <div
+              className={`${
+                isFlashcardMobileLayout ? "ml-2 mr-2 " : ""
+              }h-px ${panelHeaderDividerToneClass}`}
+            />
           </div>
         ) : null}
 
@@ -2563,7 +2688,7 @@ export default function ExamplesPanel({
             const shouldRenderMeaningAttachedToGlobalVideo =
               shouldAttachMeaningToGlobalVideo && isMeaningExpanded;
             const isMobileMeaningVideoPlaybackActive = Boolean(
-              isMobile &&
+              shouldUseMobileVideoExperience &&
                 mobileVideo?.video &&
                 typeof mobileVideo?.groupKey === "string" &&
                 mobileVideo.groupKey.startsWith("meaning-video-group-")
@@ -2609,12 +2734,28 @@ export default function ExamplesPanel({
                 >
                 {!hideThumbnail && hasMeaningPreviewMedia ? (
                   <div
-                    role={!isMobile && hasMeaningVideo ? "button" : undefined}
-                    tabIndex={!isMobile && hasMeaningVideo ? 0 : undefined}
-                    aria-label={!isMobile && hasMeaningVideo ? `Reproduzir vídeo de ${meaningPreviewTitle}` : undefined}
-                    title={!isMobile && hasMeaningVideo ? `Reproduzir vídeo de ${meaningPreviewTitle}` : undefined}
+                    role={
+                      !shouldUseMobileVideoExperience && hasMeaningVideo
+                        ? "button"
+                        : undefined
+                    }
+                    tabIndex={
+                      !shouldUseMobileVideoExperience && hasMeaningVideo
+                        ? 0
+                        : undefined
+                    }
+                    aria-label={
+                      !shouldUseMobileVideoExperience && hasMeaningVideo
+                        ? `Reproduzir vídeo de ${meaningPreviewTitle}`
+                        : undefined
+                    }
+                    title={
+                      !shouldUseMobileVideoExperience && hasMeaningVideo
+                        ? `Reproduzir vídeo de ${meaningPreviewTitle}`
+                        : undefined
+                    }
                     onClick={
-                      !isMobile && hasMeaningVideo
+                      !shouldUseMobileVideoExperience && hasMeaningVideo
                         ? (event) => {
                             event.preventDefault();
                             event.stopPropagation();
@@ -2630,7 +2771,7 @@ export default function ExamplesPanel({
                         : undefined
                     }
                     onKeyDown={
-                      !isMobile && hasMeaningVideo
+                      !shouldUseMobileVideoExperience && hasMeaningVideo
                         ? (event) => {
                             if (event.key !== "Enter" && event.key !== " ") return;
                             event.preventDefault();
@@ -2648,7 +2789,9 @@ export default function ExamplesPanel({
                     }
                     className={[
                       "relative shrink-0 self-center overflow-hidden rounded-md border bg-black/10",
-                      !isMobile && hasMeaningVideo ? "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/45 focus-visible:ring-offset-2" : "",
+                      !shouldUseMobileVideoExperience && hasMeaningVideo
+                        ? "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#ED9A0A]/45 focus-visible:ring-offset-2"
+                        : "",
                       isFlashcardMobileLayout ? "w-[128px]" : "w-[156px]",
                     ].join(" ")}
                     style={{ borderColor: meaningPalette.border }}
@@ -2673,7 +2816,7 @@ export default function ExamplesPanel({
                         <span
                           className={[
                             "flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-black/40 shadow-[0_8px_20px_rgba(15,23,42,0.22)] backdrop-blur-sm transition-all duration-200",
-                            isMobile
+                            shouldUseMobileVideoExperience
                               ? "opacity-100"
                               : "scale-95 opacity-0 group-hover/meaning-preview:scale-100 group-hover/meaning-preview:opacity-100",
                           ].join(" ")}
@@ -2831,7 +2974,10 @@ export default function ExamplesPanel({
                           resetVideoGroupIndexToStart(groupKey);
                           setExpandedMeaningVideoKey(groupKey);
 
-                          if (!isMobile && hasMeaningVideo) {
+                          if (
+                            !shouldUseMobileVideoExperience &&
+                            hasMeaningVideo
+                          ) {
                             openMeaningPreviewVideoInline({
                               entry,
                               groupKey,

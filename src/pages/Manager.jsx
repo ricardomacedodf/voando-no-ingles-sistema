@@ -7,7 +7,6 @@ import {
   Upload,
   AlertTriangle,
   ChevronRight,
-  Layers3,
 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
@@ -709,11 +708,6 @@ export default function Manager() {
       <div className="relative z-10 mx-auto w-full max-w-[1120px] px-4 pb-8 pt-2 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#86868B] dark:text-[#8E8E93]">
-            <Layers3 className="h-3.5 w-3.5" />
-            <span>Gerenciador</span>
-          </div>
-
           <h1 className="text-[2rem] font-semibold leading-tight tracking-[-0.03em] text-[#1D1D1F] dark:text-[#F5F5F7] sm:text-[2.35rem]">
             Gerenciador
           </h1>

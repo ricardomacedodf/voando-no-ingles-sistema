@@ -3563,21 +3563,21 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   return (
     <>
       <div className="manager-form-editor-shell mx-auto w-full max-w-6xl overflow-x-hidden overscroll-x-none touch-pan-y pb-10 md:pb-8 md:pl-12 lg:pl-14">
-      <div className="mb-5 px-2 py-1 md:mb-8 md:px-1 md:py-2">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="mb-5 px-2 py-1 md:mb-5 md:px-1 md:py-0">
+        <div className="flex flex-col gap-4 md:gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <button
               type="button"
               onClick={handleBackClick}
-              className="mb-3 inline-flex min-h-[40px] touch-manipulation items-center gap-2 rounded-full border border-transparent px-2.5 text-sm font-semibold text-[#0066CC] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:text-[#66B7FF] dark:hover:bg-[#2C2C2E] md:mb-5"
+              className="mb-3 inline-flex min-h-[40px] touch-manipulation items-center gap-2 rounded-full border border-transparent px-2.5 text-sm font-semibold text-[#0066CC] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:text-[#66B7FF] dark:hover:bg-[#2C2C2E] md:mb-1.5"
             >
               <ArrowLeft className="h-4 w-4" /> Voltar
             </button>
 
-            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.015em] text-[#1D1D1F] dark:text-[#F5F5F7] md:mt-4 md:text-4xl">
+            <h1 className="mt-1 text-3xl font-semibold tracking-[-0.015em] text-[#1D1D1F] dark:text-[#F5F5F7] md:mt-0 md:text-4xl">
               {item ? "Editar palavra ou frase" : "Nova palavra ou frase"}
             </h1>
-            <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[#6E6E73] dark:text-[#A1A1A6]">
+            <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[#6E6E73] dark:text-[#A1A1A6] md:mt-1.5 md:text-[14px]">
               Monte o conteúdo em camadas: dados principais, vídeo geral,
               significados, dicas, exemplos e vídeos específicos.
             </p>
@@ -3587,8 +3587,8 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
       </div>
 
-      <div className="flex min-w-0 flex-col gap-5 md:gap-6">
-        <section className="order-1 border-y border-[#E5E5EA]/80 px-2 py-5 dark:border-[#2C2C2E] sm:px-0 md:py-6">
+      <div className="flex min-w-0 flex-col gap-5 md:gap-5">
+        <section className="order-1 border-y border-[#E5E5EA]/80 px-2 py-5 dark:border-[#2C2C2E] sm:px-0 md:py-5">
           <SectionHeader
             eyebrow="Camada 1"
             title="Dados principais"

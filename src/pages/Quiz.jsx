@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Volume2, VolumeX, ArrowRight, Check } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
@@ -32,6 +32,7 @@ import {
   setPreferredStudyMode,
 } from "../lib/studyModePreference";
 import {
+  consumeVocabularyCacheRefreshFlag,
   getCachedVocabularyRows,
   setCachedVocabularyRows,
 } from "../lib/vocabularyCache";
@@ -262,9 +263,13 @@ function fitQuizPromptText(textElement, slotElement, preferredFontSize) {
 
 function updateDominatedCount(items) {
   const game = getGameState();
-  game.dominatedCount = items.filter(
+  const nextDominatedCount = items.filter(
     (item) => item?.stats?.status === LEARNING_STATUS.DOMINADA
   ).length;
+
+  if (game.dominatedCount === nextDominatedCount) return;
+
+  game.dominatedCount = nextDominatedCount;
   saveGameState(game);
 }
 
@@ -481,7 +486,8 @@ export default function Quiz() {
       };
     }
 
-    const cachedRows = getCachedVocabularyRows(user.id);
+    const shouldForceRefresh = consumeVocabularyCacheRefreshFlag(user.id);
+    const cachedRows = shouldForceRefresh ? null : getCachedVocabularyRows(user.id);
     if (Array.isArray(cachedRows)) {
       const cachedItems = buildVocabularyFromRows(cachedRows);
       applyVocabulary(cachedItems);
@@ -686,10 +692,12 @@ export default function Quiz() {
 
     if (roundNumber >= MAX_ROUNDS) {
       try {
-        const data = await fetchVocabulary();
-        setAllVocab(data);
-        updateDominatedCount(data);
-        startRound(1, data);
+        const rows = await fetchVocabularyRows();
+        setCachedVocabularyRows(user?.id, rows);
+        const items = buildVocabularyFromRows(rows);
+        setAllVocab(items);
+        updateDominatedCount(items);
+        startRound(1, items);
       } catch (error) {
         console.error("Erro ao recarregar quiz:", error);
         alert("Nao foi possivel recarregar o quiz.");
@@ -702,13 +710,16 @@ export default function Quiz() {
 
   const card = queue[current];
   const questionText = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
-  const questionTextStyle = getAdaptiveQuizTextStyle(questionText);
+  const questionTextStyle = useMemo(
+    () => getAdaptiveQuizTextStyle(questionText),
+    [questionText]
+  );
   const questionTextPreferredSize = questionTextStyle.fontSize;
   const progressCurrent = Math.min(current + 1, QUESTIONS_PER_ROUND);
   const progressPct = QUESTIONS_PER_ROUND > 0 ? (progressCurrent / QUESTIONS_PER_ROUND) * 100 : 0;
   const letters = ["A", "B", "C", "D", "E"];
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const fitPromptText = () => {
       fitQuizPromptText(
         questionTextRef.current,
@@ -777,7 +788,7 @@ export default function Quiz() {
 
   if (roundDone) {
     return (
-      <div className="flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
+      <div className="study-ui-controls flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
         <div className="w-full max-w-md text-center">
           <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 sm:h-16 sm:w-16">
             <Check className="h-10 w-10 text-primary sm:h-8 sm:w-8" />
@@ -796,7 +807,7 @@ export default function Quiz() {
             }`}
           >
             <span>{CHECK_SYMBOL}</span>
-            <span>Balanco da rodada: {roundBalanceText}</span>
+            <span className="ui-control-label">Balanco da rodada: {roundBalanceText}</span>
           </div>
 
           <button
@@ -811,7 +822,7 @@ export default function Quiz() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:max-w-[860px] md:overflow-visible sm:space-y-6">
+    <div className="study-ui-controls mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:overflow-visible sm:space-y-6">
       <div className="relative flex items-center justify-center sm:hidden">
         <div className="min-w-0">
           <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
@@ -1020,7 +1031,7 @@ export default function Quiz() {
         {answered && card?.meanings?.length > 0 && showExamples ? (
           <div
             ref={examplesPanelRef}
-            className="relative mx-auto mt-3 w-full overflow-visible"
+            className="study-example-panel-desktop-shell relative mx-auto mt-3 w-full overflow-visible"
           >
             <ExamplesPanel
               allMeanings={card?.meanings}

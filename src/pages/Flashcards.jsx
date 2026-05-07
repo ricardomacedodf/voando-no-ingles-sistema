@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useLayoutEffect, useRef } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 import { Check, X, Volume2, VolumeX } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
@@ -32,6 +32,7 @@ import {
   setPreferredStudyMode,
 } from "../lib/studyModePreference";
 import {
+  consumeVocabularyCacheRefreshFlag,
   getCachedVocabularyRows,
   setCachedVocabularyRows,
 } from "../lib/vocabularyCache";
@@ -68,9 +69,13 @@ function shuffleArray(arr) {
 
 function updateDominatedCount(items) {
   const game = getGameState();
-  game.dominatedCount = items.filter(
+  const nextDominatedCount = items.filter(
     (item) => item?.stats?.status === LEARNING_STATUS.DOMINADA
   ).length;
+
+  if (game.dominatedCount === nextDominatedCount) return;
+
+  game.dominatedCount = nextDominatedCount;
   saveGameState(game);
 }
 
@@ -208,7 +213,7 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
       FLASHCARD_MAIN_TEXT_FIXED_LINE_HEIGHT_MOBILE
     );
 
-    // Força o navegador a recalcular o layout antes de medir as linhas reais.
+    // ForÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½a o navegador a recalcular o layout antes de medir as linhas reais.
     textElement.getBoundingClientRect();
 
     const renderedLineCount = getRenderedTextLineCount(textElement);
@@ -275,6 +280,7 @@ export default function Flashcards() {
   const [cardDir, setCardDir] = useState("en_pt");
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+  const [activeResponseButton, setActiveResponseButton] = useState(null);
   const [suppressFlipResetTransition, setSuppressFlipResetTransition] = useState(false);
   const [isNarrowMobileFlashcardViewport, setIsNarrowMobileFlashcardViewport] =
     useState(false);
@@ -291,6 +297,7 @@ export default function Flashcards() {
   const examplesPanelRef = useRef(null);
   const lastFlipPointerSfxAtRef = useRef(0);
   const lastDiscardPointerSfxAtRef = useRef(0);
+  const cardStartTimeRef = useRef(Date.now());
 
   const clearDiscardOverlays = () => {
     discardTimersRef.current.forEach((timerId) => clearTimeout(timerId));
@@ -448,6 +455,7 @@ export default function Flashcards() {
       setHasInteractedWithCard(false);
       setSessionDone(false);
       setIsSubmittingResponse(false);
+      setActiveResponseButton(null);
       setSuppressFlipResetTransition(false);
       clearDiscardOverlays();
       responseLockRef.current = false;
@@ -471,7 +479,7 @@ export default function Flashcards() {
         const items = buildVocabularyFromRows(rows);
         applyVocabulary(items, { trackSession });
       } catch (error) {
-        console.error("Erro ao carregar vocabulÃ¡rio no Flashcards:", error);
+        console.error("Erro ao carregar vocabulÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio no Flashcards:", error);
         if (!applyToState || !isMounted) return;
         setBaseVocab([]);
         setVocab([]);
@@ -491,6 +499,7 @@ export default function Flashcards() {
       setHasInteractedWithCard(false);
       setSessionDone(false);
       setIsSubmittingResponse(false);
+      setActiveResponseButton(null);
       setSuppressFlipResetTransition(false);
       clearDiscardOverlays();
       responseLockRef.current = false;
@@ -500,7 +509,8 @@ export default function Flashcards() {
       };
     }
 
-    const cachedRows = getCachedVocabularyRows(user.id);
+    const shouldForceRefresh = consumeVocabularyCacheRefreshFlag(user.id);
+    const cachedRows = shouldForceRefresh ? null : getCachedVocabularyRows(user.id);
     if (Array.isArray(cachedRows)) {
       const cachedItems = buildVocabularyFromRows(cachedRows);
       applyVocabulary(cachedItems, { trackSession: true });
@@ -537,6 +547,7 @@ export default function Flashcards() {
     setHasInteractedWithCard(false);
     setSessionDone(false);
     setIsSubmittingResponse(false);
+    setActiveResponseButton(null);
     setSuppressFlipResetTransition(false);
     clearDiscardOverlays();
     responseLockRef.current = false;
@@ -575,14 +586,15 @@ export default function Flashcards() {
     setShowExamples(false);
     setHasInteractedWithCard(false);
     setIsSubmittingResponse(false);
+    setActiveResponseButton(null);
     responseLockRef.current = false;
   }, [current, vocab, mode]);
 
   const card = vocab[current];
   const front = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
   const back = cardDir === "en_pt" ? activeMeaning?.meaning : card?.term;
-  const frontTextStyle = getAdaptiveMainTextStyle(front);
-  const backTextStyle = getAdaptiveMainTextStyle(back);
+  const frontTextStyle = useMemo(() => getAdaptiveMainTextStyle(front), [front]);
+  const backTextStyle = useMemo(() => getAdaptiveMainTextStyle(back), [back]);
   const progressPct = vocab.length > 0 ? ((current + 1) / vocab.length) * 100 : 0;
   const revealHintMobileStyle = isNarrowMobileFlashcardViewport
     ? {
@@ -590,7 +602,7 @@ export default function Flashcards() {
       }
     : undefined;
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const fitVisibleTexts = () => {
       fitMainTextToSlot(
         frontTextRef.current,
@@ -696,6 +708,7 @@ export default function Flashcards() {
     if (!shouldSkipDiscardSfx) {
       playSound(SFX_EVENTS.FLASHCARD_DISCARD);
     }
+    setActiveResponseButton(correct ? "correct" : "incorrect");
     responseLockRef.current = true;
     setIsSubmittingResponse(true);
 
@@ -710,7 +723,7 @@ export default function Flashcards() {
       setFlipped(false);
     }
 
-    const responseTime = card._startTime ? Date.now() - card._startTime : 0;
+    const responseTime = Math.max(0, Date.now() - cardStartTimeRef.current);
     const now = new Date().toISOString();
     const reviewPreferences = loadReviewPreferences();
     const updatedStats = updateStatsAfterReview(card, correct, {
@@ -765,7 +778,7 @@ export default function Flashcards() {
       );
       updateDominatedCount(updatedVocab);
     } catch (error) {
-      console.error("Erro ao atualizar estatísticas no Supabase:", error);
+      console.error("Erro ao atualizar estatÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½sticas no Supabase:", error);
       alert("Nao foi possivel salvar seu progresso desta carta.");
     } finally {
       if (current < vocab.length - 1) {
@@ -776,6 +789,7 @@ export default function Flashcards() {
 
       responseLockRef.current = false;
       setIsSubmittingResponse(false);
+      setActiveResponseButton(null);
     }
   };
 
@@ -786,19 +800,9 @@ export default function Flashcards() {
   };
 
   useEffect(() => {
-    if (!card) return;
-
-    setVocab((previous) =>
-      previous.map((item, index) =>
-        index === current
-          ? {
-              ...item,
-              _startTime: Date.now(),
-            }
-          : item
-      )
-    );
-  }, [current]);
+    if (!card?.id) return;
+    cardStartTimeRef.current = Date.now();
+  }, [card?.id, current]);
 
   if (loading) {
     return (
@@ -813,7 +817,7 @@ export default function Flashcards() {
       <div className="py-20 text-center">
         <p className="text-muted-foreground">Nenhuma palavra cadastrada ainda.</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Acesse o Gerenciador para adicionar vocabulÃ¡rio.
+          Acesse o Gerenciador para adicionar vocabulÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡rio.
         </p>
       </div>
     );
@@ -821,39 +825,38 @@ export default function Flashcards() {
 
   if (sessionDone) {
     return (
-      <div className="py-20 text-center">
+      <div className="study-ui-controls py-20 text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <Check className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="mb-2 text-xl font-bold text-foreground">Sessão completa.</h2>
+        <h2 className="mb-2 text-xl font-bold text-foreground">{`Sess\u00E3o completa.`}</h2>
         <p className="mb-4 text-muted-foreground">
-          {`Você revisou ${vocab.length} ${vocab.length === 1 ? "cartão" : "cartões"}.`}
+          {`Voc\u00EA revisou ${vocab.length} ${vocab.length === 1 ? "cart\u00E3o" : "cart\u00F5es"}.`}
         </p>
         <button
-          onClick={async () => {
-            try {
-              const data = await fetchVocabulary();
-              const prepared = mode === "random" ? shuffleArray(data) : data;
-              setBaseVocab(data);
-              setVocab(prepared);
-              setCurrent(0);
-              setFlipped(false);
-              setSessionDone(false);
-              setShowExamples(false);
-              setHasInteractedWithCard(false);
-              setIsSubmittingResponse(false);
-              setSuppressFlipResetTransition(false);
-              clearDiscardOverlays();
-              responseLockRef.current = false;
-              updateDominatedCount(prepared);
-            } catch (error) {
-              console.error("Erro ao recarregar flashcards:", error);
-              alert("NÃ£o foi possÃ­vel recarregar os flashcards.");
-            }
+          onClick={() => {
+            const nextBaseItems = Array.isArray(baseVocab) && baseVocab.length > 0
+              ? [...baseVocab]
+              : [...vocab];
+            const prepared = mode === "random" ? shuffleArray(nextBaseItems) : nextBaseItems;
+
+            setBaseVocab(nextBaseItems);
+            setVocab(prepared);
+            setCurrent(0);
+            setFlipped(false);
+            setSessionDone(false);
+            setShowExamples(false);
+            setHasInteractedWithCard(false);
+            setIsSubmittingResponse(false);
+            setActiveResponseButton(null);
+            setSuppressFlipResetTransition(false);
+            clearDiscardOverlays();
+            responseLockRef.current = false;
+            updateDominatedCount(prepared);
           }}
           className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Recomeçar
+          {"Recome\u00E7ar"}
         </button>
       </div>
     );
@@ -861,7 +864,7 @@ export default function Flashcards() {
 
   return (
     <div
-      className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6"
+      className="study-ui-controls mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:overflow-x-visible sm:space-y-6"
       style={{ touchAction: "pan-y" }}
     >
       <div className="relative flex items-center justify-center sm:hidden">
@@ -873,7 +876,7 @@ export default function Flashcards() {
           type="button"
           onClick={toggleSound}
           className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
-          title={soundEnabled ? "Desativar Ã¡udio" : "Ativar Ã¡udio"}
+          title={soundEnabled ? "Desativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio" : "Ativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio"}
         >
           {soundEnabled ? (
             <Volume2 className="h-4 w-4 text-muted-foreground" />
@@ -890,7 +893,7 @@ export default function Flashcards() {
             type="button"
             onClick={toggleSound}
             className="inline-flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-muted [-webkit-tap-highlight-color:transparent]"
-            title={soundEnabled ? "Desativar Ã¡udio" : "Ativar Ã¡udio"}
+            title={soundEnabled ? "Desativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio" : "Ativar ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡udio"}
           >
             {soundEnabled ? (
               <Volume2 className="h-5 w-5 text-muted-foreground" />
@@ -1054,21 +1057,27 @@ export default function Flashcards() {
           type="button"
           onPointerDown={handleResponsePointerDown}
           onClick={(event) => handleResponse(false, event)}
-          disabled={isSubmittingResponse}
-          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#EF4444] px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-[#DC2626] active:bg-[#B91C1C] disabled:cursor-not-allowed disabled:opacity-60 [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
+          className={`flashcard-response-button inline-flex h-[58px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium ${
+            isSubmittingResponse && activeResponseButton === "incorrect"
+              ? "bg-[#EF4444]"
+              : "bg-[#EF4444] hover:bg-[#DC2626] active:bg-[#B91C1C] dark:bg-[#B91C1C] dark:hover:bg-[#DC2626] dark:active:bg-[#EF4444]"
+          }`}
         >
-          Não lembro
+          <span className="flashcard-response-label">{"N\u00E3o lembro"}</span>
         </button>
 
         <button
           type="button"
           onPointerDown={handleResponsePointerDown}
           onClick={(event) => handleResponse(true, event)}
-          disabled={isSubmittingResponse}
-          className="inline-flex h-[58px] items-center justify-center gap-2 rounded-lg bg-[#25B15F] px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 hover:bg-[#1E9A4F] disabled:cursor-not-allowed disabled:opacity-60 [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium"
+          className={`flashcard-response-button inline-flex h-[58px] items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white outline-none transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] sm:h-14 sm:rounded-md sm:text-sm sm:font-medium ${
+            isSubmittingResponse && activeResponseButton === "correct"
+              ? "bg-[#25B15F]"
+              : "bg-[#25B15F] hover:bg-[#1E9A4F] active:bg-[#187A3D] dark:bg-[#1E9A4F] dark:hover:bg-[#25B15F] dark:active:bg-[#25B15F]"
+          }`}
         >
           <Check className="mr-1 h-4 w-4" />
-          Já sei
+          <span className="flashcard-response-label">{"J\u00E1 sei"}</span>
         </button>
       </div>
 
@@ -1083,13 +1092,14 @@ export default function Flashcards() {
           />
 
           {showExamples ? (
-            <div ref={examplesPanelRef}>
+            <div ref={examplesPanelRef} className="study-example-panel-desktop-shell">
               <ExamplesPanel
                 allMeanings={card.meanings}
                 activeMeaning={activeMeaning?.meaning}
                 titleTerm={card?.term}
                 variant="flashcard"
                 panelScope="flashcards"
+                forceMobileVideoExperience
                 onClose={() => setShowExamples(false)}
               />
             </div>

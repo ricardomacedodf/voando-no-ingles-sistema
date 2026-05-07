@@ -28,6 +28,7 @@ import {
   setPreferredStudyMode,
 } from "../lib/studyModePreference";
 import {
+  consumeVocabularyCacheRefreshFlag,
   getCachedVocabularyRows,
   setCachedVocabularyRows,
 } from "../lib/vocabularyCache";
@@ -316,7 +317,8 @@ export default function Combinations() {
       };
     }
 
-    const cachedRows = getCachedVocabularyRows(user.id);
+    const shouldForceRefresh = consumeVocabularyCacheRefreshFlag(user.id);
+    const cachedRows = shouldForceRefresh ? null : getCachedVocabularyRows(user.id);
     if (Array.isArray(cachedRows)) {
       const cachedItems = buildVocabularyFromRows(cachedRows);
       applyVocabulary(cachedItems);
@@ -729,7 +731,7 @@ export default function Combinations() {
 
   if (shouldShowRoundSummary) {
     return (
-      <div className="flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
+      <div className="study-ui-controls flex min-h-[70vh] items-start justify-center px-4 pt-14 sm:items-center sm:pt-0">
         <div className="w-full max-w-md text-center">
           <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 sm:h-16 sm:w-16">
             <Check className="h-10 w-10 text-primary sm:h-8 sm:w-8" />
@@ -746,7 +748,7 @@ export default function Combinations() {
             }`}
           >
             <span>{CHECK_SYMBOL}</span>
-            <span>Balanco da rodada: {roundBalanceText}</span>
+            <span className="ui-control-label">Balanco da rodada: {roundBalanceText}</span>
           </div>
 
           <button
@@ -761,7 +763,7 @@ export default function Combinations() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden sm:space-y-6">
+    <div className="study-ui-controls mx-auto w-full max-w-2xl space-y-5 overflow-x-hidden md:overflow-x-visible sm:space-y-6">
       <div className="relative flex items-center justify-center sm:hidden">
         <div className="min-w-0">
           <ModeSelector mode={mode} setMode={setMode} variant="quiz" />
@@ -947,7 +949,7 @@ export default function Combinations() {
           />
 
           {showExamples ? (
-            <div ref={examplesPanelRef}>
+            <div ref={examplesPanelRef} className="study-example-panel-desktop-shell">
               <ExamplesPanel
                 allMeanings={focusedCard.meanings}
                 activeMeaning={focusedMeaning}

@@ -20,6 +20,76 @@ const PLAYBACK_SPEED_STEP = 0.01;
 const TIMELINE_KEYBOARD_STEP_SECONDS = 5;
 const videoPlaybackStateCache = new Map();
 
+const EXAMPLE_VIDEO_PLAYER_PREFERENCES_STORAGE_KEY =
+  "voandoNoIngles.exampleVideoPlayer.preferences";
+
+const DEFAULT_EXAMPLE_VIDEO_PLAYER_PREFERENCES = Object.freeze({
+  volume: 1,
+  isMuted: false,
+  isLooping: true,
+});
+
+const normalizeExampleVideoPlayerPreferences = (preferences = {}) => {
+  const rawVolume = Number(preferences?.volume);
+  const volume = Number.isFinite(rawVolume)
+    ? Math.min(1, Math.max(0, rawVolume))
+    : DEFAULT_EXAMPLE_VIDEO_PLAYER_PREFERENCES.volume;
+
+  return {
+    volume,
+    isMuted:
+      typeof preferences?.isMuted === "boolean"
+        ? preferences.isMuted
+        : DEFAULT_EXAMPLE_VIDEO_PLAYER_PREFERENCES.isMuted,
+    isLooping:
+      typeof preferences?.isLooping === "boolean"
+        ? preferences.isLooping
+        : DEFAULT_EXAMPLE_VIDEO_PLAYER_PREFERENCES.isLooping,
+  };
+};
+
+const readExampleVideoPlayerPreferences = () => {
+  if (typeof window === "undefined") {
+    return DEFAULT_EXAMPLE_VIDEO_PLAYER_PREFERENCES;
+  }
+
+  try {
+    const savedPreferences = window.localStorage?.getItem(
+      EXAMPLE_VIDEO_PLAYER_PREFERENCES_STORAGE_KEY
+    );
+
+    if (!savedPreferences) {
+      return DEFAULT_EXAMPLE_VIDEO_PLAYER_PREFERENCES;
+    }
+
+    return normalizeExampleVideoPlayerPreferences(JSON.parse(savedPreferences));
+  } catch {
+    return DEFAULT_EXAMPLE_VIDEO_PLAYER_PREFERENCES;
+  }
+};
+
+let exampleVideoPlayerPreferenceMemory = readExampleVideoPlayerPreferences();
+
+const saveExampleVideoPlayerPreferences = (updates = {}) => {
+  exampleVideoPlayerPreferenceMemory = normalizeExampleVideoPlayerPreferences({
+    ...exampleVideoPlayerPreferenceMemory,
+    ...updates,
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage?.setItem(
+        EXAMPLE_VIDEO_PLAYER_PREFERENCES_STORAGE_KEY,
+        JSON.stringify(exampleVideoPlayerPreferenceMemory)
+      );
+    } catch {
+      // Mantém a memória em sessão mesmo se o navegador bloquear o localStorage.
+    }
+  }
+
+  return exampleVideoPlayerPreferenceMemory;
+};
+
 function GlassControlButton({
   label,
   onClick,
@@ -421,14 +491,20 @@ export default function ExampleVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [bufferedTime, setBufferedTime] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(
+    () => exampleVideoPlayerPreferenceMemory.volume
+  );
+  const [isMuted, setIsMuted] = useState(
+    () => exampleVideoPlayerPreferenceMemory.isMuted
+  );
   const [isVolumeControlOpen, setIsVolumeControlOpen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
   const [playbackRateFeedback, setPlaybackRateFeedback] = useState(null);
   const [playbackControlFeedback, setPlaybackControlFeedback] = useState(null);
-  const [isLooping, setIsLooping] = useState(true);
+  const [isLooping, setIsLooping] = useState(
+    () => exampleVideoPlayerPreferenceMemory.isLooping
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mediaSize, setMediaSize] = useState(null);
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
@@ -504,6 +580,8 @@ export default function ExampleVideoPlayer({
     const savedPlaybackState = shouldResetThisPlayback
       ? null
       : videoPlaybackStateCache.get(normalizedPlaybackStateKey);
+    const savedPlayerPreferences = readExampleVideoPlayerPreferences();
+    exampleVideoPlayerPreferenceMemory = savedPlayerPreferences;
 
     if (shouldResetThisPlayback) {
       videoPlaybackStateCache.delete(normalizedPlaybackStateKey);
@@ -527,7 +605,9 @@ export default function ExampleVideoPlayer({
     setCurrentTime(shouldResetThisPlayback ? 0 : savedPlaybackState?.currentTime || 0);
     setDuration(shouldResetThisPlayback ? 0 : savedPlaybackState?.duration || 0);
     setBufferedTime(0);
-    setIsLooping(true);
+    setVolume(savedPlayerPreferences.volume);
+    setIsMuted(savedPlayerPreferences.isMuted);
+    setIsLooping(savedPlayerPreferences.isLooping);
     setMediaSize(null);
     clearFullscreenControlsTimer();
 
@@ -1469,8 +1549,19 @@ export default function ExampleVideoPlayer({
 
     if (!Number.isFinite(nextVolume)) return;
 
-    setVolume(nextVolume);
-    setIsMuted(nextVolume === 0);
+    const nextPreferences = saveExampleVideoPlayerPreferences({
+      volume: nextVolume,
+      isMuted: nextVolume === 0,
+    });
+
+    const player = videoRef.current;
+    if (player) {
+      player.volume = nextPreferences.volume;
+      player.muted = nextPreferences.isMuted;
+    }
+
+    setVolume(nextPreferences.volume);
+    setIsMuted(nextPreferences.isMuted);
     setIsVolumeControlOpen(true);
     showControls();
   }
@@ -1493,7 +1584,20 @@ export default function ExampleVideoPlayer({
   }
 
   function toggleMute(options = {}) {
-    setIsMuted((current) => !current);
+    setIsMuted((current) => {
+      const nextMuted = !current;
+      saveExampleVideoPlayerPreferences({
+        volume,
+        isMuted: nextMuted,
+      });
+
+      const player = videoRef.current;
+      if (player) {
+        player.muted = nextMuted;
+      }
+
+      return nextMuted;
+    });
 
     if (options?.preserveControlsAutoHide) {
       setIsVolumeControlOpen(false);
@@ -1520,12 +1624,19 @@ export default function ExampleVideoPlayer({
       );
       const player = videoRef.current;
 
+      const nextMuted = nextVolume === 0;
+
       if (player) {
         player.volume = nextVolume;
-        player.muted = nextVolume === 0;
+        player.muted = nextMuted;
       }
 
-      setIsMuted(nextVolume === 0);
+      saveExampleVideoPlayerPreferences({
+        volume: nextVolume,
+        isMuted: nextMuted,
+      });
+
+      setIsMuted(nextMuted);
       setIsVolumeControlOpen(false);
       setIsSpeedMenuOpen(false);
 
@@ -1624,7 +1735,19 @@ export default function ExampleVideoPlayer({
   }
 
   function toggleLoop() {
-    setIsLooping((current) => !current);
+    setIsLooping((current) => {
+      const nextLooping = !current;
+      saveExampleVideoPlayerPreferences({
+        isLooping: nextLooping,
+      });
+
+      const player = videoRef.current;
+      if (player) {
+        player.loop = nextLooping;
+      }
+
+      return nextLooping;
+    });
     showControls();
   }
 
