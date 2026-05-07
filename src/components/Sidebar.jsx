@@ -18,6 +18,19 @@ const SIDEBAR_OPEN_WIDTH = 292;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
 const COLLAPSED_PROFILE_MENU_WIDTH = 252;
 const SIDEBAR_TRANSITION_MS = 300;
+const SIDEBAR_COLLAPSED_BRAND_SRC = "/sidebar-avatar-collapsed.png";
+const SIDEBAR_EXPANDED_BRAND_MASK_SRC = "/sidebar-logo-normal.png";
+
+const sidebarExpandedBrandMaskStyle = {
+  WebkitMaskImage: `url('${SIDEBAR_EXPANDED_BRAND_MASK_SRC}')`,
+  maskImage: `url('${SIDEBAR_EXPANDED_BRAND_MASK_SRC}')`,
+  WebkitMaskRepeat: "no-repeat",
+  maskRepeat: "no-repeat",
+  WebkitMaskPosition: "center",
+  maskPosition: "center",
+  WebkitMaskSize: "contain",
+  maskSize: "contain",
+};
 
 const navItems = [
   { label: "Início", path: "/", icon: Home },
@@ -50,46 +63,6 @@ function SidebarToggleIcon({ isCollapsed = false, className = "" }) {
         d={isCollapsed ? "M10 8.5V15.5" : "M14 8.5V15.5"}
         stroke="currentColor"
         strokeWidth="1.65"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function BrandIcon({ className = "" }) {
-  return (
-    <svg
-      viewBox="0 0 48 48"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <path
-        d="M12 27.5C17.5 25.9 22.7 23.4 27.4 20.1L36.8 13.5C38.6 12.2 41 13.7 40.7 15.9C40.3 18.5 38.9 20.9 36.8 22.5L27.1 29.8C23.5 32.5 19.2 34 14.7 34H9.9C8.3 34 7.7 31.9 9.1 31.1L12 29.5"
-        stroke="currentColor"
-        strokeWidth="2.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M16.5 22.4L11.5 17.9C10.5 17 11.1 15.3 12.5 15.3H16.3C18.3 15.3 20.2 16 21.7 17.2L24.5 19.4"
-        stroke="currentColor"
-        strokeWidth="2.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M23.5 31.6L20.2 38.2C19.8 39.1 18.9 39.7 17.9 39.7H14.7L16.9 33.2"
-        stroke="currentColor"
-        strokeWidth="2.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9 39H31"
-        stroke="currentColor"
-        strokeWidth="2.7"
         strokeLinecap="round"
       />
     </svg>
@@ -395,26 +368,38 @@ export default function Sidebar({
           <button
             type="button"
             onClick={toggleSidebar}
-            className="group flex h-10 w-10 items-center justify-center rounded-xl text-[#25B15F] transition-colors hover:bg-muted hover:text-foreground"
+            className="group flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Expandir barra lateral"
             title="Expandir barra lateral"
           >
-            <BrandIcon className="h-[21px] w-[21px] transition-opacity group-hover:hidden" />
-            <SidebarToggleIcon
-              isCollapsed
-              className="hidden h-[20px] w-[20px] text-muted-foreground transition-colors group-hover:block group-hover:text-foreground"
-            />
+            <span className="relative flex h-[24px] w-[24px] items-center justify-center">
+              <img
+                src={SIDEBAR_COLLAPSED_BRAND_SRC}
+                alt="Logo Voando no Inglês"
+                className="h-full w-full object-contain transition-opacity duration-150 group-hover:opacity-0"
+                draggable="false"
+              />
+              <SidebarToggleIcon
+                isCollapsed
+                className="absolute h-[20px] w-[20px] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              />
+            </span>
           </button>
         ) : (
           <>
             <Link
               to="/"
               onClick={onClose}
-              className="max-w-[calc(100%-2.25rem)] truncate rounded-lg px-2 py-1 text-[18px] font-semibold tracking-[-0.02em] text-foreground transition-colors hover:bg-muted/70"
+              className="group flex h-[44px] max-w-[calc(100%-2.25rem)] items-center gap-3 overflow-hidden rounded-xl px-3 text-[18px] font-semibold tracking-[-0.02em] text-foreground transition-colors hover:bg-muted/70"
               aria-label="Ir para Início"
               title="Início"
             >
-              Voando no Inglês
+              <span
+                aria-hidden="true"
+                className="h-[18px] w-[18px] shrink-0 bg-current"
+                style={sidebarExpandedBrandMaskStyle}
+              />
+              <span className="truncate">Voando no Inglês</span>
             </Link>
 
             <button

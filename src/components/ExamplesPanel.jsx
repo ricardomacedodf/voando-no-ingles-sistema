@@ -1414,6 +1414,14 @@ export default function ExamplesPanel({
     startX: 0,
     startY: 0,
   });
+  const inlinePreviewSwipeRef = useRef({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    groupKey: "",
+    suppressClick: false,
+  });
 
   useEffect(() => {
     if (!forceMobileVideoExperience || typeof window === "undefined") {
@@ -1649,15 +1657,25 @@ export default function ExamplesPanel({
       )
     : normalized;
   const hasMultipleMeanings = sorted.length > 1;
+  const meaningVideoGroups = sorted.reduce((accumulator, entry, index) => {
+    const topVideos = Array.isArray(entry?.topVideos)
+      ? entry.topVideos.filter((videoEntry) => Boolean(videoEntry?.video))
+      : [];
+
+    if (topVideos.length === 0) return accumulator;
+
+    accumulator.push({
+      entry,
+      index,
+      groupKey: `meaning-video-group-${entry.meaning}-${index}`,
+      topVideos,
+    });
+
+    return accumulator;
+  }, []);
 
   const videoMeaningGroupKeys = shouldShowSpecificVideosInsideMeanings
-    ? sorted.reduce((accumulator, entry, index) => {
-        if (Array.isArray(entry?.topVideos) && entry.topVideos.length > 0) {
-          accumulator.push(`meaning-video-group-${entry.meaning}-${index}`);
-        }
-
-        return accumulator;
-      }, [])
+    ? meaningVideoGroups.map((group) => group.groupKey)
     : [];
   const allMeaningGroupKeys = sorted.map(
     (entry, index) => `meaning-video-group-${entry.meaning}-${index}`
@@ -2167,6 +2185,12 @@ export default function ExamplesPanel({
       shouldRenderThirdPartyInline ||
       (shouldUseMobileVideoExperience && isCurrentVideoThirdParty) ||
       (isVideoOpen && !shouldUseMobileVideoExperience);
+    const canNavigateBetweenVideos = safeVideos.length > 1;
+    const shouldEnableThumbnailSwipe =
+      canNavigateBetweenVideos &&
+      (groupKey === "global-word-video-group" || shouldUseMobileVideoExperience);
+    const shouldEnableMobileInlineSwipe =
+      shouldUseMobileVideoExperience && canNavigateBetweenVideos;
     const shouldShowAttachedChip = false;
     const attachedChipPalette = meaningPalette
       ? {
@@ -2256,6 +2280,33 @@ export default function ExamplesPanel({
           borderWidth: 0,
         }
       : undefined;
+    const navigateMeaningPreviewByDirection = (direction) => {
+      if (
+        shouldUseMobileVideoExperience ||
+        !shouldShowSpecificVideosInsideMeanings
+      ) {
+        return;
+      }
+
+      const currentMeaningGroupIndex = meaningVideoGroups.findIndex(
+        (group) => group.groupKey === groupKey
+      );
+
+      if (currentMeaningGroupIndex === -1) return;
+
+      const nextMeaningGroup = meaningVideoGroups[currentMeaningGroupIndex + direction];
+
+      if (!nextMeaningGroup) return;
+
+      resetVideoGroupIndexToStart(nextMeaningGroup.groupKey);
+      setExpandedMeaningVideoKey(nextMeaningGroup.groupKey);
+      openMeaningPreviewVideoInline({
+        entry: nextMeaningGroup.entry,
+        groupKey: nextMeaningGroup.groupKey,
+        startFromFirstVideo: true,
+        desktopAutoPlayOnOpen: false,
+      });
+    };
 
     return (
       <div
@@ -2329,6 +2380,34 @@ export default function ExamplesPanel({
                   title={currentVideo.title}
                   autoPlay={shouldAutoPlayDesktopVideo}
                   resetPlaybackOnMount={Boolean(currentPlaybackOpenToken)}
+                  onKeyboardArrowNavigate={
+                    canNavigateBetweenVideos && !shouldUseMobileVideoExperience
+                      ? (direction) => {
+                          goToVideoIndex({
+                            groupKey,
+                            videos: safeVideos,
+                            nextIndex: currentIndex + direction,
+                            desktopAutoPlayOnNavigate: true,
+                          });
+                        }
+                      : undefined
+                  }
+                  onKeyboardArrowUpNavigate={
+                    !shouldUseMobileVideoExperience &&
+                    shouldShowSpecificVideosInsideMeanings
+                      ? () => {
+                          navigateMeaningPreviewByDirection(-1);
+                        }
+                      : undefined
+                  }
+                  onKeyboardArrowDownNavigate={
+                    !shouldUseMobileVideoExperience &&
+                    shouldShowSpecificVideosInsideMeanings
+                      ? () => {
+                          navigateMeaningPreviewByDirection(1);
+                        }
+                      : undefined
+                  }
                 />
               </AspectRatio>
 
@@ -2338,7 +2417,87 @@ export default function ExamplesPanel({
                   className="absolute inset-0 z-30 touch-manipulation bg-transparent"
                   aria-label={currentVideo.title || "Abrir vídeo"}
                   title={currentVideo.title || "Abrir vídeo"}
+                  onPointerDown={(event) => {
+                    if (!shouldEnableMobileInlineSwipe) return;
+                    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+                    inlinePreviewSwipeRef.current = {
+                      active: true,
+                      pointerId: event.pointerId,
+                      startX: event.clientX,
+                      startY: event.clientY,
+                      groupKey,
+                      suppressClick: false,
+                    };
+                  }}
+                  onPointerCancel={() => {
+                    inlinePreviewSwipeRef.current = {
+                      ...inlinePreviewSwipeRef.current,
+                      active: false,
+                      pointerId: null,
+                    };
+                  }}
+                  onPointerLeave={() => {
+                    inlinePreviewSwipeRef.current = {
+                      ...inlinePreviewSwipeRef.current,
+                      active: false,
+                      pointerId: null,
+                    };
+                  }}
+                  onPointerUp={(event) => {
+                    if (!shouldEnableMobileInlineSwipe) return;
+
+                    const swipeState = inlinePreviewSwipeRef.current;
+
+                    if (
+                      !swipeState.active ||
+                      swipeState.pointerId !== event.pointerId ||
+                      swipeState.groupKey !== groupKey
+                    ) {
+                      return;
+                    }
+
+                    const deltaX = event.clientX - swipeState.startX;
+                    const deltaY = event.clientY - swipeState.startY;
+                    const absX = Math.abs(deltaX);
+                    const absY = Math.abs(deltaY);
+                    const isHorizontalSwipe =
+                      absX >= VIDEO_SWIPE_DISTANCE_PX &&
+                      absX > absY * VIDEO_SWIPE_DIRECTION_RATIO;
+
+                    inlinePreviewSwipeRef.current = {
+                      ...inlinePreviewSwipeRef.current,
+                      active: false,
+                      pointerId: null,
+                    };
+
+                    if (!isHorizontalSwipe) return;
+
+                    goToVideoIndex({
+                      groupKey,
+                      videos: safeVideos,
+                      nextIndex: deltaX > 0 ? currentIndex + 1 : currentIndex - 1,
+                    });
+
+                    inlinePreviewSwipeRef.current = {
+                      ...inlinePreviewSwipeRef.current,
+                      suppressClick: true,
+                    };
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
                   onClick={(event) => {
+                    if (inlinePreviewSwipeRef.current.suppressClick) {
+                      inlinePreviewSwipeRef.current = {
+                        ...inlinePreviewSwipeRef.current,
+                        suppressClick: false,
+                      };
+                      event.preventDefault();
+                      event.stopPropagation();
+                      return;
+                    }
+
                     event.preventDefault();
                     event.stopPropagation();
                     openVideo({
@@ -2389,7 +2548,7 @@ export default function ExamplesPanel({
                 isOpen={isVideoOpen}
                 isMobile={shouldUseMobileVideoExperience}
                 onSwipeLeft={
-                  groupKey === "global-word-video-group" && safeVideos.length > 1
+                  shouldEnableThumbnailSwipe
                     ? (event) => {
                         event.preventDefault();
                         event.stopPropagation();
@@ -2402,7 +2561,7 @@ export default function ExamplesPanel({
                     : undefined
                 }
                 onSwipeRight={
-                  groupKey === "global-word-video-group" && safeVideos.length > 1
+                  shouldEnableThumbnailSwipe
                     ? (event) => {
                         event.preventDefault();
                         event.stopPropagation();

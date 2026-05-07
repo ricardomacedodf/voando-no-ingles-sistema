@@ -354,6 +354,33 @@ export default function Combinations() {
   }, [showExamples]);
 
   useEffect(() => {
+    if (!showExamples) return undefined;
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const isDesktopViewport = () =>
+      window.matchMedia("(min-width: 768px)").matches;
+    const isFullscreenActive = () =>
+      Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+
+    const handleEscapeToCloseExamples = (event) => {
+      if (event.key !== "Escape" && event.code !== "Escape") return;
+      if (!isDesktopViewport()) return;
+      if (isFullscreenActive()) return;
+
+      event.preventDefault();
+      setShowExamples(false);
+    };
+
+    document.addEventListener("keydown", handleEscapeToCloseExamples);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscapeToCloseExamples);
+    };
+  }, [showExamples]);
+
+  useEffect(() => {
     const hasActiveSelection = selectedLeft !== null || selectedRight !== null;
     const canUseExamples = hasActiveSelection || hasErrorExampleUnlock;
     if (!canUseExamples && showExamples) {
@@ -945,6 +972,7 @@ export default function Combinations() {
             onClick={() => setShowExamples((prev) => !prev)}
             variant="flashcard"
             disabled={!hasFocusedExamples || !canUseExamples}
+            examplesPanelRef={examplesPanelRef}
             className="hide-on-mobile-video-expanded"
           />
 

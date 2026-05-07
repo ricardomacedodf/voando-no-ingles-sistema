@@ -569,6 +569,33 @@ export default function Quiz() {
     return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
   }, [showExamples]);
 
+  useEffect(() => {
+    if (!showExamples) return undefined;
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const isDesktopViewport = () =>
+      window.matchMedia("(min-width: 768px)").matches;
+    const isFullscreenActive = () =>
+      Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+
+    const handleEscapeToCloseExamples = (event) => {
+      if (event.key !== "Escape" && event.code !== "Escape") return;
+      if (!isDesktopViewport()) return;
+      if (isFullscreenActive()) return;
+
+      event.preventDefault();
+      setShowExamples(false);
+    };
+
+    document.addEventListener("keydown", handleEscapeToCloseExamples);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscapeToCloseExamples);
+    };
+  }, [showExamples]);
+
   const toggleSound = () => {
     const state = getSoundState();
     const newEnabled = !state.enabled;
@@ -1022,6 +1049,7 @@ export default function Quiz() {
               expanded={showExamples}
               onClick={() => setShowExamples((prev) => !prev)}
               disabled={!answered || !card?.meanings?.length}
+              examplesPanelRef={examplesPanelRef}
             />
           </div>
 

@@ -458,6 +458,9 @@ export default function ExampleVideoPlayer({
   layout = "fill",
   controlsMode = "full",
   resetPlaybackOnMount = false,
+  onKeyboardArrowNavigate,
+  onKeyboardArrowUpNavigate,
+  onKeyboardArrowDownNavigate,
 }) {
   const isMobileMockupLayout = layout === "mobileMockup";
   const isMobileFullscreenLayout = layout === "mobileFullscreen";
@@ -875,6 +878,62 @@ export default function ExampleVideoPlayer({
       }
 
       if (
+        typeof onKeyboardArrowNavigate === "function" &&
+        !isFullscreen &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowLeft" || event.code === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        onKeyboardArrowNavigate(-1);
+        return;
+      }
+
+      if (
+        typeof onKeyboardArrowNavigate === "function" &&
+        !isFullscreen &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowRight" || event.code === "ArrowRight")
+      ) {
+        event.preventDefault();
+        onKeyboardArrowNavigate(1);
+        return;
+      }
+
+      if (
+        typeof onKeyboardArrowUpNavigate === "function" &&
+        !isFullscreen &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowUp" || event.code === "ArrowUp")
+      ) {
+        event.preventDefault();
+        onKeyboardArrowUpNavigate();
+        return;
+      }
+
+      if (
+        typeof onKeyboardArrowDownNavigate === "function" &&
+        !isFullscreen &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "ArrowDown" || event.code === "ArrowDown")
+      ) {
+        event.preventDefault();
+        onKeyboardArrowDownNavigate();
+        return;
+      }
+
+      if (
         isNativeVideoPlayback &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -971,7 +1030,18 @@ export default function ExampleVideoPlayer({
     return () => {
       document.removeEventListener("keydown", handlePlayerKeyboardShortcut);
     };
-  }, [playback, playbackRate, isMuted, isFullscreen, isPlaying, currentTime, duration]);
+  }, [
+    playback,
+    playbackRate,
+    isMuted,
+    isFullscreen,
+    isPlaying,
+    currentTime,
+    duration,
+    onKeyboardArrowNavigate,
+    onKeyboardArrowUpNavigate,
+    onKeyboardArrowDownNavigate,
+  ]);
 
   useEffect(() => {
     return () => {
