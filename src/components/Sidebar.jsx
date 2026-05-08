@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useTheme } from "../contexts/ThemeContext";
 import ThemeToggle from "./ThemeToggle";
 
 const SIDEBAR_OPEN_WIDTH = 292;
@@ -19,6 +20,7 @@ const SIDEBAR_COLLAPSED_WIDTH = 64;
 const COLLAPSED_PROFILE_MENU_WIDTH = 252;
 const SIDEBAR_TRANSITION_MS = 300;
 const SIDEBAR_COLLAPSED_BRAND_SRC = "/sidebar-avatar-collapsed.png";
+const SIDEBAR_COLLAPSED_BRAND_LIGHT_SRC = "/sidebar-avatar-collapsed - branco.png";
 const SIDEBAR_EXPANDED_BRAND_MASK_SRC = "/sidebar-logo-normal.png";
 
 const sidebarExpandedBrandMaskStyle = {
@@ -103,6 +105,7 @@ export default function Sidebar({
 }) {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { isDark } = useTheme();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
@@ -152,6 +155,10 @@ export default function Sidebar({
     user?.user_metadata?.avatar_url ||
     user?.user_metadata?.photo_url ||
     "";
+
+  const collapsedBrandSrc = isDark
+    ? SIDEBAR_COLLAPSED_BRAND_SRC
+    : SIDEBAR_COLLAPSED_BRAND_LIGHT_SRC;
 
   const setSidebarCollapsed = useCallback(
     (nextCollapsed) => {
@@ -374,14 +381,10 @@ export default function Sidebar({
           >
             <span className="relative flex h-[24px] w-[24px] items-center justify-center">
               <img
-                src={SIDEBAR_COLLAPSED_BRAND_SRC}
+                src={collapsedBrandSrc}
                 alt="Logo Voando no Inglês"
-                className="h-full w-full object-contain transition-opacity duration-150 group-hover:opacity-0"
+                className="h-full w-full object-contain"
                 draggable="false"
-              />
-              <SidebarToggleIcon
-                isCollapsed
-                className="absolute h-[20px] w-[20px] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
               />
             </span>
           </button>
