@@ -638,7 +638,7 @@ export default function Quiz() {
     if (answered || !user?.id || !options[idx]) return;
     playOptionSelectSfx(event);
 
-    setSelected(idx);
+    setSelected((currentSelected) => (currentSelected === idx ? null : idx));
     setShowExamples(false);
   };
 
@@ -1093,7 +1093,7 @@ export default function Quiz() {
               .filter(Boolean)
               .join(" ")}
           >
-            {answered || selected !== null ? (
+            {answered ? (
               <ExamplesToggleButton
                 expanded={showExamples}
                 onClick={() => setShowExamples((prev) => !prev)}
@@ -1118,7 +1118,7 @@ export default function Quiz() {
           <div className="min-w-0 self-start">{renderQuizActionButton()}</div>
         </div>
 
-        {(answered || selected !== null) && card?.meanings?.length > 0 && showExamples ? (
+        {answered && card?.meanings?.length > 0 && showExamples ? (
           <div
             ref={examplesPanelRef}
             className="study-example-panel-desktop-shell relative mx-auto mt-3 w-full overflow-visible"

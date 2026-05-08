@@ -438,13 +438,15 @@ export default function Sidebar({
                     : "w-full justify-start gap-3 px-3"
                 } ${
                   isActive
-                    ? "bg-[#25B15F] text-white"
-                    : "text-sidebar-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-[#F3F3F3] text-foreground dark:bg-[#1f252e] dark:text-white"
+                    : "text-sidebar-foreground hover:bg-[#F3F3F3] hover:text-foreground dark:hover:bg-[#1f252e] dark:hover:text-white"
                 }`}
               >
                 <Icon
                   className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                    isActive ? "text-white" : "text-muted-foreground group-hover:text-foreground"
+                    isActive
+                      ? "text-foreground dark:text-white"
+                      : "text-muted-foreground group-hover:text-foreground dark:group-hover:text-white"
                   }`}
                 />
                 {!isCompactVisual ? <span className="truncate">{item.label}</span> : null}
