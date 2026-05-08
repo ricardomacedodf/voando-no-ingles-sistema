@@ -230,6 +230,7 @@ export default function Combinations() {
   const examplesPanelRef = useRef(null);
   const latestVocabRef = useRef([]);
   const pendingReviewUpdatesRef = useRef(new Map());
+  const pairAttemptCountsRef = useRef({});
 
   useEffect(() => {
     latestVocabRef.current = allVocab;
@@ -454,6 +455,7 @@ export default function Combinations() {
     setHasErrorExampleUnlock(false);
     setXpFeedback(null);
     setRoundXpBalance(0);
+    pairAttemptCountsRef.current = {};
     scheduleMobileActiveFocusClear();
   };
 
@@ -505,7 +507,7 @@ export default function Combinations() {
     });
   };
 
-  const enqueueReviewUpdate = (vocabId, result) => {
+  const enqueueReviewUpdate = (vocabId, result, reviewOptions = {}) => {
     if (!vocabId || !user?.id) return;
 
     const runUpdate = async () => {
@@ -517,6 +519,8 @@ export default function Combinations() {
       const updatedStats = updateStatsAfterReview(currentItem, result, {
         reviewedAt: now,
         mode: "combinations",
+        attempts: reviewOptions.attempts,
+        isFinalMatch: reviewOptions.isFinalMatch,
         preferences: reviewPreferences,
       });
 
@@ -553,7 +557,7 @@ export default function Combinations() {
     pendingQueue.set(vocabId, nextTask);
   };
 
-  const persistMatchReview = (leftItem, rightItem, isCorrect) => {
+  const persistMatchReview = (leftItem, rightItem, isCorrect, reviewOptions = {}) => {
     if (!leftItem || !rightItem || !user?.id) return;
 
     const impactedVocabIds = isCorrect
@@ -565,8 +569,18 @@ export default function Combinations() {
         );
 
     impactedVocabIds.forEach((vocabId) => {
-      enqueueReviewUpdate(vocabId, isCorrect);
+      enqueueReviewUpdate(vocabId, isCorrect, reviewOptions);
     });
+  };
+
+  const registerCombinationAttempt = (item) => {
+    if (!item) return 1;
+
+    const key = getPairKey(item);
+    const nextAttempts = (pairAttemptCountsRef.current[key] || 0) + 1;
+    pairAttemptCountsRef.current[key] = nextAttempts;
+
+    return nextAttempts;
   };
 
   const handleLeftClick = (idx, event) => {
@@ -656,6 +670,8 @@ export default function Combinations() {
     const right = rightItems[rightIdx];
 
     if (checkMatch(leftIdx, rightIdx)) {
+      const attempts = registerCombinationAttempt(left);
+
       if (!shouldSkipRepeatedMatchResultSfx("success", leftIdx, rightIdx)) {
         playSound(SFX_EVENTS.MATCH_SUCCESS);
       }
@@ -672,7 +688,10 @@ export default function Combinations() {
       setSelectedLeft(null);
       setSelectedRight(null);
       setHasErrorExampleUnlock(false);
-      persistMatchReview(left, right, true);
+      persistMatchReview(left, right, true, {
+        attempts,
+        isFinalMatch: true,
+      });
 
       if (newMatched.size / 2 >= roundPairs.length) {
         setRoundComplete(true);
@@ -681,6 +700,9 @@ export default function Combinations() {
         }
       }
     } else {
+      registerCombinationAttempt(left);
+      registerCombinationAttempt(right);
+
       if (!shouldSkipRepeatedMatchResultSfx("error", leftIdx, rightIdx)) {
         playSound(SFX_EVENTS.MATCH_ERROR);
       }
@@ -692,7 +714,10 @@ export default function Combinations() {
       setErrors((e) => e + 1);
       setHasErrorExampleUnlock(true);
       setErrorPair({ left: leftIdx, right: rightIdx });
-      persistMatchReview(left, right, false);
+      persistMatchReview(left, right, false, {
+        attempts: 1,
+        isFinalMatch: false,
+      });
 
       if (left) {
         const keyL = `${left.vocabId}_${left.meaningIdx}`;

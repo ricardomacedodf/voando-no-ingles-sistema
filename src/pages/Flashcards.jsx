@@ -753,10 +753,14 @@ export default function Flashcards() {
     const responseTime = Math.max(0, Date.now() - cardStartTimeRef.current);
     const now = new Date().toISOString();
     const reviewPreferences = loadReviewPreferences();
+    const revealedBeforeAnswer = flipped || hasInteractedWithCard;
+    const answeredWithoutReveal = !revealedBeforeAnswer;
     const updatedStats = updateStatsAfterReview(card, correct, {
       responseTimeMs: responseTime,
       reviewedAt: now,
       mode: "flashcards",
+      revealedBeforeAnswer,
+      answeredWithoutReveal,
       preferences: reviewPreferences,
     });
 

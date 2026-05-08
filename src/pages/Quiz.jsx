@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Volume2, VolumeX, ArrowRight, Check } from "lucide-react";
+import { Volume2, VolumeX, ArrowRight, Check, Eye } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
@@ -64,6 +64,16 @@ const SELECTABLE_STUDY_TEXT_STYLE = {
   userSelect: "text",
   WebkitUserSelect: "text",
 };
+
+const QUIZ_SECONDARY_ACTION_BUTTON_CLASSES =
+  "border-[#E1DDD8] bg-[#FCFAF8] text-[#948A7F] shadow-[0_2px_0_rgba(225,221,216,0.32)] md:hover:border-[#D6D0C8] md:hover:bg-[#F8F3EE] dark:border-[#4a453f] dark:bg-[#161c23] dark:text-[#bababa] dark:shadow-[0_2px_0_rgba(74,69,63,0.28)] dark:md:hover:border-[#4a453f] dark:md:hover:bg-[#161c23]";
+
+const QUIZ_DONT_REMEMBER_BUTTON_CLASSES =
+  "border-[#E1DDD8] bg-[#FCFAF8] text-[#948A7F] shadow-[0_2px_0_rgba(225,221,216,0.32)] md:hover:border-[#93c5fd] md:hover:bg-blue-50/30 dark:border-[#4a453f] dark:bg-[#161c23] dark:text-[#bababa] dark:shadow-[0_2px_0_rgba(74,69,63,0.28)] dark:md:hover:border-sky-500/70 dark:md:hover:bg-sky-500/15";
+
+const QUIZ_ACTIVE_CONFIRM_BUTTON_CLASSES =
+  "border-primary bg-primary text-primary-foreground shadow-[0_2px_0_rgba(37,177,95,0.26)] md:hover:bg-primary/90 active:scale-[0.99]";
+
 
 function isMobileQuizViewport() {
   return (
@@ -632,38 +642,18 @@ export default function Quiz() {
     setShowExamples(false);
   };
 
-  const handleConfirm = async () => {
-    if (answered || !user?.id || selected === null || !options[selected]) return;
-
-    const selectedOption = options[selected];
-    const correct = selectedOption.correct;
-    setAnswered(true);
-
-    playSound(correct ? SFX_EVENTS.QUIZ_SUCCESS : SFX_EVENTS.QUIZ_ERROR);
-    const xpDelta = correct ? CORRECT_XP_DELTA : INCORRECT_XP_DELTA;
-
-    addXP(xpDelta);
-    setXpFeedback(xpDelta > 0 ? `+${xpDelta} XP` : `${xpDelta} XP`);
-    setRoundXpBalance((prev) => prev + xpDelta);
-    setTimeout(() => setXpFeedback(null), 1000);
-
-    if (correct) {
-      recordCorrect();
-      setRoundCorrectCount((prev) => prev + 1);
-    } else {
-      recordIncorrect();
-      setRoundIncorrectCount((prev) => prev + 1);
-    }
-    updateStreak();
-
+  const persistQuizResult = async ({ correct, didNotRemember = false }) => {
     const card = queue[current];
-    const responseTime = Date.now() - startTime.current;
+    if (!card || !user?.id) return;
+
+    const responseTime = Math.max(0, Date.now() - startTime.current);
     const now = new Date().toISOString();
     const reviewPreferences = loadReviewPreferences();
     const updatedStats = updateStatsAfterReview(card, correct, {
       responseTimeMs: responseTime,
       reviewedAt: now,
       mode: "quiz",
+      didNotRemember,
       preferences: reviewPreferences,
     });
 
@@ -708,6 +698,48 @@ export default function Quiz() {
       console.error("Erro ao atualizar stats do quiz no Supabase:", error);
       alert("Nao foi possivel salvar seu progresso nesta pergunta.");
     }
+  };
+
+  const applyQuizOutcome = ({ correct, didNotRemember = false }) => {
+    setAnswered(true);
+    setShowExamples(false);
+
+    if (didNotRemember) {
+      setSelected(null);
+    }
+
+    playSound(correct ? SFX_EVENTS.QUIZ_SUCCESS : SFX_EVENTS.QUIZ_ERROR);
+    const xpDelta = correct ? CORRECT_XP_DELTA : INCORRECT_XP_DELTA;
+
+    addXP(xpDelta);
+    setXpFeedback(xpDelta > 0 ? `+${xpDelta} XP` : `${xpDelta} XP`);
+    setRoundXpBalance((prev) => prev + xpDelta);
+    setTimeout(() => setXpFeedback(null), 1000);
+
+    if (correct) {
+      recordCorrect();
+      setRoundCorrectCount((prev) => prev + 1);
+    } else {
+      recordIncorrect();
+      setRoundIncorrectCount((prev) => prev + 1);
+    }
+    updateStreak();
+  };
+
+  const handleConfirm = async () => {
+    if (answered || !user?.id || selected === null || !options[selected]) return;
+
+    const selectedOption = options[selected];
+    const correct = selectedOption.correct;
+    applyQuizOutcome({ correct });
+    await persistQuizResult({ correct });
+  };
+
+  const handleDontRemember = async () => {
+    if (answered || !user?.id || !card) return;
+
+    applyQuizOutcome({ correct: false, didNotRemember: true });
+    await persistQuizResult({ correct: false, didNotRemember: true });
   };
 
   const handleOptionPointerDown = (idx) => {
@@ -800,29 +832,32 @@ export default function Quiz() {
   const isLastRound = roundNumber >= MAX_ROUNDS;
   const roundBalanceText = `${roundXpBalance > 0 ? "+" : ""}${roundXpBalance}XP`;
 
-  const renderQuizActionButton = () => (
-    <button
-      type="button"
-      onClick={answered ? handleNext : handleConfirm}
-      disabled={!answered && selected === null}
-      style={NON_SELECTABLE_UI_STYLE}
-      className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent] ${
-        answered
-          ? "border-primary bg-primary text-primary-foreground shadow-[0_2px_0_rgba(37,177,95,0.26)] active:scale-[0.99]"
-          : selected !== null
-            ? "border-muted-foreground/50 bg-card text-muted-foreground shadow-[0_2px_0_rgba(107,114,128,0.20)] active:scale-[0.99] dark:border-slate-500/70 dark:bg-card dark:text-slate-300 dark:shadow-[0_2px_0_rgba(148,163,184,0.16)]"
-            : "cursor-not-allowed border-border bg-card text-foreground opacity-[0.44] dark:border-border dark:bg-card dark:text-foreground dark:opacity-[0.29]"
-      }`}
-    >
-      {answered ? (
-        <>
-          {"Pr\u00f3ximo"} <ArrowRight className="h-4 w-4" />
-        </>
-      ) : (
-        "Confirmar"
-      )}
-    </button>
-  );
+  const renderQuizActionButton = () => {
+    const isConfirmDisabled = !answered && selected === null;
+    const buttonClasses = answered
+      ? QUIZ_ACTIVE_CONFIRM_BUTTON_CLASSES
+      : selected !== null
+        ? QUIZ_ACTIVE_CONFIRM_BUTTON_CLASSES
+        : `${QUIZ_SECONDARY_ACTION_BUTTON_CLASSES} cursor-not-allowed dark:md:hover:!border-[#57333d] dark:md:hover:!bg-[#231820] dark:md:hover:!text-[#d18b9b] dark:active:!border-[#57333d] dark:active:!bg-[#231820] dark:active:!text-[#d18b9b]`;
+
+    return (
+      <button
+        type="button"
+        onClick={answered ? handleNext : handleConfirm}
+        disabled={isConfirmDisabled}
+        style={NON_SELECTABLE_UI_STYLE}
+        className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 disabled:cursor-not-allowed [-webkit-tap-highlight-color:transparent] ${buttonClasses}`}
+      >
+        {answered ? (
+          <>
+            {"Próximo"} <ArrowRight className="h-4 w-4" />
+          </>
+        ) : (
+          "Confirmar"
+        )}
+      </button>
+    );
+  };
 
   if (roundDone) {
     return (
@@ -1058,18 +1093,32 @@ export default function Quiz() {
               .filter(Boolean)
               .join(" ")}
           >
-            <ExamplesToggleButton
-              expanded={showExamples}
-              onClick={() => setShowExamples((prev) => !prev)}
-              disabled={!answered || !card?.meanings?.length}
-              examplesPanelRef={examplesPanelRef}
-            />
+            {answered || selected !== null ? (
+              <ExamplesToggleButton
+                expanded={showExamples}
+                onClick={() => setShowExamples((prev) => !prev)}
+                disabled={!card?.meanings?.length}
+                examplesPanelRef={examplesPanelRef}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={handleDontRemember}
+                disabled={!user?.id || !card}
+                style={NON_SELECTABLE_UI_STYLE}
+                className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-center text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 [-webkit-tap-highlight-color:transparent] sm:px-4 ${QUIZ_DONT_REMEMBER_BUTTON_CLASSES}`}
+              >
+                <Eye className="h-5 w-5 shrink-0 text-[#948A7F] dark:text-[#5c5c5c] sm:h-4 sm:w-4" />
+                <span className="leading-none sm:hidden">{"N\u00e3o lembro"}</span>
+                <span className="hidden sm:inline">{"N\u00e3o lembro, revele a resposta"}</span>
+              </button>
+            )}
           </div>
 
           <div className="min-w-0 self-start">{renderQuizActionButton()}</div>
         </div>
 
-        {answered && card?.meanings?.length > 0 && showExamples ? (
+        {(answered || selected !== null) && card?.meanings?.length > 0 && showExamples ? (
           <div
             ref={examplesPanelRef}
             className="study-example-panel-desktop-shell relative mx-auto mt-3 w-full overflow-visible"

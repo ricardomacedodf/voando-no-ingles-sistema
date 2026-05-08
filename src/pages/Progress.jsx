@@ -163,6 +163,16 @@ function WordList({ title, emptyText, items, valueRenderer }) {
   );
 }
 
+function SignalMetricCard({ label, value, description }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-4">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-bold text-foreground">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+    </div>
+  );
+}
+
 export default function Progress() {
   const { user } = useAuth();
 
@@ -389,6 +399,36 @@ export default function Progress() {
         </div>
       </div>
 
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h3 className="mb-4 font-bold">Novas metricas de aprendizado</h3>
+        <div className="grid gap-4 md:grid-cols-4">
+          <SignalMetricCard
+            label="Dominio"
+            value={`${progress.masteryCorrectStreak || 10} acertos seguidos`}
+            description="A palavra so entra como dominada quando atinge essa sequencia."
+          />
+          <SignalMetricCard
+            label="Flashcards"
+            value={progress.flashcardRevealedBeforeAnswer || 0}
+            description="Revelacoes antes de responder viram sinal de atencao."
+          />
+          <SignalMetricCard
+            label="Quiz"
+            value={formatResponseTime(progress.quizAverageResponseMs || 0)}
+            description="Tempo medio contado somente ate confirmar a resposta."
+          />
+          <SignalMetricCard
+            label="Combinacoes"
+            value={`${(progress.combinationsAverageAttempts || 0).toFixed(1)} tentativas`}
+            description="Acerto de primeira pesa positivo; repeticoes indicam dificuldade."
+          />
+        </div>
+        <div className="mt-4 text-xs text-muted-foreground">
+          Sinais de confianca: {progress.confidenceSignals || 0}. Sinais de atencao:{" "}
+          {progress.difficultySignals || 0}.
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm md:col-span-2">
           <div className="mb-4 flex items-center gap-2 font-medium text-muted-foreground">
@@ -522,14 +562,14 @@ export default function Progress() {
           title="Perto de dominar"
           emptyText="Ainda nao ha itens perto da dominacao."
           items={progress.nearMasteryWords}
-          valueRenderer={(item) => `${item.accuracyRate || 0}%`}
+          valueRenderer={(item) => `${item.stats?.correct_streak || 0}/${progress.masteryCorrectStreak || 10}`}
         />
         <WordList
           title="Dominadas"
           emptyText="Nenhum item dominado ainda."
           items={progress.dominatedWords}
           valueRenderer={(item) =>
-            formatCount(item.stats?.correct || 0, "acerto", "acertos")
+            formatCount(item.stats?.correct_streak || 0, "acerto seguido", "acertos seguidos")
           }
         />
         <WordList

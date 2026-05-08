@@ -1,5 +1,7 @@
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const MAX_REVIEW_STAGE = 6;
+const MASTERY_CORRECT_STREAK = 10;
+const QUIZ_SLOW_RESPONSE_MS = 12000;
 
 export const LEARNING_STATUS = Object.freeze({
   NOVA: "nova",
@@ -43,6 +45,23 @@ const DEFAULT_STATS = Object.freeze({
   review_stage: 0,
   last_result: null,
   last_review_mode: null,
+  correct_streak: 0,
+  flashcard_confident_without_reveal: 0,
+  flashcard_revealed_before_answer: 0,
+  quiz_answered_count: 0,
+  quiz_total_response_ms: 0,
+  quiz_average_response_ms: 0,
+  quiz_slow_response_count: 0,
+  quiz_dont_remember_count: 0,
+  combinations_rounds: 0,
+  combinations_total_attempts: 0,
+  combinations_average_attempts: 0,
+  combinations_extra_attempts: 0,
+  combinations_first_try: 0,
+  difficulty_signals: 0,
+  confidence_signals: 0,
+  mastery_threshold: MASTERY_CORRECT_STREAK,
+  mastery_remaining: MASTERY_CORRECT_STREAK,
 });
 
 const REVIEW_PACE_CONFIG = Object.freeze({
@@ -81,6 +100,36 @@ function toSafeNonNegativeNumber(value, fallback = 0) {
 function toSafeInteger(value, fallback = 0) {
   const safe = toSafeNonNegativeNumber(value, fallback);
   return Math.round(safe);
+}
+
+function pickMetric(stats, keys, fallback = 0) {
+  for (const key of keys) {
+    if (stats && stats[key] !== undefined && stats[key] !== null) {
+      return toSafeInteger(stats[key], fallback);
+    }
+  }
+
+  return fallback;
+}
+
+function normalizeBoolean(value) {
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function getDifficultySignals(stats) {
+  return (
+    toSafeInteger(stats.flashcard_revealed_before_answer, 0) +
+    toSafeInteger(stats.quiz_slow_response_count, 0) +
+    toSafeInteger(stats.quiz_dont_remember_count, 0) +
+    toSafeInteger(stats.combinations_extra_attempts, 0)
+  );
+}
+
+function getConfidenceSignals(stats) {
+  return (
+    toSafeInteger(stats.flashcard_confident_without_reveal, 0) +
+    toSafeInteger(stats.combinations_first_try, 0)
+  );
 }
 
 function normalizeIsoDate(rawValue) {
@@ -206,6 +255,9 @@ function getPriorityScore(derivedItem) {
     ? derivedItem.overdueDays
     : 0;
   const totalReviews = toSafeInteger(stats.total_reviews, 0);
+  const difficultySignals = toSafeInteger(stats.difficulty_signals, 0);
+  const confidenceSignals = toSafeInteger(stats.confidence_signals, 0);
+  const correctStreak = toSafeInteger(stats.correct_streak, 0);
 
   let score = 0;
 
@@ -223,6 +275,9 @@ function getPriorityScore(derivedItem) {
 
   score += Math.max(0, (100 - accuracyRate) * 0.45);
   score += Math.min(25, totalReviews * 1.2);
+  score += Math.min(45, difficultySignals * 4);
+  score -= Math.min(20, confidenceSignals * 1.5);
+  score -= Math.min(25, correctStreak * 2);
 
   return Math.round(score);
 }
@@ -323,11 +378,19 @@ export function calculateAccuracy(stats) {
 export function calculateStatus(stats) {
   const safeStats = stats || {};
   const totalReviews = toSafeInteger(safeStats.total_reviews, 0);
+  const correctStreak = toSafeInteger(safeStats.correct_streak, 0);
+  const difficultySignals = toSafeInteger(safeStats.difficulty_signals, 0);
+  const confidenceSignals = toSafeInteger(safeStats.confidence_signals, 0);
+
+  if (correctStreak >= MASTERY_CORRECT_STREAK) {
+    return LEARNING_STATUS.DOMINADA;
+  }
+
   if (totalReviews < 3) return LEARNING_STATUS.NOVA;
 
   const accuracyRate = calculateAccuracy(safeStats);
-  if (accuracyRate >= 80) return LEARNING_STATUS.DOMINADA;
-  if (accuracyRate < 50) return LEARNING_STATUS.DIFICIL;
+  const difficultyPressure = difficultySignals > confidenceSignals + 2;
+  if (accuracyRate < 50 || difficultyPressure) return LEARNING_STATUS.DIFICIL;
   return LEARNING_STATUS.NOVA;
 }
 
@@ -358,12 +421,76 @@ export function normalizeStats(rawStats, preferences) {
   normalized.last_reviewed = normalizeIsoDate(normalized.last_reviewed);
   normalized.last_result = normalizeReviewResult(normalized.last_result);
   normalized.last_review_mode = normalizeReviewMode(normalized.last_review_mode);
+  normalized.correct_streak = pickMetric(normalized, [
+    "correct_streak",
+    "consecutive_correct",
+    "current_correct_streak",
+    "correctStreak",
+  ]);
+  normalized.flashcard_confident_without_reveal = pickMetric(normalized, [
+    "flashcard_confident_without_reveal",
+    "flashcard_answered_without_reveal",
+  ]);
+  normalized.flashcard_revealed_before_answer = pickMetric(normalized, [
+    "flashcard_revealed_before_answer",
+    "flashcard_revealed_count",
+  ]);
+  normalized.quiz_answered_count = pickMetric(normalized, [
+    "quiz_answered_count",
+    "quiz_answer_count",
+  ]);
+  normalized.quiz_total_response_ms = pickMetric(normalized, [
+    "quiz_total_response_ms",
+    "quiz_response_total_ms",
+  ]);
+  normalized.quiz_slow_response_count = pickMetric(normalized, [
+    "quiz_slow_response_count",
+    "quiz_slow_answers",
+  ]);
+  normalized.quiz_dont_remember_count = pickMetric(normalized, [
+    "quiz_dont_remember_count",
+    "quiz_no_remember_count",
+    "quiz_did_not_remember_count",
+    "quiz_forgotten_count",
+  ]);
+  normalized.quiz_average_response_ms = normalized.quiz_answered_count
+    ? Math.round(normalized.quiz_total_response_ms / normalized.quiz_answered_count)
+    : 0;
+  normalized.combinations_rounds = pickMetric(normalized, [
+    "combinations_rounds",
+    "combination_rounds",
+  ]);
+  normalized.combinations_total_attempts = pickMetric(normalized, [
+    "combinations_total_attempts",
+    "combination_total_attempts",
+  ]);
+  normalized.combinations_extra_attempts = pickMetric(normalized, [
+    "combinations_extra_attempts",
+    "combination_extra_attempts",
+  ]);
+  normalized.combinations_first_try = pickMetric(normalized, [
+    "combinations_first_try",
+    "combination_first_try",
+  ]);
+  normalized.combinations_average_attempts = normalized.combinations_rounds
+    ? normalized.combinations_total_attempts / normalized.combinations_rounds
+    : 0;
+  normalized.difficulty_signals = getDifficultySignals(normalized);
+  normalized.confidence_signals = getConfidenceSignals(normalized);
+  normalized.mastery_threshold = MASTERY_CORRECT_STREAK;
+  normalized.mastery_remaining = Math.max(
+    0,
+    MASTERY_CORRECT_STREAK - normalized.correct_streak
+  );
 
   const fallbackStatus = normalizeBaseStatus(normalized.status);
   const calculatedStatus = calculateStatus({
     correct: normalized.correct,
     incorrect: normalized.incorrect,
     total_reviews: normalized.total_reviews,
+    correct_streak: normalized.correct_streak,
+    difficulty_signals: normalized.difficulty_signals,
+    confidence_signals: normalized.confidence_signals,
   });
 
   normalized.status =
@@ -457,6 +584,7 @@ export function updateStatsAfterReview(itemOrStats, result, options = {}) {
   const reviewResult = normalizeReviewResult(result);
   const isCorrect = reviewResult === "correct";
   const reviewedAt = normalizeIsoDate(options.reviewedAt) || new Date().toISOString();
+  const reviewMode = normalizeReviewMode(options.mode);
 
   const responseTimeRaw = Number(options.responseTimeMs);
   const hasResponseTime = Number.isFinite(responseTimeRaw) && responseTimeRaw > 0;
@@ -465,6 +593,7 @@ export function updateStatsAfterReview(itemOrStats, result, options = {}) {
   const nextCorrect = normalized.correct + (isCorrect ? 1 : 0);
   const nextIncorrect = normalized.incorrect + (isCorrect ? 0 : 1);
   const nextTotal = normalized.total_reviews + 1;
+  const nextCorrectStreak = isCorrect ? normalized.correct_streak + 1 : 0;
 
   const nextAverageResponse = hasResponseTime
     ? Math.round(
@@ -480,15 +609,65 @@ export function updateStatsAfterReview(itemOrStats, result, options = {}) {
     incorrect: nextIncorrect,
     total_reviews: nextTotal,
     avg_response_time: nextAverageResponse,
+    correct_streak: nextCorrectStreak,
     last_reviewed: reviewedAt,
+    last_review_mode: reviewMode || normalized.last_review_mode,
+    mastery_threshold: MASTERY_CORRECT_STREAK,
+    mastery_remaining: Math.max(0, MASTERY_CORRECT_STREAK - nextCorrectStreak),
   };
 
+  if (reviewMode === "flashcards") {
+    if (normalizeBoolean(options.answeredWithoutReveal)) {
+      nextBaseStats.flashcard_confident_without_reveal += 1;
+    }
+
+    if (normalizeBoolean(options.revealedBeforeAnswer)) {
+      nextBaseStats.flashcard_revealed_before_answer += 1;
+    }
+  }
+
+  if (reviewMode === "quiz" && hasResponseTime) {
+    nextBaseStats.quiz_answered_count += 1;
+    nextBaseStats.quiz_total_response_ms += responseTimeMs;
+    nextBaseStats.quiz_average_response_ms = nextBaseStats.quiz_answered_count
+      ? Math.round(nextBaseStats.quiz_total_response_ms / nextBaseStats.quiz_answered_count)
+      : 0;
+
+    if (responseTimeMs >= QUIZ_SLOW_RESPONSE_MS) {
+      nextBaseStats.quiz_slow_response_count += 1;
+    }
+
+    if (
+      normalizeBoolean(options.didNotRemember) ||
+      normalizeBoolean(options.dontRemember) ||
+      normalizeBoolean(options.quizDontRemember)
+    ) {
+      nextBaseStats.quiz_dont_remember_count += 1;
+    }
+  }
+
+  if (reviewMode === "combinations" && normalizeBoolean(options.isFinalMatch)) {
+    const attempts = Math.max(1, toSafeInteger(options.attempts, 1));
+    nextBaseStats.combinations_rounds += 1;
+    nextBaseStats.combinations_total_attempts += attempts;
+    nextBaseStats.combinations_average_attempts = nextBaseStats.combinations_rounds
+      ? nextBaseStats.combinations_total_attempts / nextBaseStats.combinations_rounds
+      : 0;
+    nextBaseStats.combinations_extra_attempts += Math.max(0, attempts - 1);
+
+    if (attempts === 1) {
+      nextBaseStats.combinations_first_try += 1;
+    }
+  }
+
+  nextBaseStats.difficulty_signals = getDifficultySignals(nextBaseStats);
+  nextBaseStats.confidence_signals = getConfidenceSignals(nextBaseStats);
   nextBaseStats.status = calculateStatus(nextBaseStats);
 
   const nextSchedule = calculateNextReview(nextBaseStats, options.preferences, {
     result: reviewResult,
     reviewedAt,
-    mode: options.mode,
+    mode: reviewMode,
   });
 
   return normalizeStats(
@@ -587,6 +766,8 @@ export function getDueItems(items, preferences, options = {}) {
     (item) =>
       item.learningStatus === LEARNING_STATUS.DIFICIL ||
       item.isOverdue ||
+      toSafeInteger(item.stats.difficulty_signals, 0) >
+        toSafeInteger(item.stats.confidence_signals, 0) + 1 ||
       (item.learningStatus === LEARNING_STATUS.APRENDENDO && item.accuracyRate < 65)
   );
   const upcoming = sorted
@@ -653,9 +834,50 @@ export function getProgressSummary(items, preferences, options = {}) {
       acc.weightedResponseTime +=
         toSafeInteger(item.stats.avg_response_time, 0) *
         toSafeInteger(item.stats.total_reviews, 0);
+      acc.flashcardConfidentWithoutReveal += toSafeInteger(
+        item.stats.flashcard_confident_without_reveal,
+        0
+      );
+      acc.flashcardRevealedBeforeAnswer += toSafeInteger(
+        item.stats.flashcard_revealed_before_answer,
+        0
+      );
+      acc.quizAnsweredCount += toSafeInteger(item.stats.quiz_answered_count, 0);
+      acc.quizTotalResponseMs += toSafeInteger(item.stats.quiz_total_response_ms, 0);
+      acc.quizSlowResponseCount += toSafeInteger(item.stats.quiz_slow_response_count, 0);
+      acc.quizDontRememberCount += toSafeInteger(item.stats.quiz_dont_remember_count, 0);
+      acc.combinationsRounds += toSafeInteger(item.stats.combinations_rounds, 0);
+      acc.combinationsTotalAttempts += toSafeInteger(
+        item.stats.combinations_total_attempts,
+        0
+      );
+      acc.combinationsExtraAttempts += toSafeInteger(
+        item.stats.combinations_extra_attempts,
+        0
+      );
+      acc.combinationsFirstTry += toSafeInteger(item.stats.combinations_first_try, 0);
+      acc.difficultySignals += toSafeInteger(item.stats.difficulty_signals, 0);
+      acc.confidenceSignals += toSafeInteger(item.stats.confidence_signals, 0);
       return acc;
     },
-    { correct: 0, incorrect: 0, reviews: 0, weightedResponseTime: 0 }
+    {
+      correct: 0,
+      incorrect: 0,
+      reviews: 0,
+      weightedResponseTime: 0,
+      flashcardConfidentWithoutReveal: 0,
+      flashcardRevealedBeforeAnswer: 0,
+      quizAnsweredCount: 0,
+      quizTotalResponseMs: 0,
+      quizSlowResponseCount: 0,
+      combinationsRounds: 0,
+      combinationsTotalAttempts: 0,
+      combinationsExtraAttempts: 0,
+      combinationsFirstTry: 0,
+      quizDontRememberCount: 0,
+      difficultySignals: 0,
+      confidenceSignals: 0,
+    }
   );
 
   const totalAttempts = totals.correct + totals.incorrect;
@@ -679,9 +901,14 @@ export function getProgressSummary(items, preferences, options = {}) {
   const nearMasteryWords = [...dueGroups.learning]
     .filter(
       (item) =>
-        toSafeInteger(item.stats.total_reviews, 0) >= 2 && item.accuracyRate >= 70
+        toSafeInteger(item.stats.correct_streak, 0) > 0 &&
+        toSafeInteger(item.stats.correct_streak, 0) < MASTERY_CORRECT_STREAK
     )
-    .sort((a, b) => b.accuracyRate - a.accuracyRate)
+    .sort(
+      (a, b) =>
+        toSafeInteger(b.stats.correct_streak, 0) -
+        toSafeInteger(a.stats.correct_streak, 0)
+    )
     .slice(0, 6);
 
   const staleDominatedWords = [...dueGroups.dominated]
@@ -713,6 +940,25 @@ export function getProgressSummary(items, preferences, options = {}) {
     totalReviews: totals.reviews,
     accuracyRate,
     averageResponseMs,
+    flashcardConfidentWithoutReveal: totals.flashcardConfidentWithoutReveal,
+    flashcardRevealedBeforeAnswer: totals.flashcardRevealedBeforeAnswer,
+    quizAnsweredCount: totals.quizAnsweredCount,
+    quizTotalResponseMs: totals.quizTotalResponseMs,
+    quizAverageResponseMs: totals.quizAnsweredCount
+      ? Math.round(totals.quizTotalResponseMs / totals.quizAnsweredCount)
+      : 0,
+    quizSlowResponseCount: totals.quizSlowResponseCount,
+    quizDontRememberCount: totals.quizDontRememberCount,
+    combinationsRounds: totals.combinationsRounds,
+    combinationsTotalAttempts: totals.combinationsTotalAttempts,
+    combinationsAverageAttempts: totals.combinationsRounds
+      ? totals.combinationsTotalAttempts / totals.combinationsRounds
+      : 0,
+    combinationsExtraAttempts: totals.combinationsExtraAttempts,
+    combinationsFirstTry: totals.combinationsFirstTry,
+    difficultySignals: totals.difficultySignals,
+    confidenceSignals: totals.confidenceSignals,
+    masteryCorrectStreak: MASTERY_CORRECT_STREAK,
     hardestWords,
     dominatedWords: dueGroups.dominated.slice(0, 6),
     learningWords: dueGroups.learning.slice(0, 6),
