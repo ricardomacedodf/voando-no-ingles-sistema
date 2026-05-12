@@ -67,6 +67,117 @@ const INTERNAL_VIDEO_CONFLICT_MESSAGE =
 const UNSAVED_CHANGES_CONFIRM_MESSAGE =
   "Existem alterações não salvas. Tem certeza que deseja sair sem salvar?";
 
+const isMobileInteractionViewport = () => {
+  if (typeof window === "undefined") return false;
+
+  const matches = (query) => {
+    try {
+      return Boolean(window.matchMedia?.(query)?.matches);
+    } catch {
+      return false;
+    }
+  };
+
+  return (
+    matches("(hover: none) and (pointer: coarse)") ||
+    matches("(max-width: 767px)") ||
+    matches("(max-height: 500px) and (orientation: landscape)")
+  );
+};
+
+const clampManagerFormHorizontalScroll = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if (!isMobileInteractionViewport()) return;
+
+  const currentY = window.scrollY || document.documentElement.scrollTop || 0;
+
+  if (window.scrollX) {
+    window.scrollTo(0, currentY);
+  }
+
+  document.documentElement.scrollLeft = 0;
+
+  if (document.body) {
+    document.body.scrollLeft = 0;
+  }
+};
+
+const managerFormMobileViewportStyles = `
+  @media (hover: none) and (pointer: coarse),
+    (max-width: 767px),
+    (max-height: 500px) and (orientation: landscape) {
+    html,
+    body {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+      overscroll-behavior-x: none !important;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    .manager-form-editor-shell {
+      width: 100% !important;
+      max-width: 100vw !important;
+      overflow-x: clip !important;
+      overscroll-behavior-x: none !important;
+      touch-action: pan-y;
+    }
+
+    .manager-form-editor-shell,
+    .manager-form-editor-shell *,
+    .manager-form-editor-shell *::before,
+    .manager-form-editor-shell *::after {
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    .manager-form-editor-shell input,
+    .manager-form-editor-shell textarea,
+    .manager-form-editor-shell select {
+      max-width: 100%;
+      font-size: 16px !important;
+      line-height: 1.4 !important;
+      transform: translateZ(0);
+    }
+
+    .manager-form-editor-shell iframe,
+    .manager-form-editor-shell img,
+    .manager-form-editor-shell video {
+      max-width: 100%;
+    }
+  }
+
+  @media (hover: none) and (pointer: coarse) and (orientation: landscape),
+    (max-height: 500px) and (orientation: landscape) {
+    .manager-form-editor-shell {
+      width: min(100svh, 430px) !important;
+      max-width: min(100svh, 430px) !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    .manager-form-editor-shell [class*="md:grid-cols"],
+    .manager-form-editor-shell [class*="lg:grid-cols"] {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .manager-form-editor-shell [class*="md:flex-row"],
+    .manager-form-editor-shell [class*="lg:flex-row"] {
+      flex-direction: column !important;
+    }
+
+    .manager-form-editor-shell [class*="md:items-start"],
+    .manager-form-editor-shell [class*="lg:items-start"],
+    .manager-form-editor-shell [class*="md:items-center"],
+    .manager-form-editor-shell [class*="lg:items-center"] {
+      align-items: stretch !important;
+    }
+  }
+`;
+
 const isVideoLayerConflictMessage = (message) =>
   message === WORD_VIDEO_CONFLICT_MESSAGE ||
   message === INTERNAL_VIDEO_CONFLICT_MESSAGE;
@@ -2732,6 +2843,132 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   }, [hasWordLevelVideos, hasMeaningOrExampleVideos]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflowX = html.style.overflowX;
+    const previousHtmlOverscrollBehaviorX = html.style.overscrollBehaviorX;
+    const previousHtmlMaxWidth = html.style.maxWidth;
+    const previousBodyOverflowX = body?.style.overflowX || "";
+    const previousBodyOverscrollBehaviorX = body?.style.overscrollBehaviorX || "";
+    const previousBodyMaxWidth = body?.style.maxWidth || "";
+    let viewportMeta = document.querySelector('meta[name="viewport"]');
+    const previousViewportContent = viewportMeta?.getAttribute("content") || "";
+    let createdViewportMeta = false;
+    let didLockOrientation = false;
+    let resetFrame = null;
+
+    const lockViewportScale = () => {
+      if (!isMobileInteractionViewport()) return;
+
+      if (!viewportMeta) {
+        viewportMeta = document.createElement("meta");
+        viewportMeta.setAttribute("name", "viewport");
+        document.head?.appendChild(viewportMeta);
+        createdViewportMeta = true;
+      }
+
+      viewportMeta.setAttribute(
+        "content",
+        "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+      );
+    };
+
+    const applyMobileViewportLock = () => {
+      if (!isMobileInteractionViewport()) return;
+
+      lockViewportScale();
+
+      html.style.overflowX = "hidden";
+      html.style.overscrollBehaviorX = "none";
+      html.style.maxWidth = "100%";
+
+      if (body) {
+        body.style.overflowX = "hidden";
+        body.style.overscrollBehaviorX = "none";
+        body.style.maxWidth = "100%";
+      }
+
+      clampManagerFormHorizontalScroll();
+    };
+
+    const scheduleHorizontalClamp = () => {
+      if (resetFrame !== null) {
+        window.cancelAnimationFrame(resetFrame);
+      }
+
+      resetFrame = window.requestAnimationFrame(() => {
+        resetFrame = null;
+        applyMobileViewportLock();
+      });
+    };
+
+    applyMobileViewportLock();
+
+    try {
+      const orientation = window.screen?.orientation;
+
+      if (orientation?.lock && isMobileInteractionViewport()) {
+        Promise.resolve(orientation.lock("portrait")).then(
+          () => {
+            didLockOrientation = true;
+          },
+          () => undefined
+        );
+      }
+    } catch {
+      // Nem todo navegador permite travar orientação fora de PWA/fullscreen.
+    }
+
+    window.addEventListener("resize", scheduleHorizontalClamp);
+    window.addEventListener("orientationchange", scheduleHorizontalClamp);
+    window.addEventListener("scroll", scheduleHorizontalClamp, { passive: true });
+    window.visualViewport?.addEventListener("resize", scheduleHorizontalClamp);
+    window.visualViewport?.addEventListener("scroll", scheduleHorizontalClamp);
+
+    return () => {
+      if (resetFrame !== null) {
+        window.cancelAnimationFrame(resetFrame);
+      }
+
+      window.removeEventListener("resize", scheduleHorizontalClamp);
+      window.removeEventListener("orientationchange", scheduleHorizontalClamp);
+      window.removeEventListener("scroll", scheduleHorizontalClamp);
+      window.visualViewport?.removeEventListener("resize", scheduleHorizontalClamp);
+      window.visualViewport?.removeEventListener("scroll", scheduleHorizontalClamp);
+
+      html.style.overflowX = previousHtmlOverflowX;
+      html.style.overscrollBehaviorX = previousHtmlOverscrollBehaviorX;
+      html.style.maxWidth = previousHtmlMaxWidth;
+
+      if (body) {
+        body.style.overflowX = previousBodyOverflowX;
+        body.style.overscrollBehaviorX = previousBodyOverscrollBehaviorX;
+        body.style.maxWidth = previousBodyMaxWidth;
+      }
+
+      if (viewportMeta) {
+        if (createdViewportMeta) {
+          viewportMeta.remove();
+        } else {
+          viewportMeta.setAttribute("content", previousViewportContent);
+        }
+      }
+
+      try {
+        if (didLockOrientation) {
+          window.screen?.orientation?.unlock?.();
+        }
+      } catch {
+        // noop
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!hasVisibleVideoLayerConflictMessage || typeof document === "undefined") {
       return undefined;
     }
@@ -2874,8 +3111,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
     window.scrollTo({
       top: targetTop,
+      left: 0,
       behavior: "smooth",
     });
+
+    window.setTimeout(clampManagerFormHorizontalScroll, 260);
   };
 
   const focusFirstEditableField = (
@@ -2908,6 +3148,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       } catch {
         targetField.focus();
       }
+
+      clampManagerFormHorizontalScroll();
+      window.setTimeout(clampManagerFormHorizontalScroll, 80);
+      window.setTimeout(clampManagerFormHorizontalScroll, 260);
     }, focusDelay);
 
     return true;
@@ -3523,12 +3767,18 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   };
 
   const leaveEditorWithoutSaving = () => {
+    let handledByParent = false;
+
     if (typeof onBack === "function") {
-      onBack();
-      return;
+      try {
+        onBack();
+        handledByParent = true;
+      } catch (error) {
+        console.error("Erro ao voltar pelo gerenciador:", error);
+      }
     }
 
-    if (typeof window !== "undefined" && window.history.length > 1) {
+    if (!handledByParent && typeof window !== "undefined" && window.history.length > 1) {
       window.history.back();
     }
   };
@@ -3562,14 +3812,20 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   return (
     <>
+      <style>{managerFormMobileViewportStyles}</style>
       <div className="manager-form-editor-shell mx-auto w-full max-w-6xl overflow-x-hidden overscroll-x-none touch-pan-y pb-10 md:pb-8 md:pl-12 lg:pl-14">
       <div className="mb-5 px-2 py-1 md:mb-5 md:px-1 md:py-0">
         <div className="flex flex-col gap-4 md:gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <button
               type="button"
-              onClick={handleBackClick}
-              className="mb-3 inline-flex min-h-[40px] touch-manipulation items-center gap-2 rounded-full border border-transparent px-2.5 text-sm font-semibold text-[#0066CC] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:text-[#66B7FF] dark:hover:bg-[#2C2C2E] md:mb-1.5"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.blur();
+                handleBackClick();
+              }}
+              className="mb-3 inline-flex min-h-11 touch-manipulation items-center gap-2 rounded-full border border-transparent px-3 text-sm font-semibold text-[#0066CC] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:text-[#66B7FF] dark:hover:bg-[#2C2C2E] md:mb-1.5"
             >
               <ArrowLeft className="h-4 w-4" /> Voltar
             </button>

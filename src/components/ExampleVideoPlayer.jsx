@@ -5,7 +5,6 @@ import {
   Minimize,
   Pause,
   Play,
-  Square,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -13,6 +12,7 @@ import { resolveExampleVideoPlayback } from "@/lib/exampleVideoStorage";
 
 const FALLBACK_MESSAGE = "Este vÃ­deo nÃ£o permite reproduÃ§Ã£o direta aqui.";
 const FULLSCREEN_CONTROLS_HIDE_DELAY = 1000;
+const VOLUME_HOVER_CLOSE_DELAY = 140;
 const PLAYBACK_SPEED_OPTIONS = [0.3, 0.5, 0.8, 1];
 const MIN_PLAYBACK_SPEED = 0.3;
 const MAX_PLAYBACK_SPEED = 1;
@@ -149,7 +149,7 @@ function GlassControlButton({
   );
 }
 
-function LoopPowerIcon({ className = "" }) {
+function LoopPowerIcon({ className = "", isDisabled = false }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -172,6 +172,46 @@ function LoopPowerIcon({ className = "" }) {
         strokeWidth="2.35"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+      {isDisabled ? (
+        <path
+          d="M5 19 19 5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.45"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
+function PipIcon({ className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect
+        x="3.5"
+        y="5"
+        width="17"
+        height="14"
+        rx="2.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <rect
+        x="12.6"
+        y="10.1"
+        width="5.3"
+        height="4.2"
+        rx="1"
+        fill="currentColor"
       />
     </svg>
   );
@@ -208,6 +248,31 @@ function SpeedFeedbackDirectionIcon({ direction = 1, className = "" }) {
             d="M12.9 6.35 19.1 12l-6.2 5.65V6.35Z"
             fill="currentColor"
           />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function TrackStepIcon({ direction = "next", className = "" }) {
+  const isPrevious = direction === "prev";
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      {isPrevious ? (
+        <>
+          <rect x="5" y="5" width="2.4" height="14" rx="0.7" fill="currentColor" />
+          <path d="M17.5 5.3 9.1 12l8.4 6.7V5.3Z" fill="currentColor" />
+        </>
+      ) : (
+        <>
+          <path d="M6.5 5.3 14.9 12l-8.4 6.7V5.3Z" fill="currentColor" />
+          <rect x="16.6" y="5" width="2.4" height="14" rx="0.7" fill="currentColor" />
         </>
       )}
     </svg>
@@ -471,11 +536,18 @@ export default function ExampleVideoPlayer({
   onKeyboardArrowNavigate,
   onKeyboardArrowUpNavigate,
   onKeyboardArrowDownNavigate,
+  showSideNavigationButtons = false,
+  onOwnVideoPlaybackEnded,
+  videoSequenceLabel = "",
 }) {
   const isMobileMockupLayout = layout === "mobileMockup";
   const isMobileFullscreenLayout = layout === "mobileFullscreen";
   const isCompactControlsMode = controlsMode === "compact";
   const isCompactLayout = layout === "compact";
+  const canShowSideNavigationButtons = Boolean(
+    showSideNavigationButtons &&
+      typeof onKeyboardArrowNavigate === "function"
+  );
 
   const videoRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -484,6 +556,7 @@ export default function ExampleVideoPlayer({
   const speedFeedbackTimerRef = useRef(null);
   const playbackControlFeedbackTimerRef = useRef(null);
   const hideFullscreenControlsTimerRef = useRef(null);
+  const volumeHoverCloseTimerRef = useRef(null);
   const restorePlaybackTimerRef = useRef(null);
   const hasConsumedAutoPlayRef = useRef(false);
   const hasRestoredPlaybackRef = useRef(false);
@@ -519,8 +592,29 @@ export default function ExampleVideoPlayer({
     () => exampleVideoPlayerPreferenceMemory.isLooping
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPictureInPicture, setIsPictureInPicture] = useState(false);
+  const [isPictureInPictureAvailable, setIsPictureInPictureAvailable] =
+    useState(false);
   const [mediaSize, setMediaSize] = useState(null);
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
+  const isDesktopPlayerLayout = !isMobileMockupLayout && !isMobileFullscreenLayout;
+  const canShowOverlaySideNavigationButtons = Boolean(
+    canShowSideNavigationButtons && !isDesktopPlayerLayout
+  );
+  const canShowBottomNavigationButtons = Boolean(
+    canShowSideNavigationButtons && isDesktopPlayerLayout
+  );
+  const sideNavigationVisibilityClass = controlsVisible
+    ? "opacity-100"
+    : "pointer-events-none opacity-0";
+  const shouldShowVideoSequenceLabel =
+    typeof videoSequenceLabel === "string" && videoSequenceLabel.trim().length > 0;
+  const isExpandedWebLayout = Boolean(
+    isFullscreenMode() &&
+      !isMobileMockupLayout &&
+      !isMobileFullscreenLayout
+  );
+  const videoSequencePositionClass = "right-2 top-2 md:right-3 md:top-3";
 
   const playbackStateKey = useMemo(() => getVideoPlaybackStateKey(video), [video]);
   const shouldResetPlaybackOnMount = Boolean(resetPlaybackOnMount);
@@ -691,10 +785,8 @@ export default function ExampleVideoPlayer({
     player.loop = isLooping;
     player.playbackRate = playbackRate;
 
-    player.disablePictureInPicture = true;
     player.disableRemotePlayback = true;
 
-    player.setAttribute("disablepictureinpicture", "");
     player.setAttribute("disableremoteplayback", "");
     player.setAttribute(
       "controlsList",
@@ -703,6 +795,25 @@ export default function ExampleVideoPlayer({
     player.setAttribute("x-webkit-airplay", "deny");
     player.setAttribute("webkit-playsinline", "true");
   }, [volume, isMuted, isLooping, playbackRate, playback?.src]);
+
+  useEffect(() => {
+    const player = videoRef.current;
+
+    if (!player) {
+      setIsPictureInPictureAvailable(false);
+      return;
+    }
+
+    const canUsePictureInPicture = Boolean(
+      isDesktopPlayerLayout &&
+        playback?.type === "video" &&
+        typeof document !== "undefined" &&
+        document.pictureInPictureEnabled &&
+        typeof player.requestPictureInPicture === "function"
+    );
+
+    setIsPictureInPictureAvailable(canUsePictureInPicture);
+  }, [isDesktopPlayerLayout, playback?.type, playback?.src]);
 
   useEffect(() => {
     if (!isVolumeControlOpen && !isSpeedMenuOpen) return;
@@ -844,6 +955,55 @@ export default function ExampleVideoPlayer({
   }, [playback?.src, isPlaying]);
 
   useEffect(() => {
+    const player = videoRef.current;
+
+    if (!player || playback?.type !== "video") {
+      setIsPictureInPicture(false);
+      return;
+    }
+
+    const syncPictureInPictureState = () => {
+      const pictureInPictureElement =
+        typeof document !== "undefined" ? document.pictureInPictureElement : null;
+      setIsPictureInPicture(Boolean(pictureInPictureElement === player));
+    };
+
+    const handleEnterPictureInPicture = () => {
+      setIsPictureInPicture(true);
+    };
+
+    const handleLeavePictureInPicture = () => {
+      setIsPictureInPicture(false);
+    };
+
+    player.addEventListener("enterpictureinpicture", handleEnterPictureInPicture);
+    player.addEventListener("leavepictureinpicture", handleLeavePictureInPicture);
+    document.addEventListener("enterpictureinpicture", syncPictureInPictureState);
+    document.addEventListener("leavepictureinpicture", syncPictureInPictureState);
+
+    syncPictureInPictureState();
+
+    return () => {
+      player.removeEventListener(
+        "enterpictureinpicture",
+        handleEnterPictureInPicture
+      );
+      player.removeEventListener(
+        "leavepictureinpicture",
+        handleLeavePictureInPicture
+      );
+      document.removeEventListener(
+        "enterpictureinpicture",
+        syncPictureInPictureState
+      );
+      document.removeEventListener(
+        "leavepictureinpicture",
+        syncPictureInPictureState
+      );
+    };
+  }, [playback?.type, playback?.src]);
+
+  useEffect(() => {
     if (!playback || playback.type === "fallback") return;
 
     const isNativeVideoPlayback = playback.type === "video";
@@ -860,6 +1020,14 @@ export default function ExampleVideoPlayer({
 
       const key = event.key;
       const normalizedKey = typeof key === "string" ? key.toLowerCase() : "";
+      const playerWrapper = wrapperRef.current;
+      const isPlayerHotkeyContextActive = Boolean(
+        isFullscreenMode() ||
+          controlsVisible ||
+          playerWrapper?.contains(activeElement) ||
+          playerWrapper?.matches?.(":hover") ||
+          isDesktopPlayerLayout
+      );
 
       if (
         isNativeVideoPlayback &&
@@ -1025,13 +1193,32 @@ export default function ExampleVideoPlayer({
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        normalizedKey === "m"
+        normalizedKey === "l"
       ) {
+        if (!isPlayerHotkeyContextActive) return;
+
         event.preventDefault();
 
         if (event.repeat) return;
 
-        toggleMute({ preserveControlsAutoHide: true });
+        toggleLoop({ showFeedback: true, preserveControlsAutoHide: true });
+        return;
+      }
+
+      if (
+        isNativeVideoPlayback &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        normalizedKey === "m"
+      ) {
+        if (!isPlayerHotkeyContextActive) return;
+
+        event.preventDefault();
+
+        if (event.repeat) return;
+
+        toggleMute({ preserveControlsAutoHide: true, showFeedback: true });
       }
     };
 
@@ -1046,6 +1233,7 @@ export default function ExampleVideoPlayer({
     isMuted,
     isFullscreen,
     isPlaying,
+    controlsVisible,
     currentTime,
     duration,
     onKeyboardArrowNavigate,
@@ -1064,6 +1252,8 @@ export default function ExampleVideoPlayer({
         window.clearTimeout(playbackControlFeedbackTimerRef.current);
         playbackControlFeedbackTimerRef.current = null;
       }
+
+      clearVolumeHoverCloseTimer();
     };
   }, []);
 
@@ -1123,6 +1313,15 @@ export default function ExampleVideoPlayer({
 
   const isWebOwnPlayerControls = !isTouchLike && !isMobileMockupLayout;
   const shouldShowVolumeControl = isWebOwnPlayerControls && isVolumeControlOpen;
+  const shouldUseHorizontalVolumeControl = Boolean(
+    isExpandedWebLayout && isWebOwnPlayerControls
+  );
+  const volumePanelClass = shouldUseHorizontalVolumeControl
+    ? "absolute left-[calc(100%+0.6rem)] top-1/2 z-40 flex h-10 w-36 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/38 px-3 shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200"
+    : "absolute bottom-[calc(100%+0.7rem)] left-1/2 z-40 flex h-28 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-white/20 bg-black/30 shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200 md:h-32 md:w-11";
+  const volumeSliderClass = shouldUseHorizontalVolumeControl
+    ? "h-1.5 w-full cursor-pointer appearance-none rounded-full bg-transparent outline-none [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_14px_rgba(255,255,255,0.32),0_6px_14px_rgba(0,0,0,0.36)] [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white"
+    : "h-1.5 w-24 -rotate-90 cursor-pointer appearance-none rounded-full bg-transparent outline-none md:w-28 [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full md:[&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_14px_rgba(255,255,255,0.32),0_6px_14px_rgba(0,0,0,0.36)] [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white";
   const playbackRateLabel = formatPlaybackRateLabel(playbackRate);
 
   const naturalFrameStyle =
@@ -1153,6 +1352,10 @@ export default function ExampleVideoPlayer({
     return Boolean(getFullscreenElement()) || isFullscreen;
   }
 
+  function shouldUseTemporaryControlsMode() {
+    return isFullscreenMode() || isMobileFullscreenLayout;
+  }
+
   function clearFullscreenControlsTimer() {
     if (hideFullscreenControlsTimerRef.current) {
       clearTimeout(hideFullscreenControlsTimerRef.current);
@@ -1160,11 +1363,18 @@ export default function ExampleVideoPlayer({
     }
   }
 
+  function clearVolumeHoverCloseTimer() {
+    if (volumeHoverCloseTimerRef.current) {
+      window.clearTimeout(volumeHoverCloseTimerRef.current);
+      volumeHoverCloseTimerRef.current = null;
+    }
+  }
+
   function scheduleFullscreenControlsHide() {
     clearFullscreenControlsTimer();
 
     hideFullscreenControlsTimerRef.current = setTimeout(() => {
-      if (isFullscreenMode() && !isVolumeControlOpen && !isSpeedMenuOpen) {
+      if (shouldUseTemporaryControlsMode() && !isVolumeControlOpen && !isSpeedMenuOpen) {
         setControlsVisible(false);
       }
     }, FULLSCREEN_CONTROLS_HIDE_DELAY);
@@ -1308,7 +1518,7 @@ export default function ExampleVideoPlayer({
   function showControls() {
     setControlsVisible(true);
 
-    if (isFullscreenMode()) {
+    if (shouldUseTemporaryControlsMode()) {
       showControlsTemporarilyInFullscreen();
     }
   }
@@ -1317,6 +1527,7 @@ export default function ExampleVideoPlayer({
     if (isFullscreenMode()) return;
 
     clearFullscreenControlsTimer();
+    clearVolumeHoverCloseTimer();
     setIsVolumeControlOpen(false);
     setIsSpeedMenuOpen(false);
     setControlsVisible(false);
@@ -1377,7 +1588,7 @@ export default function ExampleVideoPlayer({
   }
 
   function handleTouchStart() {
-    if (isFullscreenMode()) {
+    if (shouldUseTemporaryControlsMode()) {
       showControlsTemporarilyInFullscreen();
     }
   }
@@ -1461,26 +1672,6 @@ export default function ExampleVideoPlayer({
       showPlaybackControlFeedback("pause");
     }
 
-    clearSystemMediaSession();
-  }
-
-  function restartFromBeginning() {
-    const player = videoRef.current;
-    if (!player) return;
-
-    hasConsumedAutoPlayRef.current = true;
-    player.pause();
-
-    try {
-      player.currentTime = 0;
-    } catch {
-      return;
-    }
-
-    saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: false });
-    setCurrentTime(0);
-    setIsPlaying(false);
-    showControls();
     clearSystemMediaSession();
   }
 
@@ -1587,7 +1778,16 @@ export default function ExampleVideoPlayer({
       return;
     }
 
-    togglePlay();
+    togglePlay({ showFeedback: true });
+  }
+
+  function handleSideNavigation(direction) {
+    if (typeof onKeyboardArrowNavigate !== "function") return;
+
+    showControls();
+    onKeyboardArrowNavigate(direction, {
+      preservePlayerSession: isExpandedWebLayout,
+    });
   }
 
   function updateBufferedProgress(player) {
@@ -1653,18 +1853,24 @@ export default function ExampleVideoPlayer({
   function handleVolumeMouseEnter() {
     if (!isWebOwnPlayerControls) return;
 
+    clearVolumeHoverCloseTimer();
+    setIsSpeedMenuOpen(false);
+    setIsVolumeControlOpen(true);
     showControls();
   }
 
-  function handleVolumeButtonClick() {
-    if (!isWebOwnPlayerControls) {
-      toggleMute();
-      return;
-    }
+  function handleVolumeMouseLeave() {
+    if (!isWebOwnPlayerControls) return;
 
-    setIsSpeedMenuOpen(false);
-    setIsVolumeControlOpen((current) => !current);
-    showControls();
+    clearVolumeHoverCloseTimer();
+    volumeHoverCloseTimerRef.current = window.setTimeout(() => {
+      setIsVolumeControlOpen(false);
+      volumeHoverCloseTimerRef.current = null;
+    }, VOLUME_HOVER_CLOSE_DELAY);
+  }
+
+  function handleVolumeButtonClick() {
+    toggleMute();
   }
 
   function toggleMute(options = {}) {
@@ -1682,6 +1888,10 @@ export default function ExampleVideoPlayer({
 
       return nextMuted;
     });
+
+    if (options?.showFeedback && isDesktopPlayerLayout) {
+      showPlaybackControlFeedback(isMuted ? "unmute" : "mute");
+    }
 
     if (options?.preserveControlsAutoHide) {
       setIsVolumeControlOpen(false);
@@ -1818,7 +2028,7 @@ export default function ExampleVideoPlayer({
     }
   }
 
-  function toggleLoop() {
+  function toggleLoop(options = {}) {
     setIsLooping((current) => {
       const nextLooping = !current;
       saveExampleVideoPlayerPreferences({
@@ -1832,6 +2042,35 @@ export default function ExampleVideoPlayer({
 
       return nextLooping;
     });
+
+    if (options?.showFeedback && isDesktopPlayerLayout) {
+      showPlaybackControlFeedback(isLooping ? "loop-off" : "loop-on");
+    }
+
+    if (options?.preserveControlsAutoHide) {
+      setIsVolumeControlOpen(false);
+      setIsSpeedMenuOpen(false);
+      return;
+    }
+
+    showControls();
+  }
+
+  async function togglePictureInPicture() {
+    const player = videoRef.current;
+
+    if (!player || !isPictureInPictureAvailable) return;
+
+    try {
+      if (document.pictureInPictureElement === player) {
+        await document.exitPictureInPicture?.();
+      } else {
+        await player.requestPictureInPicture();
+      }
+    } catch {
+      // Alguns navegadores podem bloquear PiP sem interação explícita.
+    }
+
     showControls();
   }
 
@@ -1965,6 +2204,10 @@ export default function ExampleVideoPlayer({
   const fullscreenCursorClass = shouldHideFullscreenCursor
     ? "example-video-player-shell--cursor-hidden cursor-none"
     : "cursor-auto";
+  const isLoopShortcutFeedback =
+    playbackControlFeedback === "loop-on" || playbackControlFeedback === "loop-off";
+  const isMuteShortcutFeedback =
+    playbackControlFeedback === "mute" || playbackControlFeedback === "unmute";
 
   return (
     <div
@@ -2015,7 +2258,6 @@ export default function ExampleVideoPlayer({
         autoPlay={shouldUseNativeVideoAutoPlay}
         loop={isLooping}
         playsInline
-        disablePictureInPicture
         disableRemotePlayback
         controlsList="nodownload nofullscreen noremoteplayback"
         x-webkit-airplay="deny"
@@ -2046,7 +2288,6 @@ export default function ExampleVideoPlayer({
           player.loop = isLooping;
           player.playbackRate = playbackRate;
 
-          player.disablePictureInPicture = true;
           player.disableRemotePlayback = true;
           player.setAttribute("x-webkit-airplay", "deny");
           player.setAttribute("webkit-playsinline", "true");
@@ -2102,6 +2343,12 @@ export default function ExampleVideoPlayer({
           setControlsVisible(true);
           clearFullscreenControlsTimer();
           clearSystemMediaSession();
+
+          if (!isLooping && typeof onOwnVideoPlaybackEnded === "function") {
+            onOwnVideoPlaybackEnded({
+              preservePlayerSession: Boolean(isExpandedWebLayout),
+            });
+          }
         }}
         onCanPlay={(event) => {
           const player = event.currentTarget;
@@ -2125,6 +2372,71 @@ export default function ExampleVideoPlayer({
           clearSystemMediaSession();
         }}
       />
+
+      {shouldShowVideoSequenceLabel ? (
+        <div
+          className={[
+            "pointer-events-none absolute z-30 transition-opacity duration-200",
+            sideNavigationVisibilityClass,
+            videoSequencePositionClass,
+          ].join(" ")}
+        >
+          <span className="inline-flex items-center rounded-full border border-white/30 bg-black/45 px-2 py-0.5 text-[11px] font-semibold leading-none text-white/95 shadow-[0_6px_18px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+            {videoSequenceLabel}
+          </span>
+        </div>
+      ) : null}
+
+      {canShowOverlaySideNavigationButtons ? (
+        <div
+          className={[
+            "pointer-events-none absolute inset-0 z-30 transition-opacity duration-200",
+            sideNavigationVisibilityClass,
+          ].join(" ")}
+        >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleSideNavigation(-1);
+            }}
+              className={[
+              "absolute left-[clamp(1.15rem,8.5%,4.25rem)] top-1/2 -translate-y-1/2",
+              "pointer-events-auto flex h-[clamp(2.75rem,11vw,3.3rem)] w-[clamp(2.75rem,11vw,3.3rem)] items-center justify-center rounded-full md:h-12 md:w-12",
+              "border border-white/75 bg-black/28 text-white shadow-[0_10px_24px_rgba(0,0,0,0.42)] backdrop-blur-sm",
+              "transition-[background-color,border-color,opacity] duration-200",
+              "hover:bg-black/52 hover:border-white active:bg-white/[0.14]",
+              "outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0 focus:!ring-offset-0 focus-visible:!ring-offset-0",
+            ].join(" ")}
+            aria-label="Vídeo anterior"
+            title="Voltar"
+          >
+            <TrackStepIcon direction="prev" className="h-6 w-6 md:h-6 md:w-6" />
+          </button>
+
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleSideNavigation(1);
+            }}
+              className={[
+              "absolute right-[clamp(1.15rem,8.5%,4.25rem)] top-1/2 -translate-y-1/2",
+              "pointer-events-auto flex h-[clamp(2.75rem,11vw,3.3rem)] w-[clamp(2.75rem,11vw,3.3rem)] items-center justify-center rounded-full md:h-12 md:w-12",
+              "border border-white/75 bg-black/28 text-white shadow-[0_10px_24px_rgba(0,0,0,0.42)] backdrop-blur-sm",
+              "transition-[background-color,border-color,opacity] duration-200",
+              "hover:bg-black/52 hover:border-white active:bg-white/[0.14]",
+              "outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0 focus:!ring-offset-0 focus-visible:!ring-offset-0",
+            ].join(" ")}
+            aria-label="Próximo vídeo"
+            title="Próximo"
+          >
+            <TrackStepIcon direction="next" className="h-6 w-6 md:h-6 md:w-6" />
+          </button>
+        </div>
+      ) : null}
 
       {isCompactControlsMode && !isFullscreenMode() ? (
         <div
@@ -2196,12 +2508,39 @@ export default function ExampleVideoPlayer({
       ) : null}
 
       {playbackControlFeedback ? (
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-40 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/52 text-white shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-md transition-opacity duration-150 md:h-24 md:w-24">
-          {playbackControlFeedback === "pause" ? (
-            <Pause className="h-10 w-10 fill-white text-white stroke-[2.2] md:h-12 md:w-12" />
-          ) : (
-            <Play className="ml-1 h-10 w-10 fill-white text-white stroke-[2.2] md:h-12 md:w-12" />
-          )}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 text-white transition-opacity duration-150">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-black/52 text-white shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-md md:h-24 md:w-24">
+            {playbackControlFeedback === "pause" ? (
+              <Pause className="h-10 w-10 fill-white text-white stroke-[2.2] md:h-12 md:w-12" />
+            ) : playbackControlFeedback === "play" ? (
+              <Play className="ml-1 h-10 w-10 fill-white text-white stroke-[2.2] md:h-12 md:w-12" />
+            ) : isLoopShortcutFeedback ? (
+              <LoopPowerIcon
+                className="h-9 w-9 md:h-10 md:w-10"
+                isDisabled={playbackControlFeedback === "loop-off"}
+              />
+            ) : isMuteShortcutFeedback ? (
+              playbackControlFeedback === "mute" ? (
+                <VolumeX className="h-9 w-9 md:h-10 md:w-10" />
+              ) : (
+                <Volume2 className="h-9 w-9 md:h-10 md:w-10" />
+              )
+            ) : (
+              <Play className="ml-1 h-10 w-10 fill-white text-white stroke-[2.2] md:h-12 md:w-12" />
+            )}
+          </div>
+
+          {isDesktopPlayerLayout && isLoopShortcutFeedback ? (
+            <span className="rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold leading-none text-white/95 shadow-[0_10px_22px_rgba(0,0,0,0.35)] backdrop-blur-md">
+              {playbackControlFeedback === "loop-on" ? "Loop ativado" : "Loop desativado"}
+            </span>
+          ) : null}
+
+          {isDesktopPlayerLayout && isMuteShortcutFeedback ? (
+            <span className="rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-semibold leading-none text-white/95 shadow-[0_10px_22px_rgba(0,0,0,0.35)] backdrop-blur-md">
+              {playbackControlFeedback === "mute" ? "Áudio desativado" : "Áudio ativado"}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -2228,36 +2567,140 @@ export default function ExampleVideoPlayer({
             onTouchStart={showControls}
             style={progressStyle}
             className={[
-              "mb-5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-transparent outline-none md:mb-3 md:h-1",
-              "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent md:[&::-webkit-slider-runnable-track]:h-1",
-              "[&::-webkit-slider-thumb]:-mt-[7px] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full md:[&::-webkit-slider-thumb]:-mt-1 md:[&::-webkit-slider-thumb]:h-3 md:[&::-webkit-slider-thumb]:w-3",
+              isDesktopPlayerLayout
+                ? "mb-4 h-1 w-full cursor-pointer appearance-none rounded-full bg-transparent outline-none md:mb-3 md:h-[3px]"
+                : "mb-5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-transparent outline-none md:mb-3 md:h-1",
+              isDesktopPlayerLayout
+                ? "[&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent md:[&::-webkit-slider-runnable-track]:h-[3px]"
+                : "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent md:[&::-webkit-slider-runnable-track]:h-1",
+              isDesktopPlayerLayout
+                ? "[&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full md:[&::-webkit-slider-thumb]:-mt-[5px] md:[&::-webkit-slider-thumb]:h-3.5 md:[&::-webkit-slider-thumb]:w-3.5"
+                : "[&::-webkit-slider-thumb]:-mt-[7px] [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full md:[&::-webkit-slider-thumb]:-mt-1 md:[&::-webkit-slider-thumb]:h-3 md:[&::-webkit-slider-thumb]:w-3",
               "[&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/80 [&::-webkit-slider-thumb]:bg-[#ff1744]",
               "[&::-webkit-slider-thumb]:shadow-[0_0_18px_rgba(255,23,68,0.52),0_7px_18px_rgba(0,0,0,0.38)]",
-              "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent md:[&::-moz-range-track]:h-1",
-              "[&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full md:[&::-moz-range-thumb]:h-3 md:[&::-moz-range-thumb]:w-3",
+              isDesktopPlayerLayout
+                ? "[&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent md:[&::-moz-range-track]:h-[3px]"
+                : "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent md:[&::-moz-range-track]:h-1",
+              isDesktopPlayerLayout
+                ? "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full md:[&::-moz-range-thumb]:h-3.5 md:[&::-moz-range-thumb]:w-3.5"
+                : "[&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full md:[&::-moz-range-thumb]:h-3 md:[&::-moz-range-thumb]:w-3",
               "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/80 [&::-moz-range-thumb]:bg-[#ff1744]",
             ].join(" ")}
             aria-label="Progresso do vÃ­deo"
           />
 
-          <div className="flex w-full items-end justify-between gap-3 px-0 md:gap-2 md:px-0">
-            <div className="flex items-center justify-start gap-2">
-              <GlassControlButton
-                label={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
-                onClick={togglePlay}
-                variant="primary"
-              >
-                {isPlaying ? <Pause /> : <Play className="translate-x-[2px]" />}
-              </GlassControlButton>
-              {!isTouchLike && !isMobileMockupLayout ? (
-                <>
-                  <GlassControlButton
-                    label="Voltar ao início"
-                    onClick={restartFromBeginning}
-                  >
-                    <Square />
-                  </GlassControlButton>
+          <div
+            className={[
+              "flex w-full items-center",
+              isDesktopPlayerLayout
+                ? "justify-between gap-2"
+                : "items-end justify-between gap-3 px-0 md:gap-2 md:px-0",
+            ].join(" ")}
+          >
+            {isDesktopPlayerLayout ? (
+              <>
+                <div className="min-w-[8rem] flex-1" />
 
+                <div className="flex flex-none items-center justify-center gap-1">
+                  {canShowBottomNavigationButtons ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        handleSideNavigation(-1);
+                      }}
+                      className="group flex h-9 w-9 items-center justify-center rounded-full text-white/92 transition-all duration-200 hover:bg-black/45 hover:text-white active:bg-black/60 outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0"
+                      aria-label="Vídeo anterior"
+                      title="Voltar"
+                    >
+                      <TrackStepIcon direction="prev" className="h-4.5 w-4.5" />
+                    </button>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="group flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white/95 shadow-[0_8px_18px_rgba(0,0,0,0.35)] transition-all duration-200 hover:bg-black/60 hover:text-white active:bg-black/70 outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0"
+                    aria-label={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
+                    title={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-5 w-5 fill-white text-white stroke-[2.3]" />
+                    ) : (
+                      <Play className="ml-[1px] h-5 w-5 fill-white text-white stroke-[2.3]" />
+                    )}
+                  </button>
+
+                  {canShowBottomNavigationButtons ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        handleSideNavigation(1);
+                      }}
+                      className="group flex h-9 w-9 items-center justify-center rounded-full text-white/92 transition-all duration-200 hover:bg-black/45 hover:text-white active:bg-black/60 outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0"
+                      aria-label="Próximo vídeo"
+                      title="Próximo"
+                    >
+                      <TrackStepIcon direction="next" className="h-4.5 w-4.5" />
+                    </button>
+                  ) : null}
+
+                  <div
+                    ref={volumeControlRef}
+                    className="relative flex items-center"
+                    onMouseEnter={handleVolumeMouseEnter}
+                    onMouseLeave={handleVolumeMouseLeave}
+                  >
+                    <div
+                      className={[
+                        volumePanelClass,
+                        shouldShowVolumeControl
+                          ? "pointer-events-auto opacity-100"
+                          : "pointer-events-none opacity-0",
+                      ].join(" ")}
+                    >
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={isMuted ? 0 : volume}
+                        onChange={handleVolumeChange}
+                        onMouseDown={showControls}
+                        onTouchStart={showControls}
+                        style={volumeStyle}
+                        className={volumeSliderClass}
+                        aria-label="Volume do vÃ­deo"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleVolumeButtonClick}
+                      className={[
+                        "group flex h-9 w-9 items-center justify-center rounded-full text-white/92 transition-all duration-200",
+                        "hover:bg-black/45 hover:text-white active:bg-black/60",
+                        "outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0",
+                        shouldShowVolumeControl || (!isMuted && volume > 0)
+                          ? "bg-black/40 text-white"
+                          : "",
+                      ].join(" ")}
+                      aria-label="Volume"
+                      title="Volume"
+                    >
+                      {isMuted || volume === 0 ? (
+                        <VolumeX className="h-5 w-5" />
+                      ) : (
+                        <Volume2 className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex min-w-[8rem] flex-1 items-center justify-end gap-1.5">
                   <div
                     ref={speedControlRef}
                     className="relative flex select-none items-center"
@@ -2270,7 +2713,7 @@ export default function ExampleVideoPlayer({
                   >
                     <div
                       className={[
-                        "absolute bottom-[calc(100%+0.7rem)] left-0 z-40 w-[min(17.5rem,calc(100vw-2rem))] translate-x-0 select-none rounded-2xl border border-white/20 bg-black/40 p-3 text-white shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200",
+                        "absolute bottom-[calc(100%+0.7rem)] right-0 z-40 w-[min(17.5rem,calc(100vw-2rem))] translate-x-0 select-none rounded-2xl border border-white/20 bg-black/40 p-3 text-white shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200",
                         isSpeedMenuOpen
                           ? "pointer-events-auto opacity-100"
                           : "pointer-events-none opacity-0",
@@ -2342,80 +2785,155 @@ export default function ExampleVideoPlayer({
                       </div>
                     </div>
 
-                    <GlassControlButton
-                      label={`Velocidade: ${playbackRateLabel}`}
+                    <button
+                      type="button"
                       onClick={handleSpeedButtonClick}
-                      active={isSpeedMenuOpen || playbackRate !== 1}
+                      className={[
+                        "group flex h-9 w-9 items-center justify-center rounded-full text-white/92 transition-all duration-200",
+                        "hover:bg-black/45 hover:text-white active:bg-black/60",
+                        "outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0",
+                        isSpeedMenuOpen || playbackRate !== 1 ? "bg-black/40 text-white" : "",
+                      ].join(" ")}
+                      aria-label={`Velocidade: ${playbackRateLabel}`}
+                      title={`Velocidade: ${playbackRateLabel}`}
                     >
-                      <Gauge />
-                    </GlassControlButton>
+                      <Gauge className="h-5 w-5" />
+                    </button>
                   </div>
-                </>
-              ) : null}
-            </div>
 
-            <div className="flex items-end justify-end gap-2 md:gap-2">
-              <GlassControlButton
-                label={isLooping ? "Desativar loop" : "Ativar loop"}
-                onClick={toggleLoop}
-                active={isLooping}
-              >
-                <LoopPowerIcon />
-              </GlassControlButton>
-
-              <div
-                ref={volumeControlRef}
-                className="relative flex items-center"
-              >
-                <div
-                  className={[
-                    "absolute bottom-[calc(100%+0.7rem)] left-1/2 z-40 flex h-28 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-white/20 bg-black/30 shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200 md:h-32 md:w-11",
-                    shouldShowVolumeControl
-                      ? "pointer-events-auto opacity-100"
-                      : "pointer-events-none opacity-0",
-                  ].join(" ")}
-                >
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={isMuted ? 0 : volume}
-                    onChange={handleVolumeChange}
-                    onMouseDown={showControls}
-                    onTouchStart={showControls}
-                    style={volumeStyle}
+                  <button
+                    type="button"
+                    onClick={() => toggleLoop({ showFeedback: true })}
                     className={[
-                      "h-1.5 w-24 -rotate-90 cursor-pointer appearance-none rounded-full bg-transparent outline-none md:w-28",
-                      "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent",
-                      "[&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full md:[&::-webkit-slider-thumb]:-mt-[5px]",
-                      "[&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-white",
-                      "[&::-webkit-slider-thumb]:shadow-[0_0_14px_rgba(255,255,255,0.32),0_6px_14px_rgba(0,0,0,0.36)]",
-                      "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent",
-                      "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full",
-                      "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white",
+                      "group flex h-9 w-9 items-center justify-center rounded-full text-white/92 transition-all duration-200",
+                      "hover:bg-black/45 hover:text-white active:bg-black/60",
+                      "outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0",
+                      isLooping ? "bg-black/40 text-white" : "",
                     ].join(" ")}
-                    aria-label="Volume do vÃ­deo"
-                  />
+                    aria-label={isLooping ? "Desativar loop" : "Ativar loop"}
+                    title={isLooping ? "Desativar loop" : "Ativar loop"}
+                  >
+                    <LoopPowerIcon className="h-5 w-5" isDisabled={!isLooping} />
+                  </button>
+
+                  {isPictureInPictureAvailable ? (
+                    <button
+                      type="button"
+                      onClick={togglePictureInPicture}
+                      className={[
+                        "group flex h-9 w-9 items-center justify-center rounded-full text-white/92 transition-all duration-200",
+                        "hover:bg-black/45 hover:text-white active:bg-black/60",
+                        "outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0",
+                        isPictureInPicture ? "bg-black/40 text-white" : "",
+                      ].join(" ")}
+                      aria-label={
+                        isPictureInPicture
+                          ? "Desativar picture-in-picture"
+                          : "Ativar picture-in-picture"
+                      }
+                      title={
+                        isPictureInPicture
+                          ? "Desativar picture-in-picture"
+                          : "Ativar picture-in-picture"
+                      }
+                    >
+                      <PipIcon className="h-5 w-5" />
+                    </button>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={toggleFullscreen}
+                    className="group flex h-9 w-9 items-center justify-center rounded-full text-white/92 transition-all duration-200 hover:bg-black/45 hover:text-white active:bg-black/60 outline-none ring-0 ring-offset-0 focus:!outline-none focus-visible:!outline-none focus:!ring-0 focus-visible:!ring-0"
+                    aria-label={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                    title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                  >
+                    {isFullscreen ? (
+                      <Minimize className="h-5 w-5" />
+                    ) : (
+                      <Maximize className="h-5 w-5" />
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-start gap-2">
+                  <GlassControlButton
+                    label={isPlaying ? "Pausar vÃ­deo" : "Reproduzir vÃ­deo"}
+                    onClick={togglePlay}
+                    variant="primary"
+                  >
+                    {isPlaying ? <Pause /> : <Play className="translate-x-[2px]" />}
+                  </GlassControlButton>
                 </div>
 
-                <GlassControlButton
-                  label="Volume"
-                  onClick={handleVolumeButtonClick}
-                  active={shouldShowVolumeControl || (!isMuted && volume > 0)}
-                >
-                  {isMuted || volume === 0 ? <VolumeX /> : <Volume2 />}
-                </GlassControlButton>
-              </div>
+                <div className="flex items-end justify-end gap-2 md:gap-2">
+                  <GlassControlButton
+                    label={isLooping ? "Desativar loop" : "Ativar loop"}
+                    onClick={() => toggleLoop({ showFeedback: true })}
+                    active={isLooping}
+                  >
+                    <LoopPowerIcon isDisabled={!isLooping} />
+                  </GlassControlButton>
 
-              <GlassControlButton
-                label={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
-                onClick={toggleFullscreen}
-                variant="fullscreen"
-              >
-                {isFullscreen ? <Minimize /> : <Maximize />}
-              </GlassControlButton>
-            </div>
+                  <div
+                    ref={volumeControlRef}
+                    className="relative flex items-center"
+                    onMouseEnter={handleVolumeMouseEnter}
+                    onMouseLeave={handleVolumeMouseLeave}
+                  >
+                    <div
+                      className={[
+                        "absolute bottom-[calc(100%+0.7rem)] left-1/2 z-40 flex h-28 w-10 -translate-x-1/2 items-center justify-center rounded-full border border-white/20 bg-black/30 shadow-[0_18px_44px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.22)] backdrop-blur-md transition-opacity duration-200 md:h-32 md:w-11",
+                        shouldShowVolumeControl
+                          ? "pointer-events-auto opacity-100"
+                          : "pointer-events-none opacity-0",
+                      ].join(" ")}
+                    >
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={isMuted ? 0 : volume}
+                        onChange={handleVolumeChange}
+                        onMouseDown={showControls}
+                        onTouchStart={showControls}
+                        style={volumeStyle}
+                        className={[
+                          "h-1.5 w-24 -rotate-90 cursor-pointer appearance-none rounded-full bg-transparent outline-none md:w-28",
+                          "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent",
+                          "[&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full md:[&::-webkit-slider-thumb]:-mt-[5px]",
+                          "[&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-white",
+                          "[&::-webkit-slider-thumb]:shadow-[0_0_14px_rgba(255,255,255,0.32),0_6px_14px_rgba(0,0,0,0.36)]",
+                          "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent",
+                          "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full",
+                          "[&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-white",
+                        ].join(" ")}
+                        aria-label="Volume do vÃ­deo"
+                      />
+                    </div>
+
+                    <GlassControlButton
+                      label="Volume"
+                      onClick={handleVolumeButtonClick}
+                      active={shouldShowVolumeControl || (!isMuted && volume > 0)}
+                    >
+                      {isMuted || volume === 0 ? <VolumeX /> : <Volume2 />}
+                    </GlassControlButton>
+                  </div>
+
+                  <GlassControlButton
+                    label={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                    onClick={toggleFullscreen}
+                    variant="fullscreen"
+                  >
+                    {isFullscreen ? <Minimize /> : <Maximize />}
+                  </GlassControlButton>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

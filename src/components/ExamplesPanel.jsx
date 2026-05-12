@@ -1031,6 +1031,7 @@ function ExampleVideoThumbnail({
   isMobile = false,
   className = "h-[84px]",
   style,
+  videoSequenceLabel = "",
 }) {
   const [thumbnailSrc, setThumbnailSrc] = useState(() => {
     const rawVideo = normalizeText(video);
@@ -1054,6 +1055,8 @@ function ExampleVideoThumbnail({
 
   const isThirdPartyVideo = isThirdPartyEmbeddedVideo(video);
   const shouldUseOwnedPlayVisual = !isThirdPartyVideo;
+  const shouldShowVideoSequenceLabel =
+    typeof videoSequenceLabel === "string" && videoSequenceLabel.trim().length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -1470,6 +1473,14 @@ function ExampleVideoThumbnail({
       ) : (
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(237,154,10,0.18),transparent_32%),linear-gradient(135deg,#F8FAFC_0%,#EFF4F8_55%,#E6EDF5_100%)]" />
       )}
+
+      {shouldShowVideoSequenceLabel ? (
+        <div className="pointer-events-none absolute right-2 top-2 z-20">
+          <span className="inline-flex items-center rounded-full border border-white/30 bg-black/45 px-2 py-0.5 text-[11px] font-semibold leading-none text-white/95 shadow-[0_6px_18px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+            {videoSequenceLabel}
+          </span>
+        </div>
+      ) : null}
 
       <>
         <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
@@ -2020,10 +2031,30 @@ export default function ExamplesPanel({
   const panelHeaderInsetClass = isFlashcardMobileLayout ? "px-1" : "px-2";
   const isExpandedGlobalWordVideo =
     mobileVideo?.groupKey === "global-word-video-group";
+  const isMobileMeaningVideoGroup = isMeaningVideoGroupKey(mobileVideo?.groupKey);
+  const currentMobileVideoIndex = Number.isFinite(mobileVideo?.index)
+    ? mobileVideo.index
+    : 0;
+  const currentMobileVideoCount = Array.isArray(mobileVideo?.videos)
+    ? mobileVideo.videos.length
+    : 0;
+  const currentMobileVideoSequenceLabel =
+    currentMobileVideoCount > 1
+      ? `${Math.min(currentMobileVideoIndex + 1, currentMobileVideoCount)}/${currentMobileVideoCount}`
+      : "";
   const currentMobileVideoValue = mobileVideo?.video || "";
   const isCurrentMobileVideoThirdPartyEmbed =
     isLikelyThirdPartyEmbedValue(currentMobileVideoValue) ||
     isThirdPartyEmbeddedVideo(currentMobileVideoValue);
+  const shouldUseMobileOwnMeaningPlayerNavigation = Boolean(
+    isMobileMeaningVideoGroup &&
+      !isCurrentMobileVideoThirdPartyEmbed &&
+      Array.isArray(mobileVideo?.videos) &&
+      mobileVideo.videos.length > 1
+  );
+  const shouldUseLandscapeMobileExpandedOwnNavigation = Boolean(
+    shouldUseMobileOwnMeaningPlayerNavigation && isMobileLandscapeVideoLayout
+  );
   const currentMobileVideoFitStyle = getExamplePanelVideoFitStyle(
     currentMobileVideoValue
   );
@@ -2176,6 +2207,7 @@ export default function ExamplesPanel({
     videos,
     nextIndex,
     desktopAutoPlayOnNavigate = false,
+    preservePlayerSession = false,
   }) => {
     if (!Array.isArray(videos) || videos.length === 0) return;
 
@@ -2211,6 +2243,16 @@ export default function ExamplesPanel({
     }
 
     if (!shouldUseMobileVideoExperienceRuntime && desktopAutoPlayOnNavigate) {
+      if (preservePlayerSession) {
+        setOpenDesktopVideos({
+          [groupKey]: true,
+        });
+        setDesktopAutoplayByGroup({
+          [groupKey]: Boolean(desktopAutoPlayOnNavigate),
+        });
+        return;
+      }
+
       const nextOpenToken = videoPlaybackOpenTokenRef.current + 1;
       videoPlaybackOpenTokenRef.current = nextOpenToken;
 
@@ -2354,11 +2396,21 @@ export default function ExamplesPanel({
       shouldRenderMobileThirdPartyPreview ||
       shouldRenderInlineOpenedVideo;
     const canNavigateBetweenVideos = safeVideos.length > 1;
+    const videoSequenceLabel = canNavigateBetweenVideos
+      ? `${currentIndex + 1}/${safeVideos.length}`
+      : "";
     const shouldEnableThumbnailSwipe =
       canNavigateBetweenVideos &&
       (groupKey === "global-word-video-group" || shouldUseMobileVideoExperience);
     const shouldEnableMobileInlineSwipe =
       shouldUseMobileVideoExperienceRuntime && canNavigateBetweenVideos;
+    const shouldUseOwnMeaningInlinePlayerNavigation = Boolean(
+      isMeaningVideoGroup &&
+        canNavigateBetweenVideos &&
+        !isCurrentVideoThirdParty
+    );
+    const shouldShowExternalVideoControls =
+      !shouldUseOwnMeaningInlinePlayerNavigation;
     const shouldShowAttachedChip = false;
     const attachedChipPalette = meaningPalette
       ? {
@@ -2586,19 +2638,27 @@ export default function ExamplesPanel({
                 }}
               >
                 <ExampleVideoPlayer
-                  key={`${currentVideo.key}-${currentVideo.video}-${currentPlaybackOpenToken}`}
+                  key={`${groupKey}-${currentPlaybackOpenToken}`}
                   video={currentVideo.video}
                   title={currentVideo.title}
                   autoPlay={shouldAutoPlayDesktopVideo}
                   resetPlaybackOnMount={Boolean(currentPlaybackOpenToken)}
+                  videoSequenceLabel={videoSequenceLabel}
+                  showSideNavigationButtons={
+                    shouldUseOwnMeaningInlinePlayerNavigation &&
+                    shouldRenderPlayerDirectly
+                  }
                   onKeyboardArrowNavigate={
                     canNavigateBetweenVideos && !shouldUseMobileVideoExperience
-                      ? (direction) => {
+                      ? (direction, navigationOptions = {}) => {
                           goToVideoIndex({
                             groupKey,
                             videos: safeVideos,
                             nextIndex: currentIndex + direction,
                             desktopAutoPlayOnNavigate: true,
+                            preservePlayerSession: Boolean(
+                              navigationOptions?.preservePlayerSession
+                            ),
                           });
                         }
                       : undefined
@@ -2616,6 +2676,21 @@ export default function ExamplesPanel({
                     shouldShowSpecificVideosInsideMeanings
                       ? () => {
                           navigateMeaningPreviewByDirection(1);
+                        }
+                      : undefined
+                  }
+                  onOwnVideoPlaybackEnded={
+                    shouldUseOwnMeaningInlinePlayerNavigation
+                      ? (navigationOptions = {}) => {
+                          goToVideoIndex({
+                            groupKey,
+                            videos: safeVideos,
+                            nextIndex: currentIndex + 1,
+                            desktopAutoPlayOnNavigate: true,
+                            preservePlayerSession: Boolean(
+                              navigationOptions?.preservePlayerSession
+                            ),
+                          });
                         }
                       : undefined
                   }
@@ -2726,7 +2801,7 @@ export default function ExamplesPanel({
               ) : null}
             </div>
 
-            {!shouldHideSourceThumbnailOnMobile
+            {shouldShowExternalVideoControls && !shouldHideSourceThumbnailOnMobile
               ? renderVideoControls({
                   groupKey,
                   videos: safeVideos,
@@ -2755,6 +2830,7 @@ export default function ExamplesPanel({
               <ExampleVideoThumbnail
                 video={currentVideo.video}
                 thumbnail={currentVideo.thumbnail}
+                videoSequenceLabel={videoSequenceLabel}
                 title={currentVideo.title}
                 isOpen={!shouldUseMobileVideoExperience && isVideoOpen}
                 isMobile={shouldUseMobileVideoExperience}
@@ -2808,7 +2884,7 @@ export default function ExamplesPanel({
               />
             </div>
 
-            {!shouldHideSourceThumbnailOnMobile
+            {shouldShowExternalVideoControls && !shouldHideSourceThumbnailOnMobile
               ? renderVideoControls({
                   groupKey,
                   videos: safeVideos,
@@ -2822,7 +2898,7 @@ export default function ExamplesPanel({
     );
   };
 
-  const goMobileVideoToIndex = (nextIndex) => {
+  const goMobileVideoToIndex = (nextIndex, { autoPlay = false } = {}) => {
     if (!mobileVideo?.videos?.length) return;
 
     const videos = mobileVideo.videos;
@@ -2847,7 +2923,7 @@ export default function ExamplesPanel({
       groupKey: mobileVideo.groupKey,
       videos,
       index: safeIndex,
-      autoPlay: false,
+      autoPlay: Boolean(autoPlay),
       openToken: mobileVideo.openToken || 0,
     });
   };
@@ -3670,6 +3746,29 @@ export default function ExamplesPanel({
                   title={mobileVideo?.title || ""}
                   autoPlay={Boolean(mobileVideo?.autoPlay)}
                   resetPlaybackOnMount={Boolean(mobileVideo?.openToken)}
+                  videoSequenceLabel={currentMobileVideoSequenceLabel}
+                  showSideNavigationButtons={
+                    shouldUseLandscapeMobileExpandedOwnNavigation
+                  }
+                  onKeyboardArrowNavigate={
+                    shouldUseLandscapeMobileExpandedOwnNavigation
+                      ? (direction) => {
+                          goMobileVideoToIndex(
+                            currentMobileVideoIndex + direction,
+                            { autoPlay: true }
+                          );
+                        }
+                      : undefined
+                  }
+                  onOwnVideoPlaybackEnded={
+                    shouldUseMobileOwnMeaningPlayerNavigation
+                      ? () => {
+                          goMobileVideoToIndex(currentMobileVideoIndex + 1, {
+                            autoPlay: true,
+                          });
+                        }
+                      : undefined
+                  }
                   layout={
                     isMobileLandscapeVideoLayout
                       ? "mobileFullscreen"
