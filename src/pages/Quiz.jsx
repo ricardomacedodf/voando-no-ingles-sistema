@@ -357,6 +357,8 @@ export default function Quiz() {
   const lastOptionPointerSfxAtRef = useRef(0);
   const prevModeRef = useRef(mode);
   const examplesPanelRef = useRef(null);
+  const examplesSectionRef = useRef(null);
+  const wasShowingExamplesRef = useRef(false);
   const questionTextRef = useRef(null);
   const questionTextSlotRef = useRef(null);
 
@@ -587,6 +589,18 @@ export default function Quiz() {
   useEffect(() => {
     if (!showExamples) return;
     return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
+  }, [showExamples]);
+
+  useEffect(() => {
+    const wasShowingExamples = wasShowingExamplesRef.current;
+    wasShowingExamplesRef.current = showExamples;
+
+    if (!wasShowingExamples || showExamples) return undefined;
+    if (!isMobileQuizViewport()) return undefined;
+
+    return scheduleExamplesAutoScroll(
+      () => examplesSectionRef.current || examplesPanelRef.current
+    );
   }, [showExamples]);
 
   useEffect(() => {
@@ -1067,7 +1081,7 @@ export default function Quiz() {
       </div>
       </div>
 
-      <div className="mx-auto w-full md:max-w-[760px]">
+      <div ref={examplesSectionRef} className="mx-auto w-full md:max-w-[760px]">
         <div className="hide-on-mobile-video-expanded grid w-full grid-cols-2 items-start gap-x-3 gap-y-0 transition-[gap] duration-200" style={NON_SELECTABLE_UI_STYLE}>
           <div
             className={[

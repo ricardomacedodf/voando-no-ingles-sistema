@@ -723,7 +723,8 @@ export default function Manager() {
             className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-full bg-[#0071E3] px-4 py-2 text-xs font-semibold text-white shadow-none transition-colors hover:bg-[#0077ED] active:bg-[#006EDB] dark:bg-[#0A84FF] dark:hover:bg-[#2290FF]"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Nova palavra/frase</span>
+            <span className="truncate sm:hidden">Novo</span>
+            <span className="hidden truncate sm:inline">Nova palavra/frase</span>
           </button>
 
           <button

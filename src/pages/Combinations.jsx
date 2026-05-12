@@ -228,6 +228,8 @@ export default function Combinations() {
     at: 0,
   });
   const examplesPanelRef = useRef(null);
+  const examplesSectionRef = useRef(null);
+  const wasShowingExamplesRef = useRef(false);
   const latestVocabRef = useRef([]);
   const pendingReviewUpdatesRef = useRef(new Map());
   const pairAttemptCountsRef = useRef({});
@@ -357,6 +359,18 @@ export default function Combinations() {
   useEffect(() => {
     if (!showExamples) return;
     return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
+  }, [showExamples]);
+
+  useEffect(() => {
+    const wasShowingExamples = wasShowingExamplesRef.current;
+    wasShowingExamplesRef.current = showExamples;
+
+    if (!wasShowingExamples || showExamples) return undefined;
+    if (!isMobileCombinationsViewport()) return undefined;
+
+    return scheduleExamplesAutoScroll(
+      () => examplesSectionRef.current || examplesPanelRef.current
+    );
   }, [showExamples]);
 
   useEffect(() => {
@@ -997,7 +1011,7 @@ export default function Combinations() {
       ) : null}
 
       {hasFocusedExamples ? (
-        <div className="space-y-0">
+        <div ref={examplesSectionRef} className="space-y-0">
           <ExamplesToggleButton
             expanded={showExamples}
             onClick={() => setShowExamples((prev) => !prev)}

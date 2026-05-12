@@ -295,6 +295,8 @@ export default function Flashcards() {
   const discardTimersRef = useRef([]);
   const discardNodesRef = useRef([]);
   const examplesPanelRef = useRef(null);
+  const examplesSectionRef = useRef(null);
+  const wasShowingExamplesRef = useRef(false);
   const lastFlipPointerSfxAtRef = useRef(0);
   const lastDiscardPointerSfxAtRef = useRef(0);
   const cardStartTimeRef = useRef(Date.now());
@@ -643,6 +645,19 @@ export default function Flashcards() {
   useEffect(() => {
     if (!showExamples) return;
     return scheduleExamplesAutoScroll(() => examplesPanelRef.current);
+  }, [showExamples]);
+
+  useEffect(() => {
+    const wasShowingExamples = wasShowingExamplesRef.current;
+    wasShowingExamplesRef.current = showExamples;
+
+    if (!wasShowingExamples || showExamples) return undefined;
+    if (typeof window === "undefined") return undefined;
+    if (window.innerWidth > FLASHCARD_MOBILE_BREAKPOINT) return undefined;
+
+    return scheduleExamplesAutoScroll(
+      () => examplesSectionRef.current || examplesPanelRef.current
+    );
   }, [showExamples]);
 
   useEffect(() => {
@@ -1161,7 +1176,7 @@ export default function Flashcards() {
       </div>
 
       {card?.meanings?.length > 0 ? (
-        <div className="relative z-10 space-y-0">
+        <div ref={examplesSectionRef} className="relative z-10 space-y-0">
           <ExamplesToggleButton
             expanded={showExamples}
             onClick={() => setShowExamples((value) => !value)}

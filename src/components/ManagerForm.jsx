@@ -2925,9 +2925,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
     window.addEventListener("resize", scheduleHorizontalClamp);
     window.addEventListener("orientationchange", scheduleHorizontalClamp);
-    window.addEventListener("scroll", scheduleHorizontalClamp, { passive: true });
     window.visualViewport?.addEventListener("resize", scheduleHorizontalClamp);
-    window.visualViewport?.addEventListener("scroll", scheduleHorizontalClamp);
 
     return () => {
       if (resetFrame !== null) {
@@ -2936,9 +2934,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
       window.removeEventListener("resize", scheduleHorizontalClamp);
       window.removeEventListener("orientationchange", scheduleHorizontalClamp);
-      window.removeEventListener("scroll", scheduleHorizontalClamp);
       window.visualViewport?.removeEventListener("resize", scheduleHorizontalClamp);
-      window.visualViewport?.removeEventListener("scroll", scheduleHorizontalClamp);
 
       html.style.overflowX = previousHtmlOverflowX;
       html.style.overscrollBehaviorX = previousHtmlOverscrollBehaviorX;

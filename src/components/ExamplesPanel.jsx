@@ -31,6 +31,9 @@ const VIDEO_SWIPE_DIRECTION_RATIO = 1.15;
 const MOBILE_VIDEO_EXPERIENCE_MAX_SHORT_SIDE_PX = 767;
 const MOBILE_VIDEO_EXPERIENCE_MAX_LONG_SIDE_PX = 1024;
 const EMBED_PREVIEW_VISUAL_SCALE = 0.65;
+const MOBILE_VIDEO_COLLAPSE_SCROLL_TOP_GAP_PX = 10;
+const MOBILE_VIDEO_COLLAPSE_SCROLL_SECOND_PASS_DELAY_MS = 140;
+const MOBILE_VIDEO_COLLAPSE_SCROLL_THIRD_PASS_DELAY_MS = 320;
 
 const EXAMPLE_PANEL_VIDEO_FIT_CLASS = "examples-panel-video-fit-shell";
 const EXAMPLE_PANEL_VIDEO_FIT_STYLE = `
@@ -1586,6 +1589,18 @@ export default function ExamplesPanel({
     groupKey: "",
     suppressClick: false,
   });
+  const videoGroupAnchorRefs = useRef(new Map());
+
+  const registerVideoGroupAnchor = (groupKey, node) => {
+    if (!groupKey) return;
+
+    if (node) {
+      videoGroupAnchorRefs.current.set(groupKey, node);
+      return;
+    }
+
+    videoGroupAnchorRefs.current.delete(groupKey);
+  };
 
   useEffect(() => {
     if (!forceMobileVideoExperience || typeof window === "undefined") {
@@ -2052,8 +2067,8 @@ export default function ExamplesPanel({
       Array.isArray(mobileVideo?.videos) &&
       mobileVideo.videos.length > 1
   );
-  const shouldUseLandscapeMobileExpandedOwnNavigation = Boolean(
-    shouldUseMobileOwnMeaningPlayerNavigation && isMobileLandscapeVideoLayout
+  const shouldUseMobileExpandedOwnNavigation = Boolean(
+    shouldUseMobileOwnMeaningPlayerNavigation
   );
   const currentMobileVideoFitStyle = getExamplePanelVideoFitStyle(
     currentMobileVideoValue
@@ -2139,6 +2154,9 @@ export default function ExamplesPanel({
   }, [shouldUseMobileVideoExperience, mobileVideo?.video]);
 
   const closeMobileVideo = () => {
+    const closingGroupKey =
+      typeof mobileVideo?.groupKey === "string" ? mobileVideo.groupKey : "";
+
     lastMobileVideoCloseAtRef.current = Date.now();
     expandedVideoSwipeRef.current = {
       active: false,
@@ -2148,6 +2166,61 @@ export default function ExamplesPanel({
     };
     setIsMobileEmbedOpening(false);
     setMobileVideo(null);
+
+    if (
+      !closingGroupKey ||
+      !shouldUseMobileVideoExperienceRuntime ||
+      !isFlashcard ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    const getTopOffset = () => {
+      const safeAreaOffsetTop = Math.max(
+        0,
+        Math.round(window.visualViewport?.offsetTop || 0)
+      );
+      return safeAreaOffsetTop + MOBILE_VIDEO_COLLAPSE_SCROLL_TOP_GAP_PX;
+    };
+
+    const scrollGroupAnchorNearTop = () => {
+      const groupAnchor = videoGroupAnchorRefs.current.get(closingGroupKey);
+      if (!groupAnchor) return;
+
+      const rect = groupAnchor.getBoundingClientRect();
+      const absoluteTop = window.scrollY + rect.top;
+      const targetTop = Math.max(0, absoluteTop - getTopOffset());
+
+      window.scrollTo({
+        top: targetTop,
+        behavior: "smooth",
+      });
+    };
+
+    let rafA = 0;
+    let rafB = 0;
+    let secondPassTimer = 0;
+    let thirdPassTimer = 0;
+
+    rafA = window.requestAnimationFrame(() => {
+      rafB = window.requestAnimationFrame(scrollGroupAnchorNearTop);
+    });
+    secondPassTimer = window.setTimeout(
+      scrollGroupAnchorNearTop,
+      MOBILE_VIDEO_COLLAPSE_SCROLL_SECOND_PASS_DELAY_MS
+    );
+    thirdPassTimer = window.setTimeout(
+      scrollGroupAnchorNearTop,
+      MOBILE_VIDEO_COLLAPSE_SCROLL_THIRD_PASS_DELAY_MS
+    );
+
+    window.setTimeout(() => {
+      if (rafA) window.cancelAnimationFrame(rafA);
+      if (rafB) window.cancelAnimationFrame(rafB);
+      if (secondPassTimer) window.clearTimeout(secondPassTimer);
+      if (thirdPassTimer) window.clearTimeout(thirdPassTimer);
+    }, MOBILE_VIDEO_COLLAPSE_SCROLL_THIRD_PASS_DELAY_MS + 260);
   };
 
   const openVideo = ({
@@ -2555,6 +2628,7 @@ export default function ExamplesPanel({
 
     return (
       <div
+        ref={(node) => registerVideoGroupAnchor(groupKey, node)}
         className={
           attachContextBelow
             ? "mb-0 w-full max-w-full"
@@ -3748,10 +3822,10 @@ export default function ExamplesPanel({
                   resetPlaybackOnMount={Boolean(mobileVideo?.openToken)}
                   videoSequenceLabel={currentMobileVideoSequenceLabel}
                   showSideNavigationButtons={
-                    shouldUseLandscapeMobileExpandedOwnNavigation
+                    shouldUseMobileExpandedOwnNavigation
                   }
                   onKeyboardArrowNavigate={
-                    shouldUseLandscapeMobileExpandedOwnNavigation
+                    shouldUseMobileExpandedOwnNavigation
                       ? (direction) => {
                           goMobileVideoToIndex(
                             currentMobileVideoIndex + direction,
