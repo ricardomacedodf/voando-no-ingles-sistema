@@ -7,14 +7,14 @@ const DARK_THEME = "dark";
 const ThemeContext = createContext(null);
 
 function readStoredTheme() {
-  if (typeof window === "undefined") return LIGHT_THEME;
+  if (typeof window === "undefined") return DARK_THEME;
 
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (storedTheme === DARK_THEME || storedTheme === LIGHT_THEME) {
     return storedTheme;
   }
 
-  return LIGHT_THEME;
+  return DARK_THEME;
 }
 
 export function ThemeProvider({ children }) {

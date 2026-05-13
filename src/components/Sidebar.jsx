@@ -23,6 +23,21 @@ const SIDEBAR_COLLAPSED_BRAND_SRC = "/sidebar-avatar-collapsed.png";
 const SIDEBAR_COLLAPSED_BRAND_LIGHT_SRC = "/sidebar-avatar-collapsed - branco.png";
 const SIDEBAR_EXPANDED_BRAND_MASK_SRC = "/sidebar-logo-normal.png";
 
+const SIDEBAR_MOBILE_PROFILE_FIX_CSS = `
+@media (max-width: 640px) {
+  body.app-mobile-profile-menu-open .vni-progress-mobile-close {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  [data-sidebar-profile-menu="true"] {
+    z-index: 9999 !important;
+  }
+}
+`;
+
 const sidebarExpandedBrandMaskStyle = {
   WebkitMaskImage: `url('${SIDEBAR_EXPANDED_BRAND_MASK_SRC}')`,
   maskImage: `url('${SIDEBAR_EXPANDED_BRAND_MASK_SRC}')`,
@@ -40,7 +55,7 @@ const navItems = [
   { label: "Quiz", path: "/quiz", icon: HelpCircle },
   { label: "Combinações", path: "/combinacoes", icon: Puzzle },
   { label: "Progresso", path: "/progresso", icon: BarChart3 },
-  { label: "Gerenciador", path: "/gerenciador", icon: Layers3 },
+  { label: "Gerenciador", mobileLabel: "Palavras/frases", path: "/gerenciador", icon: Layers3 },
 ];
 
 function SidebarToggleIcon({ isCollapsed = false, className = "" }) {
@@ -118,6 +133,10 @@ export default function Sidebar({
   const [collapsedProfileMenuPosition, setCollapsedProfileMenuPosition] = useState({
     left: 84,
     bottom: 12,
+  });
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 640px)").matches;
   });
 
   const profileAreaRef = useRef(null);
@@ -218,6 +237,32 @@ export default function Sidebar({
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const mobileViewportQuery = window.matchMedia("(max-width: 640px)");
+
+    const syncMobileViewport = () => {
+      setIsMobileViewport(mobileViewportQuery.matches);
+    };
+
+    syncMobileViewport();
+
+    if (typeof mobileViewportQuery.addEventListener === "function") {
+      mobileViewportQuery.addEventListener("change", syncMobileViewport);
+
+      return () => {
+        mobileViewportQuery.removeEventListener("change", syncMobileViewport);
+      };
+    }
+
+    mobileViewportQuery.addListener(syncMobileViewport);
+
+    return () => {
+      mobileViewportQuery.removeListener(syncMobileViewport);
+    };
+  }, []);
+
   const updateCollapsedProfileMenuPosition = useCallback(() => {
     if (typeof window === "undefined") return;
     if (!isCollapsed || !isProfileMenuOpen) return;
@@ -297,6 +342,19 @@ export default function Sidebar({
   }, [isCollapsed, setSidebarCollapsed]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    document.body.classList.toggle(
+      "app-mobile-profile-menu-open",
+      isProfileMenuOpen && isMobileViewport
+    );
+
+    return () => {
+      document.body.classList.remove("app-mobile-profile-menu-open");
+    };
+  }, [isProfileMenuOpen, isMobileViewport]);
+
+  useEffect(() => {
     if (!isProfileMenuOpen) return undefined;
 
     const handleOutsidePointerDown = (event) => {
@@ -353,7 +411,9 @@ export default function Sidebar({
   };
 
   return (
-    <aside
+    <>
+      <style>{SIDEBAR_MOBILE_PROFILE_FIX_CSS}</style>
+      <aside
       ref={sidebarRef}
       style={{
         width: sidebarWidthValue,
@@ -424,14 +484,16 @@ export default function Sidebar({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
+            const displayLabel =
+              isMobileViewport && item.mobileLabel ? item.mobileLabel : item.label;
 
             return (
               <Link
                 key={item.path}
                 to={item.path}
                 onClick={onClose}
-                title={isCompactVisual ? item.label : undefined}
-                aria-label={item.label}
+                title={isCompactVisual ? displayLabel : undefined}
+                aria-label={displayLabel}
                 className={`group flex h-[44px] items-center rounded-xl text-sm font-medium transition-colors ${
                   isCompactVisual
                     ? "w-10 justify-center px-0"
@@ -449,7 +511,7 @@ export default function Sidebar({
                       : "text-muted-foreground group-hover:text-foreground dark:group-hover:text-white"
                   }`}
                 />
-                {!isCompactVisual ? <span className="truncate">{item.label}</span> : null}
+                {!isCompactVisual ? <span className="truncate">{displayLabel}</span> : null}
               </Link>
             );
           })}
@@ -525,10 +587,11 @@ export default function Sidebar({
 
           {isProfileMenuOpen && (
             <div
+              data-sidebar-profile-menu="true"
               className={`rounded-2xl border border-border bg-card/95 p-2 shadow-lg shadow-black/15 backdrop-blur-sm dark:shadow-black/35 ${
                 isCollapsed
-                  ? "fixed z-[120] w-[252px]"
-                  : "absolute bottom-full left-0 right-0 z-30 mb-2"
+                  ? "fixed z-[9999] w-[252px]"
+                  : "absolute bottom-full left-0 right-0 z-[9999] mb-2"
               }`}
               style={
                 isCollapsed
@@ -573,6 +636,7 @@ export default function Sidebar({
           )}
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

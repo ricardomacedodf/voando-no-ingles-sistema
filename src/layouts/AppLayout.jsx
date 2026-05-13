@@ -9,7 +9,7 @@ import {
   X,
   LogOut,
   UserCircle2,
-  Database,
+  Layers3,
   BarChart3,
 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
@@ -26,7 +26,7 @@ const mobilePrimaryNavItems = [
 
 const mobilePanelNavItems = [
   { label: "Progresso", path: "/progresso", icon: BarChart3 },
-  { label: "Vocabul\u00E1rio", path: "/gerenciador", icon: Database },
+  { label: "Palavras/frases", path: "/gerenciador", icon: Layers3 },
 ];
 
 export default function AppLayout() {
@@ -49,6 +49,38 @@ export default function AppLayout() {
 
     return () => {
       document.body.style.overflow = overflow;
+    };
+  }, [isPersonalizeOpen]);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const body = document.body;
+    const mobileQuery = window.matchMedia("(max-width: 767px)");
+
+    const syncMobileProfileMenuClass = () => {
+      body.classList.toggle(
+        "app-mobile-profile-menu-open",
+        isPersonalizeOpen && mobileQuery.matches
+      );
+    };
+
+    syncMobileProfileMenuClass();
+
+    if (typeof mobileQuery.addEventListener === "function") {
+      mobileQuery.addEventListener("change", syncMobileProfileMenuClass);
+      return () => {
+        mobileQuery.removeEventListener("change", syncMobileProfileMenuClass);
+        body.classList.remove("app-mobile-profile-menu-open");
+      };
+    }
+
+    mobileQuery.addListener(syncMobileProfileMenuClass);
+    return () => {
+      mobileQuery.removeListener(syncMobileProfileMenuClass);
+      body.classList.remove("app-mobile-profile-menu-open");
     };
   }, [isPersonalizeOpen]);
 
