@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   BookOpen,
@@ -44,6 +44,15 @@ const PROGRESS_PAGE_CSS = `
       height: 100%;
       overflow-y: hidden;
       overscroll-behavior: none;
+    }
+
+    html:has(.vni-progress-page[data-scroll-unlocked="true"]),
+    body:has(.vni-progress-page[data-scroll-unlocked="true"]),
+    #root:has(.vni-progress-page[data-scroll-unlocked="true"]) {
+      height: auto;
+      min-height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: auto;
     }
   }
 }
@@ -1140,6 +1149,86 @@ html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal-butto
   background: #f6f9fd;
 }
 
+
+
+/* Ajuste final: context boxes inferiores 20% menores, com 6 itens visíveis e scroll interno */
+.vni-progress-list-card {
+  height: 232px;
+}
+
+.vni-progress-list-body {
+  height: 154px;
+  max-height: 154px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.vni-progress-list-item {
+  min-height: 24px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+@media (min-width: 641px) {
+  .vni-progress-list-card {
+    height: 255px;
+  }
+
+  .vni-progress-list-body {
+    height: 177px;
+    max-height: 177px;
+  }
+}
+
+@media (max-width: 640px) {
+  .vni-progress-list-card {
+    height: 232px;
+  }
+
+  .vni-progress-list-body {
+    height: 154px;
+    max-height: 154px;
+  }
+}
+
+
+/* Ajuste: centralizar a primeira área do Resumo do aprendizado */
+.vni-progress-summary-title {
+  width: 20%;
+  text-align: center;
+}
+
+.vni-progress-summary-grid .vni-progress-summary-item:first-child {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .vni-progress-summary-title {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+
+/* Web: travado sem zoom; libera scroll apenas quando JS detectar zoom aumentado + overflow real */
+@media (min-width: 641px) {
+  .vni-progress-page.is-zoom-scroll-enabled {
+    height: auto;
+    max-height: none;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: auto;
+  }
+
+  .vni-progress-page.is-zoom-scroll-enabled .vni-progress-container {
+    padding-bottom: 6px;
+  }
+}
+
 @media (max-width: 1190px) {
   .vni-progress-container {
     padding: 0 18px;
@@ -1263,6 +1352,34 @@ function pluralize(value, singular, plural) {
   return `${value} ${value === 1 ? singular : plural}`;
 }
 
+function getStatsNumber(stats, keys = []) {
+  for (const key of keys) {
+    const value = Number(stats?.[key]);
+
+    if (Number.isFinite(value)) return value;
+  }
+
+  return 0;
+}
+
+function getCorrectStreak(item) {
+  return getStatsNumber(item?.stats, [
+    "correct_streak",
+    "correctStreak",
+    "streak",
+    "consecutive_correct",
+    "consecutiveCorrect",
+  ]);
+}
+
+function getIncorrectCount(item) {
+  return getStatsNumber(item?.stats, ["incorrect", "errors", "wrong"]);
+}
+
+function getCorrectCount(item) {
+  return getStatsNumber(item?.stats, ["correct", "right"]);
+}
+
 function getTimestampValue(item, keys = []) {
   const stats = item?.stats || {};
 
@@ -1280,22 +1397,18 @@ function getTimestampValue(item, keys = []) {
   return 0;
 }
 
-function sortNearMasteryWords(words = []) {
-  return [...words].sort((a, b) => {
-    const aStreak = a?.stats?.correct_streak || 0;
-    const bStreak = b?.stats?.correct_streak || 0;
-
-    if (bStreak !== aStreak) return bStreak - aStreak;
-
-    const aCorrect = a?.stats?.correct || 0;
-    const bCorrect = b?.stats?.correct || 0;
-
-    return bCorrect - aCorrect;
-  });
+function getRegistrationTimestamp(item) {
+  return getTimestampValue(item, [
+    "created_at",
+    "createdAt",
+    "inserted_at",
+    "registered_at",
+    "updated_at",
+  ]);
 }
 
-function sortDominatedWords(words = []) {
-  const dateKeys = [
+function getDominatedTimestamp(item) {
+  return getTimestampValue(item, [
     "mastered_at",
     "dominated_at",
     "last_correct_at",
@@ -1305,19 +1418,73 @@ function sortDominatedWords(words = []) {
     "reviewed_at",
     "updated_at",
     "created_at",
-  ];
-
-  return [...words].sort(
-    (a, b) => getTimestampValue(b, dateKeys) - getTimestampValue(a, dateKeys)
-  );
+  ]);
 }
 
-function sortNewWords(words = []) {
-  return [...words].sort(
-    (a, b) =>
-      getTimestampValue(b, ["created_at", "updated_at"]) -
-      getTimestampValue(a, ["created_at", "updated_at"])
+function getProgressCategoryData(items = []) {
+  const dominatedWords = [];
+  const learningWords = [];
+  const needsAttentionWords = [];
+  const newWords = [];
+
+  items.forEach((item) => {
+    const correctStreak = getCorrectStreak(item);
+    const incorrect = getIncorrectCount(item);
+
+    if (correctStreak >= 10) {
+      dominatedWords.push(item);
+      return;
+    }
+
+    if (correctStreak >= 5) {
+      learningWords.push(item);
+      return;
+    }
+
+    if (incorrect > 0) {
+      needsAttentionWords.push(item);
+      return;
+    }
+
+    newWords.push(item);
+  });
+
+  learningWords.sort((a, b) => {
+    const streakDiff = getCorrectStreak(b) - getCorrectStreak(a);
+    if (streakDiff !== 0) return streakDiff;
+
+    const correctDiff = getCorrectCount(b) - getCorrectCount(a);
+    if (correctDiff !== 0) return correctDiff;
+
+    return getRegistrationTimestamp(b) - getRegistrationTimestamp(a);
+  });
+
+  dominatedWords.sort(
+    (a, b) => getDominatedTimestamp(b) - getDominatedTimestamp(a)
   );
+
+  needsAttentionWords.sort((a, b) => {
+    const incorrectDiff = getIncorrectCount(b) - getIncorrectCount(a);
+    if (incorrectDiff !== 0) return incorrectDiff;
+
+    return getRegistrationTimestamp(b) - getRegistrationTimestamp(a);
+  });
+
+  newWords.sort(
+    (a, b) => getRegistrationTimestamp(b) - getRegistrationTimestamp(a)
+  );
+
+  return {
+    dominated: dominatedWords.length,
+    learning: learningWords.length,
+    difficult: needsAttentionWords.length,
+    fresh: newWords.length,
+    totalCards: items.length,
+    dominatedWords,
+    learningWords,
+    needsAttentionWords,
+    newWords,
+  };
 }
 
 function EmptyListState({ text }) {
@@ -1392,6 +1559,14 @@ export default function Progress() {
   );
   const [loading, setLoading] = useState(true);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [allowDesktopPageScroll, setAllowDesktopPageScroll] = useState(false);
+
+  const pageRef = useRef(null);
+  const containerRef = useRef(null);
+  const initialDprRef = useRef(
+    typeof window === "undefined" ? 1 : window.devicePixelRatio || 1
+  );
+  const zoomGestureDetectedRef = useRef(false);
 
   const selectedPace = reviewPreferences.pace || REVIEW_PACE.EQUILIBRADO;
 
@@ -1442,6 +1617,90 @@ export default function Progress() {
     setProgress(getProgressSummary(vocabItems, reviewPreferences));
   }, [vocabItems, reviewPreferences]);
 
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    let frameId = null;
+
+    const isDesktopViewport = () =>
+      window.matchMedia("(min-width: 641px)").matches;
+
+    const detectZoomIncrease = () => {
+      const currentDpr = window.devicePixelRatio || 1;
+      const visualViewportScale = window.visualViewport?.scale || 1;
+
+      return (
+        zoomGestureDetectedRef.current ||
+        currentDpr > initialDprRef.current + 0.08 ||
+        visualViewportScale > 1.01
+      );
+    };
+
+    const syncDesktopScrollRule = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        const pageNode = pageRef.current;
+        const containerNode = containerRef.current;
+
+        if (!pageNode || !containerNode || !isDesktopViewport()) {
+          setAllowDesktopPageScroll(false);
+          return;
+        }
+
+        const viewportHeight =
+          window.visualViewport?.height || window.innerHeight || 0;
+        const contentHeight = containerNode.getBoundingClientRect().height;
+        const meaningfulOverflow = contentHeight - viewportHeight > 80;
+        const zoomIsReallyIncreased = detectZoomIncrease();
+
+        setAllowDesktopPageScroll(zoomIsReallyIncreased && meaningfulOverflow);
+      });
+    };
+
+    const handleZoomShortcut = (event) => {
+      const key = event.key?.toLowerCase();
+      const isZoomKey =
+        (event.ctrlKey || event.metaKey) &&
+        (key === "+" || key === "=" || key === "-" || key === "0");
+
+      if (!isZoomKey) return;
+
+      zoomGestureDetectedRef.current = key !== "0";
+      window.setTimeout(syncDesktopScrollRule, 160);
+    };
+
+    const handleWheel = (event) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+
+      zoomGestureDetectedRef.current = true;
+      window.setTimeout(syncDesktopScrollRule, 160);
+    };
+
+    syncDesktopScrollRule();
+
+    window.addEventListener("resize", syncDesktopScrollRule);
+    window.addEventListener("orientationchange", syncDesktopScrollRule);
+    window.addEventListener("keydown", handleZoomShortcut);
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    window.visualViewport?.addEventListener("resize", syncDesktopScrollRule);
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      window.removeEventListener("resize", syncDesktopScrollRule);
+      window.removeEventListener("orientationchange", syncDesktopScrollRule);
+      window.removeEventListener("keydown", handleZoomShortcut);
+      window.removeEventListener("wheel", handleWheel);
+      window.visualViewport?.removeEventListener("resize", syncDesktopScrollRule);
+    };
+  }, [vocabItems.length, loading]);
+
   const handleReviewPaceChange = (pace) => {
     if (pace === selectedPace) return;
     const nextPreferences = saveReviewPreferences({ pace });
@@ -1468,6 +1727,9 @@ export default function Progress() {
         last_review_at: null,
         mastered_at: null,
         dominated_at: null,
+        correctStreak: 0,
+        consecutive_correct: 0,
+        consecutiveCorrect: 0,
       };
 
       const { error } = await supabase
@@ -1486,21 +1748,20 @@ export default function Progress() {
     }
   };
 
+  const progressData = useMemo(
+    () => getProgressCategoryData(vocabItems),
+    [vocabItems]
+  );
+
   const categoryValues = useMemo(
     () => ({
-      dominated: progress.dominated || 0,
-      nearMastery: progress.learning || 0,
-      reinforce: progress.difficult || 0,
-      fresh: progress.fresh || 0,
-      total: progress.totalCards || 0,
+      dominated: progressData.dominated || 0,
+      nearMastery: progressData.learning || 0,
+      reinforce: progressData.difficult || 0,
+      fresh: progressData.fresh || 0,
+      total: progressData.totalCards || 0,
     }),
-    [
-      progress.dominated,
-      progress.learning,
-      progress.difficult,
-      progress.fresh,
-      progress.totalCards,
-    ]
+    [progressData]
   );
 
   const percentages = useMemo(
@@ -1513,22 +1774,12 @@ export default function Progress() {
     [categoryValues]
   );
 
-  const masteryStreakTarget = progress.masteryCorrectStreak || 10;
+  const masteryStreakTarget = 10;
 
-  const orderedNearMasteryWords = useMemo(
-    () => sortNearMasteryWords(progress.learningWords || []),
-    [progress.learningWords]
-  );
-
-  const orderedDominatedWords = useMemo(
-    () => sortDominatedWords(progress.dominatedWords || []),
-    [progress.dominatedWords]
-  );
-
-  const orderedNewWords = useMemo(
-    () => sortNewWords(progress.newWords || []),
-    [progress.newWords]
-  );
+  const orderedNearMasteryWords = progressData.learningWords || [];
+  const orderedDominatedWords = progressData.dominatedWords || [];
+  const orderedNeedsAttentionWords = progressData.needsAttentionWords || [];
+  const orderedNewWords = progressData.newWords || [];
 
   if (loading) {
     return (
@@ -1545,8 +1796,14 @@ export default function Progress() {
     <>
       <style>{PROGRESS_PAGE_CSS}</style>
 
-      <div className="vni-progress-page">
-        <div className="vni-progress-container">
+      <div
+        ref={pageRef}
+        className={`vni-progress-page ${
+          allowDesktopPageScroll ? "is-zoom-scroll-enabled" : ""
+        }`}
+        data-scroll-unlocked={allowDesktopPageScroll ? "true" : "false"}
+      >
+        <div ref={containerRef} className="vni-progress-container">
           <div className="vni-progress-stack">
             <div className="vni-progress-header">
               <div>
@@ -1691,9 +1948,9 @@ export default function Progress() {
                 value={categoryValues.nearMastery}
                 description={
                   <>
-                    palavras quase
+                    Quase
                     <br />
-                    consolidadas
+                    dominadas.
                   </>
                 }
                 accentColor={COLORS.nearMastery}
@@ -1706,9 +1963,9 @@ export default function Progress() {
                 value={categoryValues.reinforce}
                 description={
                   <>
-                    palavras que ainda
+                    Que ainda
                     <br />
-                    exigem atenção
+                    exigem atenção.
                   </>
                 }
                 accentColor={COLORS.reinforce}
@@ -1721,9 +1978,9 @@ export default function Progress() {
                 value={categoryValues.dominated}
                 description={
                   <>
-                    palavras já memorizadas
+                    Já memorizadas
                     <br />
-                    com consistência
+                    com consistência.
                   </>
                 }
                 accentColor={COLORS.dominated}
@@ -1736,9 +1993,9 @@ export default function Progress() {
                 value={categoryValues.fresh}
                 description={
                   <>
-                    palavras ainda no início
+                    Ainda no início
                     <br />
-                    do aprendizado
+                    do aprendizado.
                   </>
                 }
                 accentColor="#566173"
@@ -1752,7 +2009,7 @@ export default function Progress() {
               <ProgressListFrame
                 title="Perto de dominar"
                 accentColor={COLORS.nearMastery}
-                description="Palavras que estão quase entrando no domínio."
+                description="As que estão quase entrando no domínio."
                 icon={<BarChart3 size={32} strokeWidth={2} />}
               >
                 {orderedNearMasteryWords.length ? (
@@ -1790,14 +2047,14 @@ export default function Progress() {
               <ProgressListFrame
                 title="Precisam de reforço"
                 accentColor={COLORS.reinforce}
-                description="Palavras que mais precisam de reforço."
+                description="As que mais precisam de reforço."
                 icon={<CircleAlert size={32} strokeWidth={2} />}
                 reinforce
               >
-                {progress.needsAttentionWords?.length ? (
+                {orderedNeedsAttentionWords.length ? (
                   <ul className="vni-progress-list">
-                    {progress.needsAttentionWords.map((item) => {
-                      const errors = item.stats?.incorrect || 0;
+                    {orderedNeedsAttentionWords.map((item) => {
+                      const errors = getIncorrectCount(item);
                       return (
                         <li key={item.id} className="vni-progress-list-item">
                           <span className="vni-progress-term">{item.term}</span>
@@ -1819,7 +2076,7 @@ export default function Progress() {
               <ProgressListFrame
                 title="Dominadas"
                 accentColor={COLORS.dominated}
-                description="Palavras que você já memorizou com consistência."
+                description="As que você memorizou com consistência."
                 icon={<Crown size={32} strokeWidth={2} />}
               >
                 {orderedDominatedWords.length ? (
@@ -1847,7 +2104,7 @@ export default function Progress() {
               <ProgressListFrame
                 title="Novas"
                 accentColor="#566173"
-                description="Palavras que ainda estão no início do aprendizado."
+                description="As que ainda estão no início do aprendizado."
                 icon={<BookOpen size={32} strokeWidth={2} />}
               >
                 {orderedNewWords.length ? (
