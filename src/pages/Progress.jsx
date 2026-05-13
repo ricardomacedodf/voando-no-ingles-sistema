@@ -1,174 +1,1383 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BellRing,
-  CalendarClock,
-  Clock3,
-  Target,
-  TriangleAlert,
+  BarChart3,
+  BookOpen,
+  CircleAlert,
+  Crown,
+  RotateCcw,
+  Trophy,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { resetStudyHistory } from "../lib/gameState";
 import {
-  LEARNING_STATUS,
   REVIEW_PACE,
-  createInitialStats,
-  getInternalNotifications,
   getProgressSummary,
   loadReviewPreferences,
   normalizeVocabularyItem,
   saveReviewPreferences,
 } from "../lib/learningEngine";
-import {
-  clearCachedVocabularyRows,
-  markVocabularyCacheForRefresh,
-} from "../lib/vocabularyCache";
 
 const EMPTY_PROGRESS = Object.freeze(
   getProgressSummary([], { pace: REVIEW_PACE.EQUILIBRADO })
 );
 
 const REVIEW_PACE_OPTIONS = [
-  {
-    value: REVIEW_PACE.INTENSIVO,
-    label: "Intensivo",
-    description: "Mais repeticoes e intervalos menores.",
-  },
-  {
-    value: REVIEW_PACE.EQUILIBRADO,
-    label: "Equilibrado",
-    description: "Ritmo padrao para estudo diario.",
-  },
-  {
-    value: REVIEW_PACE.LEVE,
-    label: "Leve",
-    description: "Menos carga diaria e mais espacamento.",
-  },
+  { value: REVIEW_PACE.INTENSIVO, label: "Intensivo" },
+  { value: REVIEW_PACE.EQUILIBRADO, label: "Equilibrado" },
+  { value: REVIEW_PACE.LEVE, label: "Leve" },
 ];
 
-function formatCount(value, singular, plural) {
-  return `${value} ${value === 1 ? singular : plural}`;
+const COLORS = {
+  dominated: "#29AE67",
+  nearMastery: "#2d8bff",
+  reinforce: "#FA2137",
+  fresh: "#9aa4b3",
+};
+
+const PROGRESS_PAGE_CSS = `
+@media (min-width: 641px) {
+  @supports selector(body:has(.vni-progress-page)) {
+    html:has(.vni-progress-page),
+    body:has(.vni-progress-page),
+    #root:has(.vni-progress-page) {
+      height: 100%;
+      overflow-y: hidden;
+      overscroll-behavior: none;
+    }
+  }
 }
 
-function formatResponseTime(ms) {
-  if (!ms || ms <= 0) return "0.0s";
-  return `${(ms / 1000).toFixed(1)}s`;
+@media (max-width: 640px) {
+  @supports selector(body:has(.vni-progress-page)) {
+    html:has(.vni-progress-page),
+    body:has(.vni-progress-page),
+    #root:has(.vni-progress-page) {
+      height: auto !important;
+      min-height: 100%;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      overscroll-behavior: auto !important;
+    }
+  }
 }
 
-function formatLastReviewed(value) {
-  if (!value) return "Sem revisao";
-
-  const parsedDate = new Date(value);
-  if (Number.isNaN(parsedDate.getTime())) return "Sem revisao";
-
-  const diffMs = Date.now() - parsedDate.getTime();
-  if (diffMs < 0) return "Hoje";
-
-  const dayMs = 24 * 60 * 60 * 1000;
-  const days = Math.floor(diffMs / dayMs);
-
-  if (days <= 0) return "Hoje";
-  if (days === 1) return "Ha 1 dia";
-  if (days < 7) return `Ha ${days} dias`;
-
-  const weeks = Math.floor(days / 7);
-  if (weeks === 1) return "Ha 1 semana";
-  if (weeks < 5) return `Ha ${weeks} semanas`;
-
-  const months = Math.floor(days / 30);
-  if (months === 1) return "Ha 1 mes";
-  if (months < 12) return `Ha ${months} meses`;
-
-  const years = Math.floor(days / 365);
-  return years === 1 ? "Ha 1 ano" : `Ha ${years} anos`;
+.vni-progress-page,
+.vni-progress-page * {
+  box-sizing: border-box;
 }
 
-function formatNextReview(value) {
-  if (!value) return "Sem data";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Sem data";
-
-  const now = new Date();
-  const startToday = new Date(now);
-  startToday.setHours(0, 0, 0, 0);
-  const startNextDay = new Date(startToday.getTime() + 24 * 60 * 60 * 1000);
-
-  if (date < startToday) return "Atrasada";
-  if (date < startNextDay) return "Hoje";
-
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
+.vni-progress-page {
+  position: relative;
+  left: auto;
+  width: 100%;
+  min-width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 100dvh;
+  transform: none;
+  margin: 0;
+  background: #0C1014;
+  padding: 6px 0 0;
+  color: #e8edf5;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  overscroll-behavior: none;
 }
 
-function getDistributionPercent(part, total) {
-  if (!total) return 0;
+.vni-progress-container {
+  width: calc(100% - 24px);
+  max-width: 1963px;
+  margin: 0 auto;
+  padding: 0;
+  background: transparent;
+  transform: none;
+  transform-origin: top center;
+}
+
+.vni-progress-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vni-progress-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.vni-progress-title {
+  margin: 0;
+  color: #f2f5fa;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.025em;
+}
+
+.vni-progress-subtitle {
+  margin: 9px 0 0;
+  color: #aab4c2;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.vni-progress-panel {
+  border: 1px solid #122033;
+  border-radius: 8px;
+  background: #161C23;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.018);
+}
+
+.vni-progress-pace {
+  width: 352px;
+  min-width: 352px;
+  height: 62px;
+  padding: 10px 14px;
+  background: #161C23;
+}
+
+.vni-progress-pace-title {
+  margin-bottom: 7px;
+  color: #eef3fb;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.vni-progress-pace-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.vni-progress-pace-button {
+  height: 23px;
+  border: 1px solid #17263a;
+  border-radius: 5px;
+  background: #060d18;
+  color: #d2d9e4;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.vni-progress-pace-button:hover {
+  border-color: #294263;
+  background: #081522;
+}
+
+.vni-progress-pace-button.is-active {
+  border-color: #1f64f2;
+  background: #124ce6;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.vni-progress-domain {
+  min-height: 145px;
+  padding: 19px 24px;
+  background: #161C23;
+}
+
+.vni-progress-domain-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: center;
+  gap: 30px;
+}
+
+.vni-progress-domain-title {
+  color: #eef3fb;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.vni-progress-domain-number {
+  margin-top: 10px;
+  color: #2d8bff;
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 0.86;
+  letter-spacing: -0.04em;
+}
+
+.vni-progress-domain-label {
+  margin-top: 6px;
+  color: #eef3fb;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.vni-progress-domain-total {
+  margin-top: 7px;
+  color: #aab4c2;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.vni-progress-percent-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 11px;
+  color: #e8edf5;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+}
+
+.vni-progress-bar {
+  width: 100%;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #121f31;
+}
+
+.vni-progress-bar-fill {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.vni-progress-bar-segment {
+  height: 100%;
+  min-width: 0;
+}
+
+.vni-progress-legend {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  color: #aab4c2;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.vni-progress-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.vni-progress-legend-dot {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border-radius: 999px;
+}
+
+.vni-progress-domain-note {
+  margin: 13px 0 0;
+  color: #aab4c2;
+  font-size: 12px;
+  line-height: 1;
+  text-align: center;
+}
+
+.vni-progress-metrics,
+.vni-progress-lists {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vni-progress-metric-card,
+.vni-progress-list-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #122033;
+  border-radius: 8px;
+  background: #161C23;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.018);
+}
+
+.vni-progress-metric-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 1px;
+  background: var(--accent-color);
+  border-radius: 999px;
+}
+
+.vni-progress-list-card::before {
+  display: none;
+  content: none;
+}
+
+.vni-progress-metric-card {
+  height: 125px;
+  padding: 18px 20px;
+}
+
+.vni-progress-metric-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+}
+
+.vni-progress-metric-icon {
+  display: flex;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--icon-bg);
+  color: var(--accent-color);
+}
+
+.vni-progress-metric-title {
+  margin: 0;
+  color: #eef3fb;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.vni-progress-metric-value {
+  margin-top: 3px;
+  color: var(--value-color, var(--accent-color));
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.vni-progress-metric-description {
+  margin: 5px 0 0;
+  color: #aab4c2;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.vni-progress-list-card {
+  height: 290px;
+  padding: 16px 18px;
+}
+
+.vni-progress-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.vni-progress-list-title {
+  margin: 0;
+  color: var(--accent-color);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.vni-progress-list-description {
+  max-width: 205px;
+  margin: 7px 0 0;
+  color: #aab4c2;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.vni-progress-list-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  margin-top: 1px;
+  color: var(--accent-color);
+}
+
+.vni-progress-list-body {
+  height: 212px;
+  max-height: 212px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #26364b transparent;
+  overscroll-behavior: contain;
+}
+
+.vni-progress-list-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.vni-progress-list-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vni-progress-list-body::-webkit-scrollbar-thumb {
+  background: #26364b;
+  border-radius: 999px;
+}
+
+.vni-progress-list-body::-webkit-scrollbar-thumb:hover {
+  background: #34465f;
+}
+
+.vni-progress-empty {
+  padding: 8px 0;
+  color: #8e99a8;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.vni-progress-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vni-progress-list-item {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #122033;
+  padding: 4px 0;
+  color: #aab4c2;
+  font-size: 11px;
+  line-height: 1;
+  overflow: visible;
+}
+
+.vni-progress-list-card.is-reinforce .vni-progress-list-item {
+  border-bottom-color: #24182a;
+}
+
+.vni-progress-list-item:last-child {
+  border-bottom: 0;
+}
+
+.vni-progress-term {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #e8edf5;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vni-progress-count {
+  flex: 0 0 auto;
+  color: #aab4c2;
+  white-space: nowrap;
+}
+
+.vni-progress-ratio {
+  width: 34px;
+  flex: 0 0 34px;
+  color: #aab4c2;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.vni-progress-mini-bar {
+  width: 88px;
+  height: 5px;
+  flex: 0 0 88px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #1d2d42;
+}
+
+.vni-progress-mini-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #2d8bff;
+}
+
+.vni-progress-badge {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.vni-progress-badge.is-dominated {
+  background: #0d3b28;
+  color: #29AE67;
+}
+
+.vni-progress-badge.is-reinforce {
+  background: #341222;
+  color: #FA2137;
+}
+
+.vni-progress-badge.is-new {
+  background: #1b2534;
+  color: #c8cfda;
+}
+
+.vni-progress-summary {
+  min-height: 92px;
+  padding: 15px 24px;
+  background: #161C23;
+}
+
+.vni-progress-summary-title {
+  margin: 0 0 10px;
+  color: #eef3fb;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.vni-progress-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.vni-progress-summary-item {
+  min-width: 0;
+  padding: 0 16px;
+  text-align: center;
+}
+
+.vni-progress-summary-item + .vni-progress-summary-item {
+  border-left: 1px solid #24344a;
+}
+
+.vni-progress-summary-number {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.vni-progress-summary-label {
+  margin-top: 6px;
+  color: #aab4c2;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.vni-progress-loading {
+  display: flex;
+  min-height: calc(100vh - 0px);
+  align-items: center;
+  justify-content: center;
+  background: #0C1014;
+}
+
+.vni-progress-spinner {
+  width: 32px;
+  height: 32px;
+  border: 4px solid #17253b;
+  border-top-color: #2d8bff;
+  border-radius: 999px;
+  animation: vni-progress-spin 900ms linear infinite;
+}
+
+@keyframes vni-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* Light mode somente quando o app NÃO estiver em dark mode */
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-page {
+  background: #ffffff;
+  color: #172033;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-title {
+  color: #101827;
+  text-shadow: none;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-subtitle {
+  color: #5f6f84;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-panel,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metric-card,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-card {
+  border-color: #d7e1ee;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfe 100%);
+  box-shadow:
+    0 18px 46px rgba(31, 50, 81, 0.08),
+    0 2px 8px rgba(31, 50, 81, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-pace {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-color: #d7e1ee;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-pace-title,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-domain-title,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-domain-label,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metric-title,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary-title {
+  color: #111827;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-pace-button {
+  border-color: #d6e0ec;
+  background: #f6f9fd;
+  color: #2f3d52;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-pace-button:hover {
+  border-color: #b9c9dd;
+  background: #eef5fd;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-pace-button.is-active {
+  border-color: #1f64f2;
+  background: linear-gradient(180deg, #2f7dff 0%, #1557e6 100%);
+  color: #ffffff;
+  box-shadow:
+    0 6px 14px rgba(45, 139, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-domain,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary {
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbfe 100%);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-domain-number {
+  color: #1f7bf2;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-domain-total,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-domain-note,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-legend,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metric-description,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-description,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-count,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-ratio,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary-label,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-empty {
+  color: #64748b;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-percent-row {
+  color: #243247;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-bar {
+  background: #e6edf6;
+  box-shadow: inset 0 1px 2px rgba(31, 50, 81, 0.08);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-domain-grid > div:first-child::after {
+  background: #cbd5e1;
+  opacity: 1;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metric-icon {
+  background: color-mix(in srgb, var(--accent-color) 13%, #ffffff);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metrics .vni-progress-metric-card:nth-child(2) .vni-progress-metric-icon {
+  background: #fdecef;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-title {
+  color: var(--accent-color);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-term {
+  color: #172033;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-item {
+  border-bottom-color: #e3eaf3;
+  color: #64748b;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-card.is-reinforce .vni-progress-list-item {
+  border-bottom-color: #f0d7dc;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-mini-bar {
+  background: #dce7f4;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-mini-fill {
+  background: #2d8bff;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-badge.is-dominated {
+  background: #e8f7ef;
+  color: #16884a;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-badge.is-reinforce {
+  background: #fdecef;
+  color: #bd3142;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-badge.is-new {
+  background: #eef2f7;
+  color: #5b6676;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary-item + .vni-progress-summary-item {
+  border-left-color: #d7e1ee;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary-number {
+  text-shadow: none;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-body {
+  scrollbar-color: #c1ccda transparent;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-body::-webkit-scrollbar-thumb {
+  background: #c1ccda;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-body::-webkit-scrollbar-thumb:hover {
+  background: #9eacbf;
+}
+
+@media (max-width: 640px) {
+  html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-page {
+    background: #ffffff;
+  }
+
+  html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-panel,
+  html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metric-card,
+  html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-list-card {
+    border-color: #dce5f0;
+    background: #ffffff;
+    box-shadow: 0 12px 28px rgba(31, 50, 81, 0.07);
+  }
+}
+
+
+/* Light mode: corrigir contraste dos números do resumo do aprendizado */
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary-item:first-child .vni-progress-summary-number {
+  color: #172033 !important;
+  opacity: 1 !important;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary-item .vni-progress-summary-number {
+  opacity: 1 !important;
+}
+
+/* Ajuste final: aumentar apenas no desktop todas as caixas de contexto em mais 10% */
+@media (min-width: 641px) {
+  .vni-progress-domain {
+    min-height: 160px;
+    padding-top: 21px;
+    padding-bottom: 21px;
+  }
+
+  .vni-progress-metric-card {
+    height: 138px;
+  }
+
+  .vni-progress-list-card {
+    height: 319px;
+  }
+
+  .vni-progress-list-body {
+    height: 241px;
+    max-height: 241px;
+  }
+
+  .vni-progress-summary {
+    min-height: 101px;
+  }
+}
+
+
+/* Regra de seleção/cópia de texto */
+.vni-progress-page,
+.vni-progress-page * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (min-width: 641px) {
+  .vni-progress-lists .vni-progress-term {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+}
+
+@media (max-width: 640px) {
+  .vni-progress-page,
+  .vni-progress-page * {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none;
+  }
+}
+
+
+/* Dark mode: suavizar o vermelho da área "Precisam de reforço" */
+.vni-progress-metrics .vni-progress-metric-card:nth-child(2)::before {
+  background: #b85e69;
+}
+
+.vni-progress-metrics .vni-progress-metric-card:nth-child(2) .vni-progress-metric-value {
+  color: #d06a76;
+}
+
+.vni-progress-metrics .vni-progress-metric-card:nth-child(2) .vni-progress-metric-icon {
+  background: #281b20;
+  color: #d06a76;
+}
+
+.vni-progress-lists .vni-progress-list-card:nth-child(2) .vni-progress-list-title,
+.vni-progress-lists .vni-progress-list-card:nth-child(2) .vni-progress-list-icon {
+  color: #d06a76;
+}
+
+.vni-progress-lists .vni-progress-list-card:nth-child(2) .vni-progress-list-item {
+  border-bottom-color: #2c2328;
+}
+
+.vni-progress-badge.is-reinforce {
+  background: #3a252b;
+  color: #d98a94;
+}
+
+/* Light mode preservado sem mudança visual agressiva */
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metrics .vni-progress-metric-card:nth-child(2)::before {
+  background: #FA2137;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metrics .vni-progress-metric-card:nth-child(2) .vni-progress-metric-value {
+  color: #FA2137;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-metrics .vni-progress-metric-card:nth-child(2) .vni-progress-metric-icon {
+  background: #ffe8ec;
+  color: #FA2137;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-lists .vni-progress-list-card:nth-child(2) .vni-progress-list-title,
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-lists .vni-progress-list-card:nth-child(2) .vni-progress-list-icon {
+  color: #FA2137;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-lists .vni-progress-list-card:nth-child(2) .vni-progress-list-item {
+  border-bottom-color: #f3d5dc;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-badge.is-reinforce {
+  background: #ffe8ec;
+  color: #FA2137;
+}
+
+
+/* Dark mode: aplicar o mesmo vermelho suavizado no número do resumo "Precisam de reforço" */
+.vni-progress-summary-item:nth-child(4) .vni-progress-summary-number {
+  color: #d06a76 !important;
+}
+
+/* Light mode preservado */
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-summary-item:nth-child(4) .vni-progress-summary-number {
+  color: #FA2137 !important;
+}
+
+
+/* Linha divisória vertical do bloco superior */
+.vni-progress-domain-grid > div:first-child {
+  position: relative;
+}
+
+.vni-progress-domain-grid > div:first-child::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  right: 8px;
+  width: 1px;
+  border-radius: 999px;
+  background: #566173;
+  opacity: 0.9;
+}
+
+/* No mobile, remove a linha para não quebrar o empilhamento do layout */
+@media (max-width: 640px) {
+  .vni-progress-domain-grid > div:first-child::after {
+    display: none;
+  }
+}
+
+
+/* Botão Resetar progresso */
+.vni-progress-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vni-progress-reset-button {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #2b3542;
+  border-radius: 8px;
+  background: #161C23;
+  color: #cbd5e1;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.vni-progress-reset-button:hover {
+  border-color: #d06a76;
+  background: #201920;
+  color: #f0c2c8;
+}
+
+.vni-progress-reset-button:active {
+  transform: translateY(1px);
+}
+
+.vni-progress-reset-button.is-mobile {
+  display: none;
+}
+
+/* Light mode do botão reset */
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-button {
+  border-color: #d7e1ee;
+  background: #ffffff;
+  color: #405066;
+  box-shadow: 0 10px 24px rgba(31, 50, 81, 0.06);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-button:hover {
+  border-color: #d8a4ac;
+  background: #fff7f8;
+  color: #bd3142;
+}
+
+@media (max-width: 640px) {
+  .vni-progress-header-actions {
+    width: 100%;
+  }
+
+  .vni-progress-reset-button.is-desktop {
+    display: none;
+  }
+
+  .vni-progress-reset-button.is-mobile {
+    display: inline-flex;
+    width: 100%;
+    margin-top: 10px;
+  }
+}
+
+
+/* Modal personalizada de confirmação do Resetar progresso */
+.vni-progress-reset-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  padding: 20px;
+  backdrop-filter: blur(2px);
+}
+
+.vni-progress-reset-modal {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid #263241;
+  border-radius: 10px;
+  background: #0b1017;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  padding: 24px 24px 22px;
+  color: #e8edf5;
+}
+
+.vni-progress-reset-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vni-progress-reset-modal-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+}
+
+.vni-progress-reset-modal-title {
+  margin: 0;
+  color: #f3f6fb;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.vni-progress-reset-modal-text {
+  margin: 14px 0 0;
+  color: #b8c2d1;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.vni-progress-reset-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.vni-progress-reset-modal-button {
+  display: inline-flex;
+  height: 38px;
+  min-width: 92px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.vni-progress-reset-modal-button:active {
+  transform: translateY(1px);
+}
+
+.vni-progress-reset-modal-button.is-cancel {
+  border: 1px solid #2d3a4a;
+  background: #0d141d;
+  color: #f0f4fa;
+}
+
+.vni-progress-reset-modal-button.is-cancel:hover {
+  border-color: #44546a;
+  background: #121b26;
+}
+
+.vni-progress-reset-modal-button.is-reset {
+  border: 1px solid #dc2626;
+  background: #e62d36;
+  color: #ffffff;
+}
+
+.vni-progress-reset-modal-button.is-reset:hover {
+  border-color: #ef4444;
+  background: #f03842;
+}
+
+/* Light mode da modal de reset */
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal-overlay {
+  background: rgba(15, 23, 42, 0.58);
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal {
+  border-color: #d7e1ee;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(31, 50, 81, 0.22);
+  color: #172033;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal-title {
+  color: #111827;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal-text {
+  color: #516177;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal-button.is-cancel {
+  border-color: #d7e1ee;
+  background: #ffffff;
+  color: #172033;
+}
+
+html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal-button.is-cancel:hover {
+  border-color: #b9c9dd;
+  background: #f6f9fd;
+}
+
+@media (max-width: 1190px) {
+  .vni-progress-container {
+    padding: 0 18px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .vni-progress-page {
+    width: 100%;
+    min-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    padding-top: 6px;
+    overflow: hidden;
+  }
+
+  .vni-progress-container {
+    transform: none;
+  }
+
+  .vni-progress-header {
+    flex-direction: column;
+  }
+
+  .vni-progress-pace {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .vni-progress-domain-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vni-progress-metrics,
+  .vni-progress-lists {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vni-progress-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 16px;
+  }
+
+  .vni-progress-summary-item + .vni-progress-summary-item {
+    border-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .vni-progress-page {
+    width: 100%;
+    min-width: 100%;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100dvh;
+    padding: 6px 0 40px;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .vni-progress-container {
+    width: calc(100% - 4px);
+    max-width: none;
+    margin-left: 2px;
+    margin-right: 2px;
+    padding: 0;
+  }
+
+  .vni-progress-panel,
+  .vni-progress-metric-card,
+  .vni-progress-list-card {
+    width: 100%;
+  }
+
+  .vni-progress-summary {
+    display: none;
+  }
+
+  .vni-progress-title {
+    font-size: 28px;
+  }
+
+  .vni-progress-metrics,
+  .vni-progress-lists,
+  .vni-progress-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vni-progress-domain {
+    padding: 16px;
+  }
+
+  .vni-progress-legend {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .vni-progress-legend-item {
+    justify-content: flex-start;
+  }
+
+  .vni-progress-summary-item {
+    padding: 0;
+  }
+}
+`;
+
+function formatPercent(value) {
+  return `${Math.round(Number.isFinite(value) ? value : 0)}%`;
+}
+
+function getPercent(part, total) {
+  if (!total || total <= 0) return 0;
   return (part / total) * 100;
 }
 
-function SessionLinks() {
+function pluralize(value, singular, plural) {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function getTimestampValue(item, keys = []) {
+  const stats = item?.stats || {};
+
+  for (const key of keys) {
+    const value = stats[key] ?? item?.[key];
+
+    if (!value) continue;
+
+    const timestamp =
+      typeof value === "number" ? value : new Date(value).getTime();
+
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+
+  return 0;
+}
+
+function sortNearMasteryWords(words = []) {
+  return [...words].sort((a, b) => {
+    const aStreak = a?.stats?.correct_streak || 0;
+    const bStreak = b?.stats?.correct_streak || 0;
+
+    if (bStreak !== aStreak) return bStreak - aStreak;
+
+    const aCorrect = a?.stats?.correct || 0;
+    const bCorrect = b?.stats?.correct || 0;
+
+    return bCorrect - aCorrect;
+  });
+}
+
+function sortDominatedWords(words = []) {
+  const dateKeys = [
+    "mastered_at",
+    "dominated_at",
+    "last_correct_at",
+    "last_reviewed_at",
+    "last_review_at",
+    "lastReviewedAt",
+    "reviewed_at",
+    "updated_at",
+    "created_at",
+  ];
+
+  return [...words].sort(
+    (a, b) => getTimestampValue(b, dateKeys) - getTimestampValue(a, dateKeys)
+  );
+}
+
+function sortNewWords(words = []) {
+  return [...words].sort(
+    (a, b) =>
+      getTimestampValue(b, ["created_at", "updated_at"]) -
+      getTimestampValue(a, ["created_at", "updated_at"])
+  );
+}
+
+function EmptyListState({ text }) {
+  return <div className="vni-progress-empty">{text}</div>;
+}
+
+function MetricCard({
+  title,
+  value,
+  description,
+  icon,
+  accentColor,
+  iconBackground,
+  valueColor,
+}) {
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
-      <Link
-        to="/flashcards?focus=today"
-        className="rounded-lg border border-border bg-card px-3 py-2 text-center text-sm font-medium transition-colors hover:bg-muted"
-      >
-        Revisar no Flashcards
-      </Link>
-      <Link
-        to="/quiz?focus=today"
-        className="rounded-lg border border-border bg-card px-3 py-2 text-center text-sm font-medium transition-colors hover:bg-muted"
-      >
-        Revisar no Quiz
-      </Link>
-      <Link
-        to="/combinacoes?focus=attention"
-        className="rounded-lg border border-border bg-card px-3 py-2 text-center text-sm font-medium transition-colors hover:bg-muted"
-      >
-        Reforcar em Combinacoes
-      </Link>
+    <div
+      className="vni-progress-metric-card"
+      style={{
+        "--accent-color": accentColor,
+        "--icon-bg": iconBackground,
+        "--value-color": valueColor || accentColor,
+      }}
+    >
+      <div className="vni-progress-metric-content">
+        <div className="vni-progress-metric-icon">{icon}</div>
+
+        <div>
+          <h3 className="vni-progress-metric-title">{title}</h3>
+          <div className="vni-progress-metric-value">{value}</div>
+          <p className="vni-progress-metric-description">{description}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
-function WordList({ title, emptyText, items, valueRenderer }) {
+function ProgressListFrame({
+  title,
+  accentColor,
+  description,
+  icon,
+  children,
+  reinforce = false,
+}) {
   return (
-    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-      <h3 className="mb-4 font-bold">{title}</h3>
+    <div
+      className={`vni-progress-list-card ${reinforce ? "is-reinforce" : ""}`}
+      style={{ "--accent-color": accentColor }}
+    >
+      <div className="vni-progress-list-header">
+        <div>
+          <h3 className="vni-progress-list-title">{title}</h3>
+          <p className="vni-progress-list-description">{description}</p>
+        </div>
 
-      {items.length > 0 ? (
-        <ul className="space-y-3">
-          {items.map((item) => (
-            <li key={item.id} className="border-b border-border pb-2 text-sm last:border-0">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium text-foreground">{item.term}</span>
-                <span className="whitespace-nowrap text-xs font-semibold text-muted-foreground">
-                  {valueRenderer(item)}
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {formatCount(item.stats?.total_reviews || 0, "revisao", "revisoes")} -{" "}
-                {formatLastReviewed(item.stats?.last_reviewed)}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="py-4 text-center text-sm text-muted-foreground">{emptyText}</div>
-      )}
-    </div>
-  );
-}
+        <div className="vni-progress-list-icon">{icon}</div>
+      </div>
 
-function SignalMetricCard({ label, value, description }) {
-  return (
-    <div className="rounded-lg border border-border bg-muted/30 p-4">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-foreground">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+      <div className="vni-progress-list-body">{children}</div>
     </div>
   );
 }
@@ -178,50 +1387,47 @@ export default function Progress() {
 
   const [vocabItems, setVocabItems] = useState([]);
   const [progress, setProgress] = useState(EMPTY_PROGRESS);
-  const [notifications, setNotifications] = useState([]);
   const [reviewPreferences, setReviewPreferences] = useState(() =>
     loadReviewPreferences()
   );
   const [loading, setLoading] = useState(true);
-  const [isResetting, setIsResetting] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   const selectedPace = reviewPreferences.pace || REVIEW_PACE.EQUILIBRADO;
 
-  const loadProgress = async () => {
+  const loadProgress = useCallback(async () => {
     try {
       setLoading(true);
+      const activePreferences = loadReviewPreferences();
 
       if (!user?.id) {
         setVocabItems([]);
-        setProgress(EMPTY_PROGRESS);
-        setNotifications(getInternalNotifications([], reviewPreferences));
+        setProgress(getProgressSummary([], activePreferences));
         return;
       }
 
       const { data, error } = await supabase
         .from("vocabulary")
-        .select("id, term, stats")
+        .select("id, term, stats, created_at, updated_at")
         .eq("user_id", user.id);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      const normalizedItems = (Array.isArray(data) ? data : []).map((row) =>
-        normalizeVocabularyItem(row, reviewPreferences)
-      );
+      const normalizedItems = (Array.isArray(data) ? data : []).map((row) => ({
+        ...normalizeVocabularyItem(row, activePreferences),
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
 
       setVocabItems(normalizedItems);
     } catch (error) {
       console.error("Erro ao carregar progresso:", error);
       setVocabItems([]);
       setProgress(EMPTY_PROGRESS);
-      setNotifications(getInternalNotifications([], reviewPreferences));
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     loadProgress();
@@ -230,434 +1436,550 @@ export default function Progress() {
     return () => {
       window.removeEventListener("focus", loadProgress);
     };
-  }, [user?.id, reviewPreferences]);
+  }, [loadProgress]);
 
   useEffect(() => {
-    const summary = getProgressSummary(vocabItems, reviewPreferences);
-    setProgress(summary);
-    setNotifications(getInternalNotifications(vocabItems, reviewPreferences));
+    setProgress(getProgressSummary(vocabItems, reviewPreferences));
   }, [vocabItems, reviewPreferences]);
 
   const handleReviewPaceChange = (pace) => {
+    if (pace === selectedPace) return;
     const nextPreferences = saveReviewPreferences({ pace });
     setReviewPreferences(nextPreferences);
   };
 
-  useEffect(() => {
-    if (!showResetConfirm) return undefined;
+  const handleResetProgress = () => {
+    if (!user?.id) return;
+    setShowResetModal(true);
+  };
 
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape" && !isResetting) {
-        setShowResetConfirm(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showResetConfirm, isResetting]);
-
-  const handleResetHistory = async () => {
-    if (isResetting) return;
-
-    if (!user?.id) {
-      setShowResetConfirm(false);
-      alert("Usuario nao identificado.");
-      return;
-    }
+  const confirmResetProgress = async () => {
+    if (!user?.id) return;
 
     try {
-      setIsResetting(true);
-      const resetStats = createInitialStats();
+      setShowResetModal(false);
+      setLoading(true);
+
+      const resetStats = {
+        correct: 0,
+        incorrect: 0,
+        correct_streak: 0,
+        last_reviewed_at: null,
+        last_review_at: null,
+        mastered_at: null,
+        dominated_at: null,
+      };
 
       const { error } = await supabase
         .from("vocabulary")
-        .update({
-          stats: resetStats,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ stats: resetStats })
         .eq("user_id", user.id);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      clearCachedVocabularyRows(user.id);
-      markVocabularyCacheForRefresh(user.id);
-
-      const result = resetStudyHistory();
-      if (!result.success) {
-        alert("Nao foi possivel resetar o progresso.");
-        return;
-      }
-
-      setVocabItems([]);
-      setProgress(EMPTY_PROGRESS);
-      setNotifications(getInternalNotifications([], reviewPreferences));
       await loadProgress();
-      setShowResetConfirm(false);
     } catch (error) {
       console.error("Erro ao resetar progresso:", error);
-      alert("Ocorreu um erro ao resetar o progresso.");
+      window.alert("Não foi possível resetar o progresso agora.");
     } finally {
-      setIsResetting(false);
+      setLoading(false);
     }
   };
 
-  const dominatedPct = useMemo(
-    () => getDistributionPercent(progress.dominated, progress.totalCards),
-    [progress.dominated, progress.totalCards]
+  const categoryValues = useMemo(
+    () => ({
+      dominated: progress.dominated || 0,
+      nearMastery: progress.learning || 0,
+      reinforce: progress.difficult || 0,
+      fresh: progress.fresh || 0,
+      total: progress.totalCards || 0,
+    }),
+    [
+      progress.dominated,
+      progress.learning,
+      progress.difficult,
+      progress.fresh,
+      progress.totalCards,
+    ]
   );
-  const difficultPct = useMemo(
-    () => getDistributionPercent(progress.difficult, progress.totalCards),
-    [progress.difficult, progress.totalCards]
+
+  const percentages = useMemo(
+    () => ({
+      dominated: getPercent(categoryValues.dominated, categoryValues.total),
+      nearMastery: getPercent(categoryValues.nearMastery, categoryValues.total),
+      reinforce: getPercent(categoryValues.reinforce, categoryValues.total),
+      fresh: getPercent(categoryValues.fresh, categoryValues.total),
+    }),
+    [categoryValues]
   );
-  const learningPct = useMemo(
-    () => getDistributionPercent(progress.learning, progress.totalCards),
-    [progress.learning, progress.totalCards]
+
+  const masteryStreakTarget = progress.masteryCorrectStreak || 10;
+
+  const orderedNearMasteryWords = useMemo(
+    () => sortNearMasteryWords(progress.learningWords || []),
+    [progress.learningWords]
   );
-  const freshPct = useMemo(
-    () => getDistributionPercent(progress.fresh, progress.totalCards),
-    [progress.fresh, progress.totalCards]
+
+  const orderedDominatedWords = useMemo(
+    () => sortDominatedWords(progress.dominatedWords || []),
+    [progress.dominatedWords]
+  );
+
+  const orderedNewWords = useMemo(
+    () => sortNewWords(progress.newWords || []),
+    [progress.newWords]
   );
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <div className="h-7 w-7 animate-spin rounded-full border-3 border-border border-t-primary" />
-      </div>
+      <>
+        <style>{PROGRESS_PAGE_CSS}</style>
+        <div className="vni-progress-loading">
+          <div className="vni-progress-spinner" />
+        </div>
+      </>
     );
   }
 
   return (
     <>
-      <div className="mx-auto w-full max-w-[1080px] space-y-8 px-4 py-4 md:min-h-[1047px] md:px-8 md:py-8">
-      <div>
-        <h1 className="mb-2 text-2xl font-bold">Progresso</h1>
-        <p className="text-muted-foreground">
-          Painel central de revisao: acompanhe fila diaria, itens atrasados e saude da memoria.
-        </p>
-      </div>
+      <style>{PROGRESS_PAGE_CSS}</style>
 
-      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-          <CalendarClock className="h-4 w-4 text-primary" />
-          Ritmo de revisao
-        </div>
-        <div className="grid gap-2 md:grid-cols-3">
-          {REVIEW_PACE_OPTIONS.map((option) => {
-            const isActive = selectedPace === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => handleReviewPaceChange(option.value)}
-                className={`rounded-lg border px-3 py-3 text-left transition-colors ${
-                  isActive
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                <div className="text-sm font-semibold">{option.label}</div>
-                <div className="mt-1 text-xs">{option.description}</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-7">
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-4 text-center shadow-sm">
-          <div className="mb-2 text-xs text-muted-foreground">Revisoes hoje</div>
-          <div className="text-3xl font-bold text-primary">{progress.dueToday}</div>
-        </div>
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-4 text-center shadow-sm">
-          <div className="mb-2 text-xs text-muted-foreground">Atrasadas</div>
-          <div className="text-3xl font-bold text-red-500">{progress.overdue}</div>
-        </div>
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-4 text-center shadow-sm">
-          <div className="mb-2 text-xs text-muted-foreground">Atencao</div>
-          <div className="text-3xl font-bold text-amber-500">{progress.needsAttention}</div>
-        </div>
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-4 text-center shadow-sm">
-          <div className="mb-2 text-xs text-muted-foreground">Dificeis</div>
-          <div className="text-3xl font-bold text-red-500">{progress.difficult}</div>
-        </div>
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-4 text-center shadow-sm">
-          <div className="mb-2 text-xs text-muted-foreground">Aprendendo</div>
-          <div className="text-3xl font-bold text-blue-500">{progress.learning}</div>
-        </div>
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-4 text-center shadow-sm">
-          <div className="mb-2 text-xs text-muted-foreground">Dominadas</div>
-          <div className="text-3xl font-bold text-orange-500">{progress.dominated}</div>
-        </div>
-        <div className="flex flex-col items-center rounded-xl border border-border bg-card p-4 text-center shadow-sm">
-          <div className="mb-2 text-xs text-muted-foreground">Novas</div>
-          <div className="text-3xl font-bold text-slate-600 dark:text-slate-300">{progress.fresh}</div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h3 className="mb-4 font-bold">Novas metricas de aprendizado</h3>
-        <div className="grid gap-4 md:grid-cols-4">
-          <SignalMetricCard
-            label="Dominio"
-            value={`${progress.masteryCorrectStreak || 10} acertos seguidos`}
-            description="A palavra so entra como dominada quando atinge essa sequencia."
-          />
-          <SignalMetricCard
-            label="Flashcards"
-            value={progress.flashcardRevealedBeforeAnswer || 0}
-            description="Revelacoes antes de responder viram sinal de atencao."
-          />
-          <SignalMetricCard
-            label="Quiz"
-            value={formatResponseTime(progress.quizAverageResponseMs || 0)}
-            description="Tempo medio contado somente ate confirmar a resposta."
-          />
-          <SignalMetricCard
-            label="Combinacoes"
-            value={`${(progress.combinationsAverageAttempts || 0).toFixed(1)} tentativas`}
-            description="Acerto de primeira pesa positivo; repeticoes indicam dificuldade."
-          />
-        </div>
-        <div className="mt-4 text-xs text-muted-foreground">
-          Sinais de confianca: {progress.confidenceSignals || 0}. Sinais de atencao:{" "}
-          {progress.difficultySignals || 0}.
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm md:col-span-2">
-          <div className="mb-4 flex items-center gap-2 font-medium text-muted-foreground">
-            <Target className="h-5 w-5 text-primary" />
-            Taxa de acerto
-          </div>
-          <div className="text-4xl font-bold">{progress.accuracyRate}%</div>
-          <div className="mt-2 text-sm">
-            <span className="font-medium text-primary">
-              {formatCount(progress.totalCorrect, "acerto", "acertos")}
-            </span>
-            {" / "}
-            <span className="font-medium text-destructive">
-              {formatCount(progress.totalIncorrect, "erro", "erros")}
-            </span>
-          </div>
-          <div className="mt-2 text-xs text-muted-foreground">
-            Baseado em {formatCount(progress.totalReviews, "revisao", "revisoes")} registradas.
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-4 flex items-center gap-2 font-medium text-muted-foreground">
-            <Clock3 className="h-5 w-5 text-blue-500" />
-            Tempo medio
-          </div>
-          <div className="text-4xl font-bold">{formatResponseTime(progress.averageResponseMs)}</div>
-          <div className="mt-2 text-xs text-muted-foreground">
-            Saude da memoria: {progress.health.score}/100 ({progress.health.label})
-          </div>
-          <div className="mt-2 text-xs text-muted-foreground">{progress.health.description}</div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h3 className="mb-4 font-bold">Distribuicao do vocabulario</h3>
-
-        <div className="mb-2 flex h-4 overflow-hidden rounded-full bg-muted">
-          <div className="bg-orange-500" style={{ width: `${dominatedPct}%` }} />
-          <div className="bg-blue-500" style={{ width: `${learningPct}%` }} />
-          <div className="bg-red-500" style={{ width: `${difficultPct}%` }} />
-          <div className="bg-slate-300 dark:bg-slate-500" style={{ width: `${freshPct}%` }} />
-        </div>
-
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded-full bg-orange-500" />
-            Dominadas
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded-full bg-blue-500" />
-            Em aprendizado
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded-full bg-red-500" />
-            Dificeis
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded-full bg-slate-300 dark:bg-slate-500" />
-            Novas
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <div className="mb-4 flex items-center gap-2 font-semibold text-foreground">
-          <BellRing className="h-4 w-4 text-primary" />
-          Notificacoes internas
-        </div>
-        <div className="space-y-2">
-          {notifications.map((notification) => (
-            <div
-              key={notification.id}
-              className={`rounded-lg border px-3 py-2 text-sm ${
-                notification.type === "warning"
-                  ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
-                  : notification.type === "success"
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200"
-                  : "border-border bg-muted/40 text-foreground"
-              }`}
-            >
-              <div className="font-semibold">{notification.title}</div>
-              <div className="text-xs opacity-90">{notification.message}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h3 className="mb-4 font-bold">Iniciar sessao de revisao</h3>
-        <SessionLinks />
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <WordList
-          title="Fila de hoje"
-          emptyText="Nenhuma revisao prevista para hoje."
-          items={progress.dueTodayWords}
-          valueRenderer={(item) => formatNextReview(item.stats?.next_review_at)}
-        />
-        <WordList
-          title="Itens atrasados"
-          emptyText="Nao ha itens atrasados agora."
-          items={progress.overdueWords}
-          valueRenderer={(item) => `${item.overdueDays || 0} dia(s)`}
-        />
-        <WordList
-          title="Mais dificeis"
-          emptyText="Nenhum item com erros ainda."
-          items={progress.hardestWords}
-          valueRenderer={(item) =>
-            formatCount(item.stats?.incorrect || 0, "erro", "erros")
-          }
-        />
-        <WordList
-          title="Proximas revisoes"
-          emptyText="Sem itens agendados no momento."
-          items={progress.upcomingWords}
-          valueRenderer={(item) => formatNextReview(item.stats?.next_review_at)}
-        />
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <WordList
-          title="Em aprendizado"
-          emptyText="Nenhum item em aprendizado no momento."
-          items={progress.learningWords}
-          valueRenderer={(item) => `${item.accuracyRate || 0}%`}
-        />
-        <WordList
-          title="Perto de dominar"
-          emptyText="Ainda nao ha itens perto da dominacao."
-          items={progress.nearMasteryWords}
-          valueRenderer={(item) => `${item.stats?.correct_streak || 0}/${progress.masteryCorrectStreak || 10}`}
-        />
-        <WordList
-          title="Dominadas"
-          emptyText="Nenhum item dominado ainda."
-          items={progress.dominatedWords}
-          valueRenderer={(item) =>
-            formatCount(item.stats?.correct_streak || 0, "acerto seguido", "acertos seguidos")
-          }
-        />
-        <WordList
-          title="Novas"
-          emptyText="Nenhum item pendente de primeira revisao."
-          items={progress.newWords}
-          valueRenderer={() => LEARNING_STATUS.NOVA}
-        />
-      </div>
-
-      <div className="border-t border-border pt-8">
-        <button
-          type="button"
-          onClick={() => setShowResetConfirm(true)}
-          disabled={isResetting}
-          className="inline-flex items-center justify-center rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive hover:text-white disabled:opacity-50"
-        >
-          <TriangleAlert className="mr-2 h-4 w-4" />
-          {isResetting ? "Resetando..." : "Resetar progresso"}
-        </button>
-      </div>
-      </div>
-
-      {showResetConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reset-progress-title"
-          onClick={() => !isResetting && setShowResetConfirm(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between gap-4">
+      <div className="vni-progress-page">
+        <div className="vni-progress-container">
+          <div className="vni-progress-stack">
+            <div className="vni-progress-header">
               <div>
-                <h2 id="reset-progress-title" className="text-lg font-bold text-foreground">
-                  Resetar progresso?
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Essa acao afeta apenas o historico de estudo.
+                <h1 className="vni-progress-title">Progresso</h1>
+                <p className="vni-progress-subtitle">
+                  Acompanhe sua evolução real no domínio do vocabulário.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowResetConfirm(false)}
-                disabled={isResetting}
-                className="rounded-full p-1 text-xl leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-                aria-label="Fechar"
-              >
-                ×
-              </button>
-            </div>
 
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4">
-              <div className="flex gap-3">
-                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-                  <TriangleAlert className="h-5 w-5" />
-                </div>
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground">
-                    Tem certeza que deseja resetar apenas o progresso de estudo?
-                  </p>
-                  <p>As palavras cadastradas serao mantidas.</p>
-                  <p>
-                    Serao zerados XP, nivel, streak, medalhas e estatisticas de aprendizado.
-                  </p>
+              <div className="vni-progress-header-actions">
+                <button
+                  type="button"
+                  className="vni-progress-reset-button is-desktop"
+                  onClick={handleResetProgress}
+                >
+                  <RotateCcw size={14} strokeWidth={2} />
+                  Resetar progresso
+                </button>
+
+                <div className="vni-progress-panel vni-progress-pace">
+                  <div className="vni-progress-pace-title">Ritmo de revisão</div>
+
+                  <div className="vni-progress-pace-options">
+                    {REVIEW_PACE_OPTIONS.map((option) => {
+                      const isActive = selectedPace === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleReviewPaceChange(option.value)}
+                          className={`vni-progress-pace-button ${
+                            isActive ? "is-active" : ""
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <section className="vni-progress-panel vni-progress-domain">
+              <div className="vni-progress-domain-grid">
+                <div>
+                  <div className="vni-progress-domain-title">Perto de dominar</div>
+
+                  <div className="vni-progress-domain-number">
+                    {categoryValues.nearMastery}
+                  </div>
+
+                  <div className="vni-progress-domain-label">palavras/frases perto de dominar</div>
+
+                  <div className="vni-progress-domain-total">
+                    de {categoryValues.total} palavras cadastradas
+                  </div>
+                </div>
+
+                <div>
+                  <div className="vni-progress-percent-row">
+                    <span>{formatPercent(percentages.nearMastery)}</span>
+                    <span>{formatPercent(percentages.reinforce)}</span>
+                    <span>{formatPercent(percentages.dominated)}</span>
+                    <span>{formatPercent(percentages.fresh)}</span>
+                  </div>
+
+                  <div className="vni-progress-bar">
+                    <div className="vni-progress-bar-fill">
+                      <div
+                        className="vni-progress-bar-segment"
+                        style={{
+                          width: `${percentages.nearMastery}%`,
+                          backgroundColor: COLORS.nearMastery,
+                        }}
+                      />
+                      <div
+                        className="vni-progress-bar-segment"
+                        style={{
+                          width: `${percentages.reinforce}%`,
+                          backgroundColor: COLORS.reinforce,
+                        }}
+                      />
+                      <div
+                        className="vni-progress-bar-segment"
+                        style={{
+                          width: `${percentages.dominated}%`,
+                          backgroundColor: COLORS.dominated,
+                        }}
+                      />
+                      <div
+                        className="vni-progress-bar-segment"
+                        style={{
+                          width: `${percentages.fresh}%`,
+                          backgroundColor: COLORS.fresh,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="vni-progress-legend">
+                    <div className="vni-progress-legend-item">
+                      <span
+                        className="vni-progress-legend-dot"
+                        style={{ backgroundColor: COLORS.nearMastery }}
+                      />
+                      Perto de dominar
+                    </div>
+                    <div className="vni-progress-legend-item">
+                      <span
+                        className="vni-progress-legend-dot"
+                        style={{ backgroundColor: COLORS.reinforce }}
+                      />
+                      Precisam de reforço
+                    </div>
+                    <div className="vni-progress-legend-item">
+                      <span
+                        className="vni-progress-legend-dot"
+                        style={{ backgroundColor: COLORS.dominated }}
+                      />
+                      Dominadas
+                    </div>
+                    <div className="vni-progress-legend-item">
+                      <span
+                        className="vni-progress-legend-dot"
+                        style={{ backgroundColor: COLORS.fresh }}
+                      />
+                      Novas
+                    </div>
+                  </div>
+
+                  <p className="vni-progress-domain-note">
+                    {formatPercent(percentages.nearMastery)} do vocabulário está perto de dominar
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="vni-progress-metrics">
+              <MetricCard
+                title="Perto de dominar"
+                value={categoryValues.nearMastery}
+                description={
+                  <>
+                    palavras quase
+                    <br />
+                    consolidadas
+                  </>
+                }
+                accentColor={COLORS.nearMastery}
+                iconBackground="#0b2342"
+                icon={<TrendingUp size={24} strokeWidth={2} />}
+              />
+
+              <MetricCard
+                title="Precisam de reforço"
+                value={categoryValues.reinforce}
+                description={
+                  <>
+                    palavras que ainda
+                    <br />
+                    exigem atenção
+                  </>
+                }
+                accentColor={COLORS.reinforce}
+                iconBackground="#31111d"
+                icon={<CircleAlert size={24} strokeWidth={2} />}
+              />
+
+              <MetricCard
+                title="Dominadas"
+                value={categoryValues.dominated}
+                description={
+                  <>
+                    palavras já memorizadas
+                    <br />
+                    com consistência
+                  </>
+                }
+                accentColor={COLORS.dominated}
+                iconBackground="#0a2a1e"
+                icon={<Trophy size={24} strokeWidth={2} />}
+              />
+
+              <MetricCard
+                title="Novas"
+                value={categoryValues.fresh}
+                description={
+                  <>
+                    palavras ainda no início
+                    <br />
+                    do aprendizado
+                  </>
+                }
+                accentColor="#566173"
+                valueColor={COLORS.fresh}
+                iconBackground="#151c2a"
+                icon={<BookOpen size={24} strokeWidth={2} />}
+              />
+            </section>
+
+            <section className="vni-progress-lists">
+              <ProgressListFrame
+                title="Perto de dominar"
+                accentColor={COLORS.nearMastery}
+                description="Palavras que estão quase entrando no domínio."
+                icon={<BarChart3 size={32} strokeWidth={2} />}
+              >
+                {orderedNearMasteryWords.length ? (
+                  <ul className="vni-progress-list">
+                    {orderedNearMasteryWords.map((item) => {
+                      const streak = Math.max(
+                        0,
+                        Math.min(item.stats?.correct_streak || 0, masteryStreakTarget)
+                      );
+                      const streakPercent = masteryStreakTarget
+                        ? (streak / masteryStreakTarget) * 100
+                        : 0;
+
+                      return (
+                        <li key={item.id} className="vni-progress-list-item">
+                          <span className="vni-progress-term">{item.term}</span>
+                          <span className="vni-progress-ratio">
+                            {streak}/{masteryStreakTarget}
+                          </span>
+                          <div className="vni-progress-mini-bar">
+                            <div
+                              className="vni-progress-mini-fill"
+                              style={{ width: `${streakPercent}%` }}
+                            />
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <EmptyListState text="Nenhuma palavra perto de dominar no momento." />
+                )}
+              </ProgressListFrame>
+
+              <ProgressListFrame
+                title="Precisam de reforço"
+                accentColor={COLORS.reinforce}
+                description="Palavras que mais precisam de reforço."
+                icon={<CircleAlert size={32} strokeWidth={2} />}
+                reinforce
+              >
+                {progress.needsAttentionWords?.length ? (
+                  <ul className="vni-progress-list">
+                    {progress.needsAttentionWords.map((item) => {
+                      const errors = item.stats?.incorrect || 0;
+                      return (
+                        <li key={item.id} className="vni-progress-list-item">
+                          <span className="vni-progress-term">{item.term}</span>
+                          <span className="vni-progress-count">
+                            {pluralize(errors, "erro", "erros")}
+                          </span>
+                          <span className="vni-progress-badge is-reinforce">
+                            atenção
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <EmptyListState text="Nenhuma palavra pedindo reforço agora." />
+                )}
+              </ProgressListFrame>
+
+              <ProgressListFrame
+                title="Dominadas"
+                accentColor={COLORS.dominated}
+                description="Palavras que você já memorizou com consistência."
+                icon={<Crown size={32} strokeWidth={2} />}
+              >
+                {orderedDominatedWords.length ? (
+                  <ul className="vni-progress-list">
+                    {orderedDominatedWords.map((item) => {
+                      const streak = item.stats?.correct_streak || 0;
+                      return (
+                        <li key={item.id} className="vni-progress-list-item">
+                          <span className="vni-progress-term">{item.term}</span>
+                          <span className="vni-progress-count">
+                            {pluralize(streak, "acerto seguido", "acertos seguidos")}
+                          </span>
+                          <span className="vni-progress-badge is-dominated">
+                            dominada
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <EmptyListState text="Nenhuma palavra dominada ainda." />
+                )}
+              </ProgressListFrame>
+
+              <ProgressListFrame
+                title="Novas"
+                accentColor="#566173"
+                description="Palavras que ainda estão no início do aprendizado."
+                icon={<BookOpen size={32} strokeWidth={2} />}
+              >
+                {orderedNewWords.length ? (
+                  <ul className="vni-progress-list">
+                    {orderedNewWords.map((item) => (
+                      <li key={item.id} className="vni-progress-list-item">
+                        <span className="vni-progress-term">{item.term}</span>
+                        <span className="vni-progress-badge is-new">nova</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <EmptyListState text="Nenhuma palavra nova pendente." />
+                )}
+              </ProgressListFrame>
+            </section>
+
+            <button
+              type="button"
+              className="vni-progress-reset-button is-mobile"
+              onClick={handleResetProgress}
+            >
+              <RotateCcw size={14} strokeWidth={2} />
+              Resetar progresso
+            </button>
+
+            <section className="vni-progress-panel vni-progress-summary">
+              <h3 className="vni-progress-summary-title">Resumo do aprendizado</h3>
+
+              <div className="vni-progress-summary-grid">
+                <div className="vni-progress-summary-item">
+                  <div className="vni-progress-summary-number" style={{ color: "#f2f5fa" }}>
+                    {categoryValues.total}
+                  </div>
+                  <div className="vni-progress-summary-label">
+                    palavra/frase cadastrada
+                  </div>
+                </div>
+
+                <div className="vni-progress-summary-item">
+                  <div
+                    className="vni-progress-summary-number"
+                    style={{ color: COLORS.dominated }}
+                  >
+                    {categoryValues.dominated}
+                  </div>
+                  <div className="vni-progress-summary-label">dominadas</div>
+                </div>
+
+                <div className="vni-progress-summary-item">
+                  <div
+                    className="vni-progress-summary-number"
+                    style={{ color: COLORS.nearMastery }}
+                  >
+                    {categoryValues.nearMastery}
+                  </div>
+                  <div className="vni-progress-summary-label">perto de dominar</div>
+                </div>
+
+                <div className="vni-progress-summary-item">
+                  <div
+                    className="vni-progress-summary-number"
+                    style={{ color: COLORS.reinforce }}
+                  >
+                    {categoryValues.reinforce}
+                  </div>
+                  <div className="vni-progress-summary-label">
+                    precisam de reforço
+                  </div>
+                </div>
+
+                <div className="vni-progress-summary-item">
+                  <div
+                    className="vni-progress-summary-number"
+                    style={{ color: COLORS.fresh }}
+                  >
+                    {categoryValues.fresh}
+                  </div>
+                  <div className="vni-progress-summary-label">novas</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      {showResetModal && (
+        <div
+          className="vni-progress-reset-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="vni-progress-reset-modal-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowResetModal(false);
+            }
+          }}
+        >
+          <div className="vni-progress-reset-modal">
+            <div className="vni-progress-reset-modal-header">
+              <div className="vni-progress-reset-modal-icon">
+                <CircleAlert size={22} strokeWidth={2} />
+              </div>
+
+              <h2
+                id="vni-progress-reset-modal-title"
+                className="vni-progress-reset-modal-title"
+              >
+                Resetar progresso
+              </h2>
+            </div>
+
+            <p className="vni-progress-reset-modal-text">
+              Tem certeza que deseja resetar todo o progresso? Essa ação vai zerar
+              seus acertos, erros e sequência de revisão das palavras e frases.
+            </p>
+
+            <div className="vni-progress-reset-modal-actions">
               <button
                 type="button"
-                onClick={() => setShowResetConfirm(false)}
-                disabled={isResetting}
-                className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                className="vni-progress-reset-modal-button is-cancel"
+                onClick={() => setShowResetModal(false)}
               >
                 Cancelar
               </button>
+
               <button
                 type="button"
-                onClick={handleResetHistory}
-                disabled={isResetting}
-                className="rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-destructive/90 disabled:opacity-50"
+                className="vni-progress-reset-modal-button is-reset"
+                onClick={confirmResetProgress}
               >
-                {isResetting ? "Resetando..." : "Confirmar reset"}
+                Resetar
               </button>
             </div>
           </div>
