@@ -558,6 +558,8 @@ export default function ExampleVideoPlayer({
   const hideFullscreenControlsTimerRef = useRef(null);
   const volumeHoverCloseTimerRef = useRef(null);
   const restorePlaybackTimerRef = useRef(null);
+  const suppressFullscreenControlsFromArrowNavigationRef = useRef(false);
+  const keepFullscreenControlSuppressionUntilPlayRef = useRef(false);
   const hasConsumedAutoPlayRef = useRef(false);
   const hasRestoredPlaybackRef = useRef(false);
   const orientationLockRequestedRef = useRef(false);
@@ -920,7 +922,7 @@ export default function ExampleVideoPlayer({
     }
 
     clearFullscreenControlsTimer();
-  }, [isFullscreen, isPlaying]);
+  }, [isFullscreen]);
 
   useEffect(() => {
     const player = videoRef.current;
@@ -1021,6 +1023,10 @@ export default function ExampleVideoPlayer({
       const key = event.key;
       const normalizedKey = typeof key === "string" ? key.toLowerCase() : "";
       const playerWrapper = wrapperRef.current;
+      const shouldHandleHorizontalArrowVideoNavigation = Boolean(
+        typeof onKeyboardArrowNavigate === "function" &&
+          (!isFullscreen || isDesktopPlayerLayout)
+      );
       const isPlayerHotkeyContextActive = Boolean(
         isFullscreenMode() ||
           controlsVisible ||
@@ -1056,8 +1062,7 @@ export default function ExampleVideoPlayer({
       }
 
       if (
-        typeof onKeyboardArrowNavigate === "function" &&
-        !isFullscreen &&
+        shouldHandleHorizontalArrowVideoNavigation &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
@@ -1065,13 +1070,23 @@ export default function ExampleVideoPlayer({
         (key === "ArrowLeft" || event.code === "ArrowLeft")
       ) {
         event.preventDefault();
-        onKeyboardArrowNavigate(-1);
+        const shouldPreservePlayerSession = Boolean(isExpandedWebLayout);
+        if (shouldPreservePlayerSession) {
+          clearFullscreenControlsTimer();
+          setControlsVisible(false);
+        }
+        suppressFullscreenControlsFromArrowNavigationRef.current =
+          shouldPreservePlayerSession;
+        keepFullscreenControlSuppressionUntilPlayRef.current =
+          shouldPreservePlayerSession;
+        onKeyboardArrowNavigate(-1, {
+          preservePlayerSession: shouldPreservePlayerSession,
+        });
         return;
       }
 
       if (
-        typeof onKeyboardArrowNavigate === "function" &&
-        !isFullscreen &&
+        shouldHandleHorizontalArrowVideoNavigation &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
@@ -1079,7 +1094,18 @@ export default function ExampleVideoPlayer({
         (key === "ArrowRight" || event.code === "ArrowRight")
       ) {
         event.preventDefault();
-        onKeyboardArrowNavigate(1);
+        const shouldPreservePlayerSession = Boolean(isExpandedWebLayout);
+        if (shouldPreservePlayerSession) {
+          clearFullscreenControlsTimer();
+          setControlsVisible(false);
+        }
+        suppressFullscreenControlsFromArrowNavigationRef.current =
+          shouldPreservePlayerSession;
+        keepFullscreenControlSuppressionUntilPlayRef.current =
+          shouldPreservePlayerSession;
+        onKeyboardArrowNavigate(1, {
+          preservePlayerSession: shouldPreservePlayerSession,
+        });
         return;
       }
 
@@ -1175,7 +1201,18 @@ export default function ExampleVideoPlayer({
 
         if (event.repeat) return;
 
-        togglePlay({ showFeedback: true });
+        const shouldSuppressFullscreenControls = Boolean(isExpandedWebLayout);
+        if (shouldSuppressFullscreenControls) {
+          clearFullscreenControlsTimer();
+          setControlsVisible(false);
+        }
+        suppressFullscreenControlsFromArrowNavigationRef.current =
+          shouldSuppressFullscreenControls;
+        keepFullscreenControlSuppressionUntilPlayRef.current = false;
+        togglePlay({
+          showFeedback: !shouldSuppressFullscreenControls,
+          preserveControlsAutoHide: shouldSuppressFullscreenControls,
+        });
         return;
       }
 
@@ -1641,6 +1678,12 @@ export default function ExampleVideoPlayer({
           }
 
           if (isFullscreenMode()) {
+            if (options?.preserveControlsAutoHide) {
+              clearFullscreenControlsTimer();
+              setControlsVisible(false);
+              return;
+            }
+
             showControlsTemporarilyInFullscreen();
             return;
           }
@@ -1661,7 +1704,12 @@ export default function ExampleVideoPlayer({
     setIsPlaying(false);
 
     if (isFullscreenMode()) {
-      showControlsTemporarilyInFullscreen();
+      if (options?.preserveControlsAutoHide) {
+        clearFullscreenControlsTimer();
+        setControlsVisible(false);
+      } else {
+        showControlsTemporarilyInFullscreen();
+      }
     } else if (isCompactControlsMode) {
       setControlsVisible(true);
     } else {
@@ -2315,6 +2363,17 @@ export default function ExampleVideoPlayer({
           saveOwnVideoPlaybackState({ wasPlaying: true });
           setIsPlaying(true);
 
+          if (
+            suppressFullscreenControlsFromArrowNavigationRef.current &&
+            isExpandedWebLayout
+          ) {
+            suppressFullscreenControlsFromArrowNavigationRef.current = false;
+            keepFullscreenControlSuppressionUntilPlayRef.current = false;
+            clearFullscreenControlsTimer();
+            setControlsVisible(false);
+            return;
+          }
+
           if (isFullscreenMode()) {
             showControlsTemporarilyInFullscreen();
             return;
@@ -2325,6 +2384,34 @@ export default function ExampleVideoPlayer({
         onPause={() => {
           saveOwnVideoPlaybackState({ wasPlaying: false });
           setIsPlaying(false);
+          const shouldSuppressControlsForAutoAdvancePause = Boolean(
+            isExpandedWebLayout &&
+              !isLooping &&
+              typeof onOwnVideoPlaybackEnded === "function" &&
+              videoRef.current?.ended
+          );
+
+          if (shouldSuppressControlsForAutoAdvancePause) {
+            suppressFullscreenControlsFromArrowNavigationRef.current = true;
+            keepFullscreenControlSuppressionUntilPlayRef.current = true;
+            clearFullscreenControlsTimer();
+            setControlsVisible(false);
+            clearSystemMediaSession();
+            return;
+          }
+
+          if (
+            suppressFullscreenControlsFromArrowNavigationRef.current &&
+            isExpandedWebLayout
+          ) {
+            if (!keepFullscreenControlSuppressionUntilPlayRef.current) {
+              suppressFullscreenControlsFromArrowNavigationRef.current = false;
+            }
+            clearFullscreenControlsTimer();
+            setControlsVisible(false);
+            clearSystemMediaSession();
+            return;
+          }
 
           if (isFullscreenMode()) {
             showControlsTemporarilyInFullscreen();
@@ -2338,15 +2425,30 @@ export default function ExampleVideoPlayer({
           clearSystemMediaSession();
         }}
         onEnded={() => {
+          const shouldAutoAdvanceToNextVideo = Boolean(
+            !isLooping && typeof onOwnVideoPlaybackEnded === "function"
+          );
+          const shouldPreservePlayerSession = Boolean(
+            shouldAutoAdvanceToNextVideo && isExpandedWebLayout
+          );
+
           saveOwnVideoPlaybackState({ currentTime: 0, wasPlaying: false });
           setIsPlaying(false);
-          setControlsVisible(true);
           clearFullscreenControlsTimer();
+
+          if (shouldPreservePlayerSession) {
+            suppressFullscreenControlsFromArrowNavigationRef.current = true;
+            keepFullscreenControlSuppressionUntilPlayRef.current = true;
+            setControlsVisible(false);
+          } else {
+            setControlsVisible(true);
+          }
+
           clearSystemMediaSession();
 
-          if (!isLooping && typeof onOwnVideoPlaybackEnded === "function") {
+          if (shouldAutoAdvanceToNextVideo) {
             onOwnVideoPlaybackEnded({
-              preservePlayerSession: Boolean(isExpandedWebLayout),
+              preservePlayerSession: shouldPreservePlayerSession,
             });
           }
         }}
