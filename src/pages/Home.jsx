@@ -258,7 +258,7 @@ export default function Home() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[960px] space-y-8 animate-in fade-in duration-500">
+    <div className="mx-auto w-full max-w-[960px] space-y-8 animate-in fade-in duration-500 md:origin-top md:scale-[1.05]">
       <WelcomeCard />
       <StatsGrid stats={stats} />
       <ActivityCards />

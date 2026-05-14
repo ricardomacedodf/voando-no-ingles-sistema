@@ -41,7 +41,7 @@ export default function WelcomeCard() {
 
           <div className="h-3 w-full overflow-hidden rounded-full bg-black/20">
             <div
-              className="h-full rounded-full bg-white transition-all duration-1000 ease-out"
+              className="h-full rounded-full bg-white dark:bg-[#ededed] transition-all duration-1000 ease-out"
               style={{ width: `${xpProgress}%` }}
             />
           </div>

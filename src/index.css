@@ -178,6 +178,22 @@
 }
 
 @media (max-width: 767px) {
+  /*
+    Paints only the top safe-area (notch/status bar) with the same page background
+    on mobile to avoid transparent/alternate strips above the content.
+  */
+  .app-mobile-safe-shell::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--mobile-safe-area-top);
+    background: hsl(var(--background));
+    pointer-events: none;
+    z-index: 1;
+  }
+
   .app-mobile-safe-main {
     padding-bottom: calc(
       var(--mobile-bottom-nav-height) + var(--mobile-safe-area-bottom) + 1rem

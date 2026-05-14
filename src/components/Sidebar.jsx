@@ -462,7 +462,10 @@ export default function Sidebar({
                 className="h-[18px] w-[18px] shrink-0 bg-current"
                 style={sidebarExpandedBrandMaskStyle}
               />
-              <span className="truncate">Voando no Inglês</span>
+              <span className="truncate">
+                <span className="text-foreground dark:text-white">Voando </span>
+                <span className="text-[#12B981] dark:text-[#20D89A]">no Inglês</span>
+              </span>
             </Link>
 
             <button
