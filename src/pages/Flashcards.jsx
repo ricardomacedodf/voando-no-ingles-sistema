@@ -34,6 +34,7 @@ import {
 import {
   consumeVocabularyCacheRefreshFlag,
   getCachedVocabularyRows,
+  patchCachedVocabularyRow,
   setCachedVocabularyRows,
 } from "../lib/vocabularyCache";
 
@@ -77,6 +78,15 @@ function updateDominatedCount(items) {
 
   game.dominatedCount = nextDominatedCount;
   saveGameState(game);
+}
+
+function getCardStatCount(stats, keys = []) {
+  for (const key of keys) {
+    const value = Number(stats?.[key]);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+
+  return 0;
 }
 
 function clamp(value, min, max) {
@@ -593,6 +603,12 @@ export default function Flashcards() {
   }, [current, vocab, mode]);
 
   const card = vocab[current];
+  const cardCorrectCount = getCardStatCount(card?.stats, ["correct", "right"]);
+  const cardIncorrectCount = getCardStatCount(card?.stats, [
+    "incorrect",
+    "errors",
+    "wrong",
+  ]);
   const front = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
   const back = cardDir === "en_pt" ? activeMeaning?.meaning : card?.term;
   const frontTextStyle = useMemo(() => getAdaptiveMainTextStyle(front), [front]);
@@ -799,6 +815,12 @@ export default function Flashcards() {
       if (error) {
         throw error;
       }
+
+      patchCachedVocabularyRow(user.id, card.id, {
+        stats: updatedStats,
+        updated_at: now,
+        updatedAt: now,
+      });
 
       const updatedVocab = vocab.map((item) =>
         item.id === card.id
@@ -1008,11 +1030,11 @@ export default function Flashcards() {
           <div className="shrink-0 flex items-center gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1 whitespace-nowrap text-[#25B15F]">
               <Check className="h-3 w-3" />
-              Acertei: {card?.stats?.correct || 0}
+              Acertei: {cardCorrectCount}
             </span>
             <span className="inline-flex items-center gap-1 whitespace-nowrap text-red-500">
               <X className="h-3 w-3" />
-              Errei: {card?.stats?.incorrect || 0}
+              Errei: {cardIncorrectCount}
             </span>
           </div>
         </div>
@@ -1029,11 +1051,11 @@ export default function Flashcards() {
         <div className="flex items-center gap-2 text-xs">
           <span className="flex items-center gap-1 text-[#25B15F]">
             <Check className="h-3.5 w-3.5" />
-            Acertei: {card?.stats?.correct || 0}
+            Acertei: {cardCorrectCount}
           </span>
           <span className="flex items-center gap-1 text-red-500">
             <X className="h-3.5 w-3.5" />
-            Errei: {card?.stats?.incorrect || 0}
+            Errei: {cardIncorrectCount}
           </span>
         </div>
       </div>

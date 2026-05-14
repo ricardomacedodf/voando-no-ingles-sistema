@@ -34,6 +34,7 @@ import {
 import {
   consumeVocabularyCacheRefreshFlag,
   getCachedVocabularyRows,
+  patchCachedVocabularyRow,
   setCachedVocabularyRows,
 } from "../lib/vocabularyCache";
 
@@ -331,6 +332,15 @@ function mapVocabularyRow(row) {
   };
 }
 
+function getCardStatCount(stats, keys = []) {
+  for (const key of keys) {
+    const value = Number(stats?.[key]);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+
+  return 0;
+}
+
 export default function Quiz() {
   const { user } = useAuth();
   const location = useLocation();
@@ -341,8 +351,8 @@ export default function Quiz() {
   const [current, setCurrent] = useState(0);
   const [roundNumber, setRoundNumber] = useState(1);
   const [roundDone, setRoundDone] = useState(false);
-  const [roundCorrectCount, setRoundCorrectCount] = useState(0);
-  const [roundIncorrectCount, setRoundIncorrectCount] = useState(0);
+  const [_roundCorrectCount, setRoundCorrectCount] = useState(0);
+  const [_roundIncorrectCount, setRoundIncorrectCount] = useState(0);
   const [roundXpBalance, setRoundXpBalance] = useState(0);
   const [options, setOptions] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -352,6 +362,7 @@ export default function Quiz() {
   const [xpFeedback, setXpFeedback] = useState(null);
   const [activeMeaning, setActiveMeaning] = useState(null);
   const [cardDir, setCardDir] = useState("en_pt");
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(() => getSoundState().enabled);
   const startTime = useRef(Date.now());
   const lastOptionPointerSfxAtRef = useRef(0);
@@ -433,6 +444,7 @@ export default function Quiz() {
     setRoundCorrectCount(0);
     setRoundIncorrectCount(0);
     setRoundXpBalance(0);
+    setIsSubmittingAnswer(false);
     startTime.current = Date.now();
   };
 
@@ -456,6 +468,7 @@ export default function Quiz() {
       setRoundCorrectCount(0);
       setRoundIncorrectCount(0);
       setRoundXpBalance(0);
+      setIsSubmittingAnswer(false);
       updateDominatedCount(items);
     };
 
@@ -502,6 +515,7 @@ export default function Quiz() {
       setRoundCorrectCount(0);
       setRoundIncorrectCount(0);
       setRoundXpBalance(0);
+      setIsSubmittingAnswer(false);
       setLoading(false);
       return () => {
         isMounted = false;
@@ -583,6 +597,7 @@ export default function Quiz() {
     setAnswered(false);
     setSelected(null);
     setShowExamples(false);
+    setIsSubmittingAnswer(false);
     startTime.current = Date.now();
   }, [current, mode, queue.length, allVocab.length]);
 
@@ -685,6 +700,12 @@ export default function Quiz() {
         throw error;
       }
 
+      patchCachedVocabularyRow(user.id, card.id, {
+        stats: updatedStats,
+        updated_at: now,
+        updatedAt: now,
+      });
+
       const refreshedAllVocab = allVocab.map((item) =>
         item.id === card.id
           ? {
@@ -741,19 +762,39 @@ export default function Quiz() {
   };
 
   const handleConfirm = async () => {
-    if (answered || !user?.id || selected === null || !options[selected]) return;
+    if (
+      answered ||
+      isSubmittingAnswer ||
+      !user?.id ||
+      selected === null ||
+      !options[selected]
+    ) {
+      return;
+    }
 
+    setIsSubmittingAnswer(true);
     const selectedOption = options[selected];
     const correct = selectedOption.correct;
-    applyQuizOutcome({ correct });
-    await persistQuizResult({ correct });
+
+    try {
+      applyQuizOutcome({ correct });
+      await persistQuizResult({ correct });
+    } finally {
+      setIsSubmittingAnswer(false);
+    }
   };
 
   const handleDontRemember = async () => {
-    if (answered || !user?.id || !card) return;
+    if (answered || isSubmittingAnswer || !user?.id || !card) return;
 
-    applyQuizOutcome({ correct: false, didNotRemember: true });
-    await persistQuizResult({ correct: false, didNotRemember: true });
+    setIsSubmittingAnswer(true);
+
+    try {
+      applyQuizOutcome({ correct: false, didNotRemember: true });
+      await persistQuizResult({ correct: false, didNotRemember: true });
+    } finally {
+      setIsSubmittingAnswer(false);
+    }
   };
 
   const handleOptionPointerDown = (idx) => {
@@ -763,6 +804,12 @@ export default function Quiz() {
   };
 
   const handleNext = () => {
+    setAnswered(false);
+    setSelected(null);
+    setShowExamples(false);
+    setActiveMeaning(null);
+    setOptions([]);
+
     if (current < queue.length - 1 && current < QUESTIONS_PER_ROUND - 1) {
       setCurrent((c) => c + 1);
     } else {
@@ -792,6 +839,12 @@ export default function Quiz() {
   };
 
   const card = queue[current];
+  const cardCorrectCount = getCardStatCount(card?.stats, ["correct", "right"]);
+  const cardIncorrectCount = getCardStatCount(card?.stats, [
+    "incorrect",
+    "errors",
+    "wrong",
+  ]);
   const questionText = cardDir === "en_pt" ? card?.term : activeMeaning?.meaning;
   const questionTextStyle = useMemo(
     () => getAdaptiveQuizTextStyle(questionText),
@@ -847,7 +900,7 @@ export default function Quiz() {
   const roundBalanceText = `${roundXpBalance > 0 ? "+" : ""}${roundXpBalance}XP`;
 
   const renderQuizActionButton = () => {
-    const isConfirmDisabled = !answered && selected === null;
+    const isConfirmDisabled = (!answered && selected === null) || isSubmittingAnswer;
     const buttonClasses = answered
       ? QUIZ_ACTIVE_CONFIRM_BUTTON_CLASSES
       : selected !== null
@@ -958,17 +1011,17 @@ export default function Quiz() {
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="shrink-0 flex items-center gap-2 text-[11px] text-foreground">
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-              <span className="text-primary">{CHECK_SYMBOL}</span>
+          <div className="shrink-0 flex items-center gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-[#25B15F]">
+              <span>{CHECK_SYMBOL}</span>
               <span>
-                Acertei: <span className="font-semibold">{roundCorrectCount}</span>
+                Acertei: <span className="font-semibold">{cardCorrectCount}</span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-              <span className="text-destructive">{CROSS_SYMBOL}</span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-red-500">
+              <span>{CROSS_SYMBOL}</span>
               <span>
-                Errei: <span className="font-semibold">{roundIncorrectCount}</span>
+                Errei: <span className="font-semibold">{cardIncorrectCount}</span>
               </span>
             </span>
           </div>
@@ -986,17 +1039,17 @@ export default function Quiz() {
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="shrink-0 flex items-center gap-3 text-xs text-foreground">
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-              <span className="text-primary">{CHECK_SYMBOL}</span>
+          <div className="shrink-0 flex items-center gap-3 text-xs">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[#25B15F]">
+              <span>{CHECK_SYMBOL}</span>
               <span>
-                Acertei: <span className="font-semibold">{roundCorrectCount}</span>
+                Acertei: <span className="font-semibold">{cardCorrectCount}</span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-              <span className="text-destructive">{CROSS_SYMBOL}</span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-red-500">
+              <span>{CROSS_SYMBOL}</span>
               <span>
-                Errei: <span className="font-semibold">{roundIncorrectCount}</span>
+                Errei: <span className="font-semibold">{cardIncorrectCount}</span>
               </span>
             </span>
           </div>
@@ -1118,7 +1171,7 @@ export default function Quiz() {
               <button
                 type="button"
                 onClick={handleDontRemember}
-                disabled={!user?.id || !card}
+                disabled={!user?.id || !card || isSubmittingAnswer}
                 style={NON_SELECTABLE_UI_STYLE}
                 className={`flex h-[58px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-center text-sm font-semibold outline-none transition-all focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7CC8F8]/45 focus-visible:ring-offset-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 [-webkit-tap-highlight-color:transparent] sm:px-4 ${QUIZ_DONT_REMEMBER_BUTTON_CLASSES}`}
               >

@@ -151,6 +151,35 @@ export function clearCachedVocabularyRows(userId) {
   }
 }
 
+export function patchCachedVocabularyRow(userId, rowId, patch = {}) {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) return;
+
+  const currentRows = getCachedVocabularyRows(normalizedUserId);
+  if (!Array.isArray(currentRows) || currentRows.length === 0) return;
+
+  const normalizedRowId = String(rowId || "").trim();
+  if (!normalizedRowId) return;
+
+  let didUpdate = false;
+
+  const nextRows = currentRows.map((row) => {
+    if (String(row?.id || "").trim() !== normalizedRowId) {
+      return row;
+    }
+
+    didUpdate = true;
+    return {
+      ...row,
+      ...patch,
+    };
+  });
+
+  if (!didUpdate) return;
+
+  setCachedVocabularyRows(normalizedUserId, nextRows);
+}
+
 export function markVocabularyCacheForRefresh(userId) {
   const refreshKey = getForceRefreshKey(userId);
   if (!refreshKey || !canUseSessionStorage()) return;

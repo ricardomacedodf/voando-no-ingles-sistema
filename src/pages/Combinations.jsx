@@ -30,6 +30,7 @@ import {
 import {
   consumeVocabularyCacheRefreshFlag,
   getCachedVocabularyRows,
+  patchCachedVocabularyRow,
   setCachedVocabularyRows,
 } from "../lib/vocabularyCache";
 
@@ -86,6 +87,15 @@ function shuffleArray(arr) {
 
 function mapVocabularyRow(row, preferences) {
   return normalizeVocabularyItem(row, preferences);
+}
+
+function getCardStatCount(stats, keys = []) {
+  for (const key of keys) {
+    const value = Number(stats?.[key]);
+    if (Number.isFinite(value) && value >= 0) return value;
+  }
+
+  return 0;
 }
 
 function buildPool(vocab) {
@@ -210,7 +220,7 @@ export default function Combinations() {
   const [isMobileViewport, setIsMobileViewport] = useState(() =>
     typeof window !== "undefined" && window.innerWidth <= COMBINATIONS_MOBILE_BREAKPOINT
   );
-  const [errors, setErrors] = useState(0);
+  const [_errors, setErrors] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showExamples, setShowExamples] = useState(false);
   const [hasErrorExampleUnlock, setHasErrorExampleUnlock] = useState(false);
@@ -552,6 +562,12 @@ export default function Combinations() {
       if (error) {
         throw error;
       }
+
+      patchCachedVocabularyRow(user.id, vocabId, {
+        stats: updatedStats,
+        updated_at: now,
+        updatedAt: now,
+      });
     };
 
     const pendingQueue = pendingReviewUpdatesRef.current;
@@ -794,10 +810,21 @@ export default function Combinations() {
   const shouldShowMobileConcludeRound = roundComplete && isMobileViewport && !showRoundSummary;
 
   const focusedCard = allVocab.find((item) => item.id === focusedPair?.vocabId);
+  const focusedCardCorrectCount = getCardStatCount(focusedCard?.stats, [
+    "correct",
+    "right",
+  ]);
+  const focusedCardIncorrectCount = getCardStatCount(focusedCard?.stats, [
+    "incorrect",
+    "errors",
+    "wrong",
+  ]);
   const focusedMeaning = focusedCard?.meanings?.[focusedPair?.meaningIdx]?.meaning || null;
   const hasFocusedExamples =
     Array.isArray(focusedCard?.meanings) && focusedCard.meanings.length > 0;
   const hasActiveSelection = selectedLeft !== null || selectedRight !== null;
+  const displayedCorrectCount = hasActiveSelection ? focusedCardCorrectCount : 0;
+  const displayedIncorrectCount = hasActiveSelection ? focusedCardIncorrectCount : 0;
   const canUseExamples = hasActiveSelection || hasErrorExampleUnlock;
 
   if (shouldShowRoundSummary) {
@@ -884,17 +911,17 @@ export default function Combinations() {
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="shrink-0 flex items-center gap-2 text-[11px] text-foreground">
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-              <span className="text-primary">{CHECK_SYMBOL}</span>
+          <div className="shrink-0 flex items-center gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-[#25B15F]">
+              <span>{CHECK_SYMBOL}</span>
               <span>
-                Acertei: <span className="font-semibold">{correctMatches}</span>
+                Acertei: <span className="font-semibold">{displayedCorrectCount}</span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-              <span className="text-destructive">{CROSS_SYMBOL}</span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-red-500">
+              <span>{CROSS_SYMBOL}</span>
               <span>
-                Errei: <span className="font-semibold">{errors}</span>
+                Errei: <span className="font-semibold">{displayedIncorrectCount}</span>
               </span>
             </span>
           </div>
@@ -912,17 +939,17 @@ export default function Combinations() {
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="shrink-0 flex items-center gap-3 text-xs text-foreground">
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-              <span className="text-primary">{CHECK_SYMBOL}</span>
+          <div className="shrink-0 flex items-center gap-3 text-xs">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[#25B15F]">
+              <span>{CHECK_SYMBOL}</span>
               <span>
-                Acertei: <span className="font-semibold">{correctMatches}</span>
+                Acertei: <span className="font-semibold">{displayedCorrectCount}</span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-              <span className="text-destructive">{CROSS_SYMBOL}</span>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-red-500">
+              <span>{CROSS_SYMBOL}</span>
               <span>
-                Errei: <span className="font-semibold">{errors}</span>
+                Errei: <span className="font-semibold">{displayedIncorrectCount}</span>
               </span>
             </span>
           </div>

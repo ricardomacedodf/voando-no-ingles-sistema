@@ -17,6 +17,10 @@ import {
   normalizeVocabularyItem,
   saveReviewPreferences,
 } from "../lib/learningEngine";
+import {
+  clearCachedVocabularyRows,
+  markVocabularyCacheForRefresh,
+} from "../lib/vocabularyCache";
 
 const EMPTY_PROGRESS = Object.freeze(
   getProgressSummary([], { pace: REVIEW_PACE.EQUILIBRADO })
@@ -1407,6 +1411,34 @@ function getRegistrationTimestamp(item) {
   ]);
 }
 
+function getCreatedTimestamp(item) {
+  return getTimestampValue(item, [
+    "created_at",
+    "createdAt",
+    "inserted_at",
+    "registered_at",
+  ]);
+}
+
+function getLatestAddedVocabularyItems(items = [], limit = 6) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 6;
+
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => String(item?.term || "").trim().length > 0)
+    .sort((a, b) => {
+      const createdDiff = getCreatedTimestamp(b) - getCreatedTimestamp(a);
+      if (createdDiff !== 0) return createdDiff;
+
+      const updatedDiff =
+        getTimestampValue(b, ["updated_at", "updatedAt"]) -
+        getTimestampValue(a, ["updated_at", "updatedAt"]);
+      if (updatedDiff !== 0) return updatedDiff;
+
+      return String(b?.id || "").localeCompare(String(a?.id || ""));
+    })
+    .slice(0, safeLimit);
+}
+
 function getDominatedTimestamp(item) {
   return getTimestampValue(item, [
     "mastered_at",
@@ -1739,6 +1771,9 @@ export default function Progress() {
 
       if (error) throw error;
 
+      clearCachedVocabularyRows(user.id);
+      markVocabularyCacheForRefresh(user.id);
+
       await loadProgress();
     } catch (error) {
       console.error("Erro ao resetar progresso:", error);
@@ -1779,7 +1814,10 @@ export default function Progress() {
   const orderedNearMasteryWords = progressData.learningWords || [];
   const orderedDominatedWords = progressData.dominatedWords || [];
   const orderedNeedsAttentionWords = progressData.needsAttentionWords || [];
-  const orderedNewWords = progressData.newWords || [];
+  const orderedNewWords = useMemo(
+    () => getLatestAddedVocabularyItems(vocabItems, 6),
+    [vocabItems]
+  );
 
   if (loading) {
     return (
