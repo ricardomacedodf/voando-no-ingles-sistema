@@ -55,6 +55,8 @@ const QUIZ_TEXT_SCALE_MOBILE = 0.95;
 const QUIZ_SINGLE_LINE_LARGE_REDUCTION_MOBILE = 0.9;
 const QUIZ_MOBILE_SINGLE_LINE_FONT_SIZE = 32;
 const QUIZ_MOBILE_MULTI_LINE_FONT_SIZE = 28;
+const VOCABULARY_SELECT_COLUMNS =
+  "id, user_id, term, pronunciation, meanings, stats, created_at, updated_at";
 
 const NON_SELECTABLE_UI_STYLE = {
   userSelect: "none",
@@ -344,6 +346,10 @@ function getCardStatCount(stats, keys = []) {
 export default function Quiz() {
   const { user } = useAuth();
   const location = useLocation();
+  const focusFilter = useMemo(
+    () => new URLSearchParams(location.search).get("focus"),
+    [location.search]
+  );
 
   const [allVocab, setAllVocab] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -398,14 +404,17 @@ export default function Quiz() {
 
   const buildVocabularyFromRows = (rows) => {
     const reviewPreferences = loadReviewPreferences();
-    const focus = new URLSearchParams(location.search).get("focus");
     const normalizedItems = Array.isArray(rows)
       ? rows
           .map(mapVocabularyRow)
           .map((row) => normalizeVocabularyItem(row, reviewPreferences))
       : [];
 
-    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    const prioritized = getStudyQueue(
+      normalizedItems,
+      reviewPreferences,
+      focusFilter
+    ).items;
     if (prioritized.length >= 4 || normalizedItems.length < 4) {
       return prioritized;
     }
@@ -418,7 +427,7 @@ export default function Quiz() {
 
     const { data, error } = await supabase
       .from("vocabulary")
-      .select("*")
+      .select(VOCABULARY_SELECT_COLUMNS)
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
 
@@ -542,7 +551,7 @@ export default function Quiz() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id, location.search]);
+  }, [user?.id, focusFilter]);
 
   useEffect(() => {
     if (loading || allVocab.length === 0) return;
@@ -1194,6 +1203,7 @@ export default function Quiz() {
               allMeanings={card?.meanings}
               activeMeaning={activeMeaning?.meaning}
               titleTerm={card?.term}
+              pronunciation={card?.pronunciation}
               variant="flashcard"
               panelScope="quiz"
               onClose={() => setShowExamples(false)}

@@ -58,6 +58,8 @@ const FLASHCARD_DISCARD_ROTATE_DEG = 20;
 const FLASHCARD_DISCARD_SCALE = 0.9;
 const FLASHCARD_DISCARD_EASING = "cubic-bezier(0.22, 0.61, 0.36, 1)";
 const FLASHCARD_POINTER_SFX_GUARD_MS = 700;
+const VOCABULARY_SELECT_COLUMNS =
+  "id, user_id, term, pronunciation, meanings, stats, created_at, updated_at";
 
 function shuffleArray(arr) {
   const shuffled = [...arr];
@@ -276,6 +278,10 @@ function fitMainTextToSlot(textElement, slotElement, preferredFontSize) {
 export default function Flashcards() {
   const { user } = useAuth();
   const location = useLocation();
+  const focusFilter = useMemo(
+    () => new URLSearchParams(location.search).get("focus"),
+    [location.search]
+  );
 
   const [baseVocab, setBaseVocab] = useState([]);
   const [vocab, setVocab] = useState([]);
@@ -420,12 +426,11 @@ export default function Flashcards() {
 
   const buildVocabularyFromRows = (rows) => {
     const reviewPreferences = loadReviewPreferences();
-    const focus = new URLSearchParams(location.search).get("focus");
     const normalizedItems = Array.isArray(rows)
       ? rows.map((row) => normalizeVocabularyItem(row, reviewPreferences))
       : [];
 
-    return getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    return getStudyQueue(normalizedItems, reviewPreferences, focusFilter).items;
   };
 
   const fetchVocabularyRows = async () => {
@@ -433,7 +438,7 @@ export default function Flashcards() {
 
     const { data, error } = await supabase
       .from("vocabulary")
-      .select("*")
+      .select(VOCABULARY_SELECT_COLUMNS)
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
 
@@ -543,7 +548,7 @@ export default function Flashcards() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id, location.search]);
+  }, [user?.id, focusFilter]);
 
   useEffect(() => {
     if (loading || baseVocab.length === 0) return;
@@ -1218,6 +1223,7 @@ export default function Flashcards() {
                 allMeanings={card.meanings}
                 activeMeaning={activeMeaning?.meaning}
                 titleTerm={card?.term}
+                pronunciation={card?.pronunciation}
                 variant="flashcard"
                 panelScope="flashcards"
                 forceMobileVideoExperience

@@ -8,7 +8,9 @@ import {
   ChevronRight,
   ChevronUp,
   Clapperboard,
+  Copy,
   FileVideo,
+  GripVertical,
   Hash,
   Languages,
   Layers3,
@@ -26,7 +28,6 @@ import {
 import { supabase } from "@/api/supabaseClient";
 import ExampleVideoPlayer from "@/components/ExampleVideoPlayer";
 import {
-  getExampleVideoDisplayLabel,
   resolveExampleVideoThumbnail,
 } from "@/lib/exampleVideoStorage";
 import { useAuth } from "../contexts/AuthContext";
@@ -67,6 +68,24 @@ const INTERNAL_VIDEO_CONFLICT_MESSAGE =
 const UNSAVED_CHANGES_CONFIRM_MESSAGE =
   "Existem alterações não salvas. Tem certeza que deseja sair sem salvar?";
 
+const EXAMPLE_LONG_PRESS_MS = 560;
+const EXAMPLE_DRAG_MOVE_PX = 8;
+const EXAMPLE_DRAG_NO_SELECT_CLASS = "manager-form-example-drag-no-select";
+
+const setExampleDragNoSelectLock = (isLocked) => {
+  if (typeof document === "undefined") return;
+
+  [document.documentElement, document.body].forEach((element) => {
+    if (!element) return;
+
+    if (isLocked) {
+      element.classList.add(EXAMPLE_DRAG_NO_SELECT_CLASS);
+    } else {
+      element.classList.remove(EXAMPLE_DRAG_NO_SELECT_CLASS);
+    }
+  });
+};
+
 const isMobileInteractionViewport = () => {
   if (typeof window === "undefined") return false;
 
@@ -103,6 +122,12 @@ const clampManagerFormHorizontalScroll = () => {
 };
 
 const managerFormMobileViewportStyles = `
+  .manager-form-example-drag-no-select,
+  .manager-form-example-drag-no-select * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+
   @media (hover: none) and (pointer: coarse),
     (max-width: 767px),
     (max-height: 500px) and (orientation: landscape) {
@@ -190,6 +215,24 @@ const emptyExample = {
   exampleVideos: [],
 };
 
+let exampleIdSequence = 0;
+const createExampleLocalId = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `example-${crypto.randomUUID()}`;
+  }
+
+  const timestampPart = Date.now().toString(36);
+  const sequencePart = (exampleIdSequence++).toString(36);
+  const randomPart = Math.random().toString(36).slice(2, 8);
+
+  return `example-${timestampPart}-${sequencePart}-${randomPart}`;
+};
+
+const createEmptyExampleDraft = () => ({
+  ...emptyExample,
+  _exampleId: createExampleLocalId(),
+});
+
 const emptyMeaning = {
   meaning: "",
   category: "vocabulário",
@@ -197,8 +240,13 @@ const emptyMeaning = {
   video: "",
   thumbnail: "",
   meaningVideos: [],
-  examples: [{ ...emptyExample }],
+  examples: [],
 };
+
+const createEmptyMeaningDraft = () => ({
+  ...emptyMeaning,
+  examples: [createEmptyExampleDraft()],
+});
 
 const meaningAccentPalette = [
   { bar: "#1D1D1F", border: "#E5E5EA" },
@@ -272,6 +320,7 @@ const getNewMeaningVideoKey = (mIdx) => `meaning-${mIdx}-new`;
 const getExampleVideoKey = (mIdx, eIdx, videoIndex = 0) =>
   `example-${mIdx}-${eIdx}-${videoIndex}`;
 const getNewExampleVideoKey = (mIdx, eIdx) => `example-${mIdx}-${eIdx}-new`;
+const getExampleLocalId = (example) => normalizeText(example?._exampleId);
 
 const normalizeText = (value) =>
   typeof value === "string" ? value.trim() : "";
@@ -573,7 +622,22 @@ const normalizeExampleVideos = (example) => {
     ...normalizeVideoList(example?.exampleVideos, fallbackThumbnail),
     ...normalizeVideoList(example?.example_videos, fallbackThumbnail),
     ...normalizeVideoList(normalizeExampleVideo(example), fallbackThumbnail),
-  ]).slice(0, 1);
+  ]);
+};
+
+const normalizeExampleDraft = (example = {}) => {
+  const normalizedVideos = normalizeExampleVideos(example);
+  const firstVideo = normalizedVideos[0] || { video: "", thumbnail: "" };
+  const primaryVideo = normalizeText(firstVideo.video);
+
+  return {
+    sentence: normalizeExampleText(example?.sentence),
+    translation: normalizeExampleText(example?.translation),
+    video: primaryVideo,
+    thumbnail: primaryVideo ? normalizeText(firstVideo.thumbnail) : "",
+    exampleVideos: normalizedVideos,
+    _exampleId: normalizeText(example?._exampleId) || createExampleLocalId(),
+  };
 };
 
 const extractIframeSrc = (value) => {
@@ -1841,7 +1905,6 @@ function VideoControlCard({
   mobileCompact = false,
   removeButtonMode = "button",
   addButtonLabel = "Adicionar vídeo",
-  changeButtonLabel = "Trocar vídeo",
   saveButtonLabel,
   layerIcon,
   helperText,
@@ -1851,6 +1914,8 @@ function VideoControlCard({
   promoteRemoveToHeader = false,
   showHeaderVideoAttachedIndicator = true,
   mobileMinimalControls = false,
+  headerMeta,
+  extraActions,
   children,
 }) {
   const hasVideo = Boolean(video);
@@ -1962,9 +2027,9 @@ function VideoControlCard({
     : hasVideo
     ? "Anexado"
     : emptyLabel;
-  const mainActionLabel = hasVideo ? changeButtonLabel : addButtonLabel;
-  const nextSaveLabel =
-    saveButtonLabel || (hasVideo ? "Salvar troca" : "Anexar vídeo");
+  const mainActionLabel = addButtonLabel;
+  const nextSaveLabel = saveButtonLabel || "Anexar vídeo";
+  const shouldShowAddActions = !hasVideo;
   const actionGridClass = mobileMinimalControls
     ? "grid grid-cols-2 gap-2 max-md:items-center sm:flex sm:flex-wrap"
     : mobileCompact
@@ -1987,6 +2052,7 @@ function VideoControlCard({
   const dangerIconButtonClass =
     "inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#F2D7D5] text-[#B42318] transition-colors hover:bg-[#FFF7F6] active:bg-[#FCEDEA] focus:outline-none focus-visible:border-[#F2D7D5] focus-visible:ring-2 focus-visible:ring-black/[0.08] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#5A2521] dark:text-[#FF9F95] dark:hover:bg-[#2B1513] dark:focus-visible:ring-white/[0.1]";
   const neutralActionIconClass = "h-3.5 w-3.5 text-[#6E6E73] dark:text-[#A1A1A6]";
+  const hasExtraActions = Boolean(extraActions);
 
   return (
     <div
@@ -2139,6 +2205,10 @@ function VideoControlCard({
                 </StatusPill>
               ) : null}
 
+              {headerMeta ? (
+                <StatusPill tone="neutral">{headerMeta}</StatusPill>
+              ) : null}
+
               {isContextCollapsible ? (
                 <button
                   type="button"
@@ -2208,45 +2278,49 @@ function VideoControlCard({
                 </div>
               ) : (
                 <div className={actionGridClass}>
-                  <button
-                    type="button"
-                    onClick={onOpenEditor}
-                    disabled={isDeleting}
-                    className={secondaryButtonClass}
-                  >
-                    <Link2 className={neutralActionIconClass} />
-                    {mobileMinimalControls ? (
-                      <>
-                        <span className="md:hidden">Trocar vídeo</span>
-                        <span className="hidden md:inline">{mainActionLabel}</span>
-                      </>
-                    ) : (
-                      mainActionLabel
-                    )}
-                  </button>
+                  {shouldShowAddActions ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={onOpenEditor}
+                        disabled={isDeleting}
+                        className={secondaryButtonClass}
+                      >
+                        <Link2 className={neutralActionIconClass} />
+                        {mobileMinimalControls ? (
+                          <>
+                            <span className="md:hidden">Adicionar por link</span>
+                            <span className="hidden md:inline">{mainActionLabel}</span>
+                          </>
+                        ) : (
+                          mainActionLabel
+                        )}
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={onTriggerUpload}
-                    disabled={isUploading || isDeleting}
-                    className={secondaryButtonClass}
-                  >
-                    {isUploading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Upload className="h-3.5 w-3.5" />
-                    )}
-                    {isUploading ? (
-                      "Enviando..."
-                    ) : mobileMinimalControls ? (
-                      <>
-                        <span className="md:hidden">Upload</span>
-                        <span className="hidden md:inline">{uploadButtonText}</span>
-                      </>
-                    ) : (
-                      uploadButtonText
-                    )}
-                  </button>
+                      <button
+                        type="button"
+                        onClick={onTriggerUpload}
+                        disabled={isUploading || isDeleting}
+                        className={secondaryButtonClass}
+                      >
+                        {isUploading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="h-3.5 w-3.5" />
+                        )}
+                        {isUploading ? (
+                          "Enviando..."
+                        ) : mobileMinimalControls ? (
+                          <>
+                            <span className="md:hidden">Enviar arquivo</span>
+                            <span className="hidden md:inline">{uploadButtonText}</span>
+                          </>
+                        ) : (
+                          uploadButtonText
+                        )}
+                      </button>
+                    </>
+                  ) : null}
 
                   {showRemoveInlineIcon ? (
                     <button
@@ -2278,6 +2352,12 @@ function VideoControlCard({
                       )}
                       {isDeleting ? "Removendo..." : "Remover vídeo"}
                     </button>
+                  ) : null}
+
+                  {hasExtraActions ? (
+                    <div className="col-span-2 flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+                      {extraActions}
+                    </div>
                   ) : null}
                 </div>
               )}
@@ -2328,6 +2408,21 @@ export default function ManagerForm({ item, onBack, onSaved }) {
   const fileInputsRef = useRef({});
   const meaningCardRefs = useRef({});
   const exampleCardRefs = useRef({});
+  const exampleGestureRef = useRef({
+    pointerId: null,
+    meaningIndex: -1,
+    exampleIndex: -1,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    isDragging: false,
+    hasLongPressMenu: false,
+    suppressClick: false,
+    overMeaningIndex: -1,
+    overExampleIndex: -1,
+    longPressTimeoutId: null,
+  });
 
   const [term, setTerm] = useState(item?.term || "");
   const [pronunciation, setPronunciation] = useState(item?.pronunciation || "");
@@ -2351,55 +2446,49 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           meaningVideos: normalizeMeaningVideos(m),
           examples:
             m.examples?.length > 0
-              ? m.examples.map((e) => ({
-                  sentence: e?.sentence || "",
-                  translation: e?.translation || "",
-                  video: normalizeExampleVideo(e),
-                  thumbnail: normalizeExampleThumbnail(e),
-                  exampleVideos: normalizeExampleVideos(e),
-                }))
-              : [{ ...emptyExample }],
+              ? m.examples.map((e) => normalizeExampleDraft(e))
+              : [createEmptyExampleDraft()],
         }))
-      : [{ ...emptyMeaning }]
+      : [createEmptyMeaningDraft()]
   );
-  const initialDraftSignatureRef = useRef(null);
-  if (initialDraftSignatureRef.current === null) {
-    initialDraftSignatureRef.current = createEditableDraftSignature(
-      buildEditableDraftSnapshot({
-        term: item?.term || "",
-        pronunciation: item?.pronunciation || "",
-        wordVideos: normalizeWordVideos(item),
-        meanings:
-          item?.meanings?.length > 0
-            ? item.meanings.map((m) => ({
-                meaning: m.meaning || "",
-                category: m.category || "vocabulário",
-                tip: m.tip || "",
-                video: normalizeMeaningVideo(m),
-                thumbnail: normalizeMeaningThumbnail(m),
-                meaningVideos: normalizeMeaningVideos(m),
-                examples:
-                  m.examples?.length > 0
-                    ? m.examples.map((e) => ({
-                        sentence: e?.sentence || "",
-                        translation: e?.translation || "",
-                        video: normalizeExampleVideo(e),
-                        thumbnail: normalizeExampleThumbnail(e),
-                        exampleVideos: normalizeExampleVideos(e),
-                      }))
-                    : [{ ...emptyExample }],
-              }))
-            : [{ ...emptyMeaning }],
-      })
-    );
+  const initialDraftSnapshotRef = useRef(null);
+  if (initialDraftSnapshotRef.current === null) {
+    initialDraftSnapshotRef.current = buildEditableDraftSnapshot({
+      term: item?.term || "",
+      pronunciation: item?.pronunciation || "",
+      wordVideos: normalizeWordVideos(item),
+      meanings:
+        item?.meanings?.length > 0
+          ? item.meanings.map((m) => ({
+              meaning: m.meaning || "",
+              category: m.category || "vocabulário",
+              tip: m.tip || "",
+              video: normalizeMeaningVideo(m),
+              thumbnail: normalizeMeaningThumbnail(m),
+              meaningVideos: normalizeMeaningVideos(m),
+              examples:
+                m.examples?.length > 0
+                  ? m.examples.map((e) => normalizeExampleDraft(e))
+                  : [createEmptyExampleDraft()],
+            }))
+          : [createEmptyMeaningDraft()],
+    });
   }
 
-  const [savedDraftSignature, setSavedDraftSignature] = useState(
-    initialDraftSignatureRef.current
+  const [savedDraftSnapshot, setSavedDraftSnapshot] = useState(
+    initialDraftSnapshotRef.current
   );
   const [pendingNewMeanings, setPendingNewMeanings] = useState({});
   const [recentlyAddedMeaningIndex, setRecentlyAddedMeaningIndex] = useState(null);
   const [recentlyAddedExampleKey, setRecentlyAddedExampleKey] = useState(null);
+  const [draggingExampleKey, setDraggingExampleKey] = useState("");
+  const [dragOverExampleKey, setDragOverExampleKey] = useState("");
+  const [draggingExampleOffset, setDraggingExampleOffset] = useState({
+    x: 0,
+    y: 0,
+  });
+  const [exampleActionMenu, setExampleActionMenu] = useState(null);
+  const [activeExamplePreviewIndexes, setActiveExamplePreviewIndexes] = useState({});
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [isWordVideoSectionExpanded, setIsWordVideoSectionExpanded] = useState(
     () => normalizeWordVideos(item).length > 0
@@ -2421,7 +2510,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         const examples =
           meaning?.examples?.length > 0
             ? meaning.examples
-            : [{ ...emptyExample }];
+            : [createEmptyExampleDraft()];
 
         examples.forEach((_, exampleIndex) => {
           acc[getExampleKey(meaningIndex, exampleIndex)] = false;
@@ -2463,6 +2552,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     meanings,
   });
   const currentDraftSignature = createEditableDraftSignature(currentDraftSnapshot);
+  const savedDraftSignature = createEditableDraftSignature(savedDraftSnapshot);
   const hasPendingChanges = currentDraftSignature !== savedDraftSignature;
   const hasUnsavedVideoEditorChanges = Boolean(
     videoEditor.key &&
@@ -2494,6 +2584,232 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
   const resetActiveVideoPreview = () => {
     setActiveVideoPreviewKey(null);
+  };
+
+  const clearExampleLongPressTimeout = () => {
+    const timeoutId = exampleGestureRef.current.longPressTimeoutId;
+
+    if (timeoutId && typeof window !== "undefined") {
+      window.clearTimeout(timeoutId);
+    }
+
+    exampleGestureRef.current.longPressTimeoutId = null;
+  };
+
+  const closeExampleActionMenu = () => {
+    setExampleActionMenu(null);
+  };
+
+  const resetExampleGestureTracking = ({ keepSuppressClick = false } = {}) => {
+    clearExampleLongPressTimeout();
+    setExampleDragNoSelectLock(false);
+
+    exampleGestureRef.current = {
+      pointerId: null,
+      meaningIndex: -1,
+      exampleIndex: -1,
+      startX: 0,
+      startY: 0,
+      lastX: 0,
+      lastY: 0,
+      isDragging: false,
+      hasLongPressMenu: false,
+      suppressClick: keepSuppressClick
+        ? exampleGestureRef.current.suppressClick
+        : false,
+      overMeaningIndex: -1,
+      overExampleIndex: -1,
+      longPressTimeoutId: null,
+    };
+
+    setDraggingExampleKey("");
+    setDragOverExampleKey("");
+    setDraggingExampleOffset({ x: 0, y: 0 });
+  };
+
+  const openExampleActionMenuAt = ({
+    meaningIndex,
+    exampleIndex,
+    clientX,
+    clientY,
+  }) => {
+    if (
+      !Number.isFinite(meaningIndex) ||
+      !Number.isFinite(exampleIndex)
+    ) {
+      return;
+    }
+
+    const defaultWidth = 180;
+    const defaultHeight = 60;
+    const viewportWidth =
+      typeof window !== "undefined" ? window.innerWidth : defaultWidth + 24;
+    const viewportHeight =
+      typeof window !== "undefined" ? window.innerHeight : defaultHeight + 24;
+    const safeX = Math.min(
+      Math.max(12, Math.round(clientX || 0)),
+      Math.max(12, viewportWidth - defaultWidth - 12)
+    );
+    const safeY = Math.min(
+      Math.max(12, Math.round(clientY || 0)),
+      Math.max(12, viewportHeight - defaultHeight - 12)
+    );
+
+    setExampleActionMenu({
+      meaningIndex,
+      exampleIndex,
+      x: safeX,
+      y: safeY,
+    });
+  };
+
+  const clearIndexedExampleVideoUiState = (meaningIndex) => {
+    const meaningPrefix = `example-${meaningIndex}-`;
+
+    setVideoUploadErrors((current) => {
+      let changed = false;
+      const next = {};
+
+      Object.entries(current).forEach(([currentKey, currentValue]) => {
+        if (currentKey.startsWith(meaningPrefix)) {
+          changed = true;
+          return;
+        }
+
+        next[currentKey] = currentValue;
+      });
+
+      return changed ? next : current;
+    });
+
+    setExpandedVideoContextCards((current) => {
+      let changed = false;
+      const next = {};
+
+      Object.entries(current).forEach(([currentKey, currentValue]) => {
+        if (currentKey.startsWith(meaningPrefix)) {
+          changed = true;
+          return;
+        }
+
+        next[currentKey] = currentValue;
+      });
+
+      return changed ? next : current;
+    });
+
+    setUploadingVideoKey((current) =>
+      typeof current === "string" && current.startsWith(meaningPrefix)
+        ? null
+        : current
+    );
+
+    setDeletingVideoKey((current) => {
+      if (typeof current !== "string") return current;
+      if (current.startsWith(meaningPrefix)) return null;
+      if (new RegExp(`^${meaningIndex}-\\d+$`).test(current)) return null;
+      return current;
+    });
+
+    setVideoEditor((current) => {
+      if (
+        typeof current?.key === "string" &&
+        current.key.startsWith(meaningPrefix)
+      ) {
+        return { key: null, value: "", initialValue: "" };
+      }
+
+      return current;
+    });
+  };
+
+  const getActivePreviewVideoIndex = (meaningIndex, exampleIndex, totalVideos) => {
+    if (!Number.isFinite(totalVideos) || totalVideos <= 0) return 0;
+
+    const previewMapKey = getExampleKey(meaningIndex, exampleIndex);
+    const explicitIndex = Number(activeExamplePreviewIndexes[previewMapKey]);
+
+    if (Number.isFinite(explicitIndex) && explicitIndex >= 0 && explicitIndex < totalVideos) {
+      return explicitIndex;
+    }
+
+    const activeByKeyIndex = Array.from({ length: totalVideos }).findIndex(
+      (_, videoIndex) =>
+        activeVideoPreviewKey ===
+        getExampleVideoKey(meaningIndex, exampleIndex, videoIndex)
+    );
+
+    return activeByKeyIndex >= 0 ? activeByKeyIndex : 0;
+  };
+
+  const remapExampleIndexedStateById = ({
+    currentMap,
+    meaningIndex,
+    previousExamples,
+    nextExamples,
+    fallbackValue,
+  }) => {
+    const meaningPrefix = `${meaningIndex}-`;
+    const stateByExampleId = new Map();
+    const nextMap = {};
+
+    (Array.isArray(previousExamples) ? previousExamples : []).forEach(
+      (example, exampleIndex) => {
+        const exampleId = getExampleLocalId(example);
+        const currentKey = getExampleKey(meaningIndex, exampleIndex);
+
+        if (!exampleId) return;
+
+        stateByExampleId.set(exampleId, currentMap[currentKey]);
+      }
+    );
+
+    Object.entries(currentMap).forEach(([currentKey, currentValue]) => {
+      if (currentKey.startsWith(meaningPrefix)) return;
+      nextMap[currentKey] = currentValue;
+    });
+
+    (Array.isArray(nextExamples) ? nextExamples : []).forEach(
+      (example, exampleIndex) => {
+        const exampleKey = getExampleKey(meaningIndex, exampleIndex);
+        const exampleId = getExampleLocalId(example);
+        const previousValue = exampleId ? stateByExampleId.get(exampleId) : undefined;
+
+        nextMap[exampleKey] =
+          previousValue === undefined ? fallbackValue : previousValue;
+      }
+    );
+
+    return nextMap;
+  };
+
+  const syncIndexedExampleStatesAfterStructureChange = (
+    meaningIndex,
+    previousExamples,
+    nextExamples
+  ) => {
+    setExpandedExamples((current) =>
+      remapExampleIndexedStateById({
+        currentMap: current,
+        meaningIndex,
+        previousExamples,
+        nextExamples,
+        fallbackValue: false,
+      })
+    );
+
+    setActiveExamplePreviewIndexes((current) =>
+      remapExampleIndexedStateById({
+        currentMap: current,
+        meaningIndex,
+        previousExamples,
+        nextExamples,
+        fallbackValue: 0,
+      })
+    );
+
+    clearIndexedExampleVideoUiState(meaningIndex);
+    resetActiveVideoPreview();
   };
 
   const isVideoContextCardExpanded = (key) =>
@@ -2644,7 +2960,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           thumbnail: entry?.video ? normalizeText(entry?.thumbnail) : "",
         }))
         .filter((entry) => entry.video)
-    ).slice(0, 1);
+    );
     const firstExampleVideo = cleanExampleVideos[0] || {
       video: "",
       thumbnail: "",
@@ -2673,9 +2989,11 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
       if (!currentMeaning || !currentExample) return current;
 
+      const currentExampleVideos = normalizeExampleVideos(currentExample);
       const nextExamples = [...currentMeaning.examples];
 
       nextExamples[exampleIndex] = syncExampleVideoFields(currentExample, [
+        ...currentExampleVideos,
         {
           video: cleanVideo,
           thumbnail: normalizeText(thumbnail),
@@ -2712,7 +3030,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       const nextExampleVideos = [...currentExampleVideos];
       const nextExamples = [...currentMeaning.examples];
 
-      nextExampleVideos[0] = {
+      nextExampleVideos[videoIndex] = {
         video: cleanVideo,
         thumbnail: normalizeText(thumbnail),
       };
@@ -2997,6 +3315,48 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       );
     };
   }, [hasVisibleVideoLayerConflictMessage]);
+
+  useEffect(() => {
+    if (!exampleActionMenu || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const handleOutsidePointerDown = (event) => {
+      const target = event?.target;
+
+      if (
+        target &&
+        typeof target.closest === "function" &&
+        target.closest('[data-example-action-menu="true"]')
+      ) {
+        return;
+      }
+
+      closeExampleActionMenu();
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        closeExampleActionMenu();
+      }
+    };
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointerDown, true);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [exampleActionMenu]);
+
+  useEffect(
+    () => () => {
+      clearExampleLongPressTimeout();
+      setExampleDragNoSelectLock(false);
+    },
+    []
+  );
 
   useEffect(() => {
     if (!hasUnsavedFormChanges || typeof window === "undefined") {
@@ -3320,6 +3680,124 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     setMeanings(updated);
   };
 
+  const buildDuplicatedExampleDraft = (example = {}) => {
+    const duplicatedVideos = normalizeExampleVideos(example).map((entry) => ({
+      video: normalizeText(entry?.video),
+      thumbnail: normalizeText(entry?.thumbnail),
+    }));
+    const firstVideo = duplicatedVideos[0] || { video: "", thumbnail: "" };
+    const primaryVideo = normalizeText(firstVideo.video);
+
+    return {
+      sentence: normalizeExampleText(example?.sentence),
+      translation: normalizeExampleText(example?.translation),
+      video: primaryVideo,
+      thumbnail: primaryVideo ? normalizeText(firstVideo.thumbnail) : "",
+      exampleVideos: duplicatedVideos,
+      _exampleId: createExampleLocalId(),
+    };
+  };
+
+  const duplicateExample = (meaningIndex, exampleIndex) => {
+    closeExampleActionMenu();
+
+    let previousExamplesSnapshot = [];
+    let nextExamplesSnapshot = [];
+    let nextExampleIndex = -1;
+
+    setMeanings((current) => {
+      const next = [...current];
+      const currentMeaning = next[meaningIndex];
+      const previousExamples = Array.isArray(currentMeaning?.examples)
+        ? currentMeaning.examples
+        : [];
+      const sourceExample = previousExamples[exampleIndex];
+
+      if (!currentMeaning || !sourceExample) return current;
+
+      const duplicatedExample = buildDuplicatedExampleDraft(sourceExample);
+
+      previousExamplesSnapshot = previousExamples;
+      nextExamplesSnapshot = [
+        ...previousExamples.slice(0, exampleIndex + 1),
+        duplicatedExample,
+        ...previousExamples.slice(exampleIndex + 1),
+      ];
+      nextExampleIndex = exampleIndex + 1;
+
+      next[meaningIndex] = {
+        ...currentMeaning,
+        examples: nextExamplesSnapshot,
+      };
+
+      return next;
+    });
+
+    if (nextExampleIndex < 0) return;
+
+    syncIndexedExampleStatesAfterStructureChange(
+      meaningIndex,
+      previousExamplesSnapshot,
+      nextExamplesSnapshot
+    );
+
+    setExpandedExamples((current) => ({
+      ...current,
+      [getExampleKey(meaningIndex, nextExampleIndex)]: false,
+    }));
+  };
+
+  const reorderExampleInsideMeaning = (
+    meaningIndex,
+    sourceIndex,
+    destinationIndex
+  ) => {
+    if (sourceIndex === destinationIndex) return;
+
+    let previousExamplesSnapshot = [];
+    let nextExamplesSnapshot = [];
+
+    setMeanings((current) => {
+      const next = [...current];
+      const currentMeaning = next[meaningIndex];
+      const previousExamples = Array.isArray(currentMeaning?.examples)
+        ? currentMeaning.examples
+        : [];
+
+      if (!currentMeaning) return current;
+      if (
+        sourceIndex < 0 ||
+        sourceIndex >= previousExamples.length ||
+        destinationIndex < 0 ||
+        destinationIndex >= previousExamples.length
+      ) {
+        return current;
+      }
+
+      const reorderedExamples = [...previousExamples];
+      const [movedExample] = reorderedExamples.splice(sourceIndex, 1);
+      reorderedExamples.splice(destinationIndex, 0, movedExample);
+
+      previousExamplesSnapshot = previousExamples;
+      nextExamplesSnapshot = reorderedExamples;
+
+      next[meaningIndex] = {
+        ...currentMeaning,
+        examples: reorderedExamples,
+      };
+
+      return next;
+    });
+
+    if (nextExamplesSnapshot.length === 0) return;
+
+    syncIndexedExampleStatesAfterStructureChange(
+      meaningIndex,
+      previousExamplesSnapshot,
+      nextExamplesSnapshot
+    );
+  };
+
   const isExampleDraftEmpty = (example = {}) =>
     !normalizeExampleText(example?.sentence) &&
     !normalizeExampleText(example?.translation) &&
@@ -3330,9 +3808,13 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     const firstExampleKey = getExampleKey(nextIndex, 0);
 
     resetActiveVideoPreview();
-    setMeanings([...meanings, { ...emptyMeaning, examples: [{ ...emptyExample }] }]);
+    setMeanings([...meanings, createEmptyMeaningDraft()]);
     setExpandedMeanings((current) => ({ ...current, [nextIndex]: true }));
     setExpandedExamples((current) => ({ ...current, [firstExampleKey]: false }));
+    setActiveExamplePreviewIndexes((current) => ({
+      ...current,
+      [firstExampleKey]: 0,
+    }));
     setExpandedMeaningTips((current) => ({ ...current, [nextIndex]: false }));
     setPendingNewMeanings((current) => ({ ...current, [nextIndex]: true }));
     revealMeaningCardForEditing(nextIndex, { shouldHighlight: true });
@@ -3403,7 +3885,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       });
 
       setExpandedExamples({});
+      setActiveExamplePreviewIndexes({});
       setVideoEditor({ key: null, value: "", initialValue: "" });
+      closeExampleActionMenu();
     } catch (error) {
       console.error("Erro ao apagar vídeos do significado no R2:", error);
       alert(
@@ -3441,7 +3925,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
     updated[mIdx] = {
       ...updated[mIdx],
-      examples: [...currentExamples, { ...emptyExample }],
+      examples: [...currentExamples, createEmptyExampleDraft()],
     };
 
     setMeanings(updated);
@@ -3449,6 +3933,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     setExpandedExamples((current) => ({
       ...current,
       [getExampleKey(mIdx, nextExampleIndex)]: true,
+    }));
+    setActiveExamplePreviewIndexes((current) => ({
+      ...current,
+      [getExampleKey(mIdx, nextExampleIndex)]: 0,
     }));
 
     revealExampleCardForEditing(mIdx, nextExampleIndex, {
@@ -3461,6 +3949,9 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     const videoValues = normalizeExampleVideos(meanings[mIdx]?.examples?.[eIdx])
       .map((entry) => normalizeText(entry?.video))
       .filter(Boolean);
+    const previousExamplesSnapshot = Array.isArray(meanings[mIdx]?.examples)
+      ? meanings[mIdx].examples
+      : [];
 
     try {
       setDeletingVideoKey(key);
@@ -3474,13 +3965,23 @@ export default function ManagerForm({ item, onBack, onSaved }) {
       const remainingExamples = updated[mIdx].examples.filter(
         (_, index) => index !== eIdx
       );
+      const nextExamplesSnapshot =
+        remainingExamples.length > 0
+          ? remainingExamples
+          : [createEmptyExampleDraft()];
 
       updated[mIdx] = {
         ...updated[mIdx],
-        examples: remainingExamples.length > 0 ? remainingExamples : [{ ...emptyExample }],
+        examples: nextExamplesSnapshot,
       };
 
       setMeanings(updated);
+      syncIndexedExampleStatesAfterStructureChange(
+        mIdx,
+        previousExamplesSnapshot,
+        nextExamplesSnapshot
+      );
+      closeExampleActionMenu();
 
       setVideoEditor((current) =>
         current.key === key ? { key: null, value: "", initialValue: "" } : current
@@ -3496,6 +3997,229 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     } finally {
       setDeletingVideoKey((current) => (current === key ? null : current));
     }
+  };
+
+  const setExamplePreviewVideoIndex = (
+    meaningIndex,
+    exampleIndex,
+    totalVideos,
+    nextIndex
+  ) => {
+    if (!Number.isFinite(totalVideos) || totalVideos <= 0) return;
+
+    const safeIndex =
+      nextIndex < 0
+        ? totalVideos - 1
+        : nextIndex >= totalVideos
+        ? 0
+        : nextIndex;
+    const previewMapKey = getExampleKey(meaningIndex, exampleIndex);
+
+    setActiveExamplePreviewIndexes((current) => ({
+      ...current,
+      [previewMapKey]: safeIndex,
+    }));
+    setActiveVideoPreviewKey(
+      getExampleVideoKey(meaningIndex, exampleIndex, safeIndex)
+    );
+  };
+
+  const handleExampleHeaderContextMenu = (event, meaningIndex, exampleIndex) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resetExampleGestureTracking({ keepSuppressClick: true });
+    openExampleActionMenuAt({
+      meaningIndex,
+      exampleIndex,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+  };
+
+  const isExampleHeaderControlTarget = (target) =>
+    Boolean(
+      target &&
+        typeof target.closest === "function" &&
+        target.closest('[data-example-header-control="true"]')
+    );
+
+  const handleExampleHeaderPointerDown = (event, meaningIndex, exampleIndex) => {
+    if (isExampleHeaderControlTarget(event.target)) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    closeExampleActionMenu();
+    clearExampleLongPressTimeout();
+
+    if (typeof event.currentTarget?.setPointerCapture === "function") {
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // noop
+      }
+    }
+
+    exampleGestureRef.current = {
+      pointerId: event.pointerId,
+      meaningIndex,
+      exampleIndex,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      isDragging: false,
+      hasLongPressMenu: false,
+      suppressClick: false,
+      overMeaningIndex: meaningIndex,
+      overExampleIndex: exampleIndex,
+      longPressTimeoutId: null,
+    };
+    setDraggingExampleOffset({ x: 0, y: 0 });
+    setExampleDragNoSelectLock(true);
+
+    if (event.pointerType === "touch" || event.pointerType === "pen") {
+      exampleGestureRef.current.longPressTimeoutId = window.setTimeout(() => {
+        const currentGesture = exampleGestureRef.current;
+
+        if (currentGesture.pointerId !== event.pointerId) return;
+        if (currentGesture.isDragging) return;
+
+        currentGesture.hasLongPressMenu = true;
+        currentGesture.suppressClick = true;
+        openExampleActionMenuAt({
+          meaningIndex,
+          exampleIndex,
+          clientX: currentGesture.lastX,
+          clientY: currentGesture.lastY,
+        });
+      }, EXAMPLE_LONG_PRESS_MS);
+    }
+  };
+
+  const handleExampleHeaderPointerMove = (event) => {
+    const currentGesture = exampleGestureRef.current;
+
+    if (currentGesture.pointerId !== event.pointerId) return;
+
+    currentGesture.lastX = event.clientX;
+    currentGesture.lastY = event.clientY;
+
+    const deltaX = event.clientX - currentGesture.startX;
+    const deltaY = event.clientY - currentGesture.startY;
+    const movedEnough =
+      Math.abs(deltaX) >= EXAMPLE_DRAG_MOVE_PX ||
+      Math.abs(deltaY) >= EXAMPLE_DRAG_MOVE_PX;
+
+    if (movedEnough) {
+      clearExampleLongPressTimeout();
+    }
+
+    if (currentGesture.hasLongPressMenu) return;
+    if (!movedEnough && !currentGesture.isDragging) return;
+
+    if (!currentGesture.isDragging) {
+      currentGesture.isDragging = true;
+      currentGesture.suppressClick = true;
+      setDraggingExampleKey(
+        getExampleKey(currentGesture.meaningIndex, currentGesture.exampleIndex)
+      );
+      setDragOverExampleKey(
+        getExampleKey(currentGesture.meaningIndex, currentGesture.exampleIndex)
+      );
+    }
+
+    setDraggingExampleOffset({
+      x: deltaX,
+      y: deltaY,
+    });
+
+    event.preventDefault();
+
+    if (typeof document === "undefined") return;
+
+    const hoveredElement = document.elementFromPoint(
+      event.clientX,
+      event.clientY
+    );
+    const hoveredCard = hoveredElement?.closest?.('[data-example-sort-card="true"]');
+
+    if (!hoveredCard) return;
+
+    const hoveredMeaningIndex = Number(hoveredCard.dataset.meaningIndex);
+    const hoveredExampleIndex = Number(hoveredCard.dataset.exampleIndex);
+
+    if (
+      !Number.isFinite(hoveredMeaningIndex) ||
+      !Number.isFinite(hoveredExampleIndex)
+    ) {
+      return;
+    }
+
+    if (hoveredMeaningIndex !== currentGesture.meaningIndex) return;
+
+    currentGesture.overMeaningIndex = hoveredMeaningIndex;
+    currentGesture.overExampleIndex = hoveredExampleIndex;
+    setDragOverExampleKey(getExampleKey(hoveredMeaningIndex, hoveredExampleIndex));
+  };
+
+  const handleExampleHeaderPointerUp = (event) => {
+    const currentGesture = exampleGestureRef.current;
+
+    if (currentGesture.pointerId !== event.pointerId) return;
+
+    clearExampleLongPressTimeout();
+
+    if (typeof event.currentTarget?.releasePointerCapture === "function") {
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // noop
+      }
+    }
+
+    if (currentGesture.hasLongPressMenu) {
+      resetExampleGestureTracking({ keepSuppressClick: true });
+      return;
+    }
+
+    if (currentGesture.isDragging) {
+      const sourceIndex = currentGesture.exampleIndex;
+      const destinationIndex =
+        currentGesture.overExampleIndex >= 0
+          ? currentGesture.overExampleIndex
+          : sourceIndex;
+
+      if (sourceIndex !== destinationIndex) {
+        reorderExampleInsideMeaning(
+          currentGesture.meaningIndex,
+          sourceIndex,
+          destinationIndex
+        );
+      }
+
+      resetExampleGestureTracking({ keepSuppressClick: true });
+      return;
+    }
+
+    resetExampleGestureTracking();
+  };
+
+  const handleExampleHeaderPointerCancel = (event) => {
+    const currentGesture = exampleGestureRef.current;
+
+    if (currentGesture.pointerId !== event.pointerId) return;
+
+    resetExampleGestureTracking({ keepSuppressClick: currentGesture.suppressClick });
+  };
+
+  const handleExampleHeaderClick = (event, meaningIndex, exampleIndex) => {
+    if (exampleGestureRef.current.suppressClick) {
+      exampleGestureRef.current.suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    toggleExampleExpanded(meaningIndex, exampleIndex);
   };
 
   const openVideoEditor = (key, currentVideo = "") => {
@@ -3721,7 +4445,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         const { data: insertedItem, error } = await supabase
           .from("vocabulary")
           .insert([payload])
-          .select("*")
+          .select("id")
           .single();
 
         if (error) throw error;
@@ -3735,7 +4459,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
           stats,
         });
 
-        setSavedDraftSignature(currentDraftSignature);
+        setSavedDraftSnapshot(currentDraftSnapshot);
         setVideoEditor((current) =>
           current.key ? { ...current, initialValue: current.value } : current
         );
@@ -3750,7 +4474,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
         meanings: cleanedMeanings,
         stats,
       });
-      setSavedDraftSignature(currentDraftSignature);
+      setSavedDraftSnapshot(currentDraftSnapshot);
       setVideoEditor((current) =>
         current.key ? { ...current, initialValue: current.value } : current
       );
@@ -4180,14 +4904,16 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                         <div className="space-y-2.5">
                           {meaningItem.examples.map((example, eIdx) => {
                             const exampleKey = getExampleKey(mIdx, eIdx);
+                            const exampleLocalId =
+                              getExampleLocalId(example) || `${mIdx}-${eIdx}`;
                             const exampleVideoEntries = normalizeExampleVideos(example);
                             const hasVideo = exampleVideoEntries.length > 0;
-                            const activeExampleVideoIndex = Math.max(
-                              0,
-                              exampleVideoEntries.findIndex((_, videoIndex) =>
-                                activeVideoPreviewKey ===
-                                getExampleVideoKey(mIdx, eIdx, videoIndex)
-                              )
+                            const hasMultipleExampleVideos =
+                              exampleVideoEntries.length > 1;
+                            const activeExampleVideoIndex = getActivePreviewVideoIndex(
+                              mIdx,
+                              eIdx,
+                              exampleVideoEntries.length
                             );
                             const activeExampleVideoKey = hasVideo
                               ? getExampleVideoKey(
@@ -4242,10 +4968,72 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               mIdx,
                               eIdx
                             );
+                            const exampleVideoListKey = `${newExampleVideoKey}-list`;
+                            const isExampleVideoAddOptionsOpen =
+                              isVideoContextCardExpanded(exampleVideoListKey);
                             const isNewExampleVideoEditing =
                               videoEditor.key === newExampleVideoKey;
                             const newExampleVideoUploadError =
                               videoUploadErrors[newExampleVideoKey] || "";
+                            const isNewExampleVideoUploading =
+                              uploadingVideoKey === newExampleVideoKey;
+                            const isNewExampleVideoSaving =
+                              deletingVideoKey === newExampleVideoKey;
+                            const shouldShowExampleVideoAddOptions =
+                              isExampleVideoAddOptionsOpen ||
+                              isNewExampleVideoEditing ||
+                              isNewExampleVideoUploading ||
+                              isNewExampleVideoSaving ||
+                              Boolean(newExampleVideoUploadError);
+                            const isExampleBeingDragged =
+                              draggingExampleKey === exampleKey;
+                            const isExampleDragTarget =
+                              dragOverExampleKey === exampleKey &&
+                              draggingExampleKey !== exampleKey;
+                            const dragGesture = exampleGestureRef.current;
+                            const isDraggingInsideCurrentMeaning =
+                              Boolean(draggingExampleKey) &&
+                              dragGesture.meaningIndex === mIdx &&
+                              dragGesture.exampleIndex >= 0 &&
+                              dragGesture.overExampleIndex >= 0;
+                            const dragSourceIndex = isDraggingInsideCurrentMeaning
+                              ? dragGesture.exampleIndex
+                              : -1;
+                            const dragDestinationIndex = isDraggingInsideCurrentMeaning
+                              ? dragGesture.overExampleIndex
+                              : -1;
+                            const draggedExampleCardHeight =
+                              isDraggingInsideCurrentMeaning
+                                ? exampleCardRefs.current[draggingExampleKey]
+                                    ?.offsetHeight || 0
+                                : 0;
+                            const dragDisplacementDistance =
+                              draggedExampleCardHeight > 0
+                                ? draggedExampleCardHeight + 10
+                                : 78;
+                            let displacedOffsetY = 0;
+
+                            if (
+                              isDraggingInsideCurrentMeaning &&
+                              !isExampleBeingDragged
+                            ) {
+                              if (
+                                dragSourceIndex < dragDestinationIndex &&
+                                eIdx > dragSourceIndex &&
+                                eIdx <= dragDestinationIndex
+                              ) {
+                                displacedOffsetY = -dragDisplacementDistance;
+                              } else if (
+                                dragSourceIndex > dragDestinationIndex &&
+                                eIdx >= dragDestinationIndex &&
+                                eIdx < dragSourceIndex
+                              ) {
+                                displacedOffsetY = dragDisplacementDistance;
+                              }
+                            }
+
+                            const isExampleDisplacedDuringDrag =
+                              displacedOffsetY !== 0;
                             const exampleCardClassName = isExampleExpanded
                               ? "border-[#B7D7F8] bg-white ring-0 shadow-none dark:border-[#245A8F] dark:bg-[#1C1C1E] dark:ring-0 dark:shadow-none"
                               : shouldShowEmptyExamplePlaceholder
@@ -4254,16 +5042,34 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               ? "border-[#D2D2D7] bg-white dark:border-[#3A3A3C] dark:bg-[#1C1C1E]"
                               : "border-[#E5E5EA] bg-white dark:border-[#2C2C2E] dark:bg-[#1C1C1E]";
                             const exampleHeaderClassName = isExampleExpanded
-                              ? "group flex cursor-pointer items-center justify-between gap-3 border-b border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] px-4 py-2.5 transition-colors dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
+                              ? "group flex select-none cursor-grab active:cursor-grabbing items-center justify-between gap-3 border-b border-[#D6E8FA] bg-[linear-gradient(180deg,#FFFFFF_0%,#F7FAFF_100%)] px-4 py-2.5 transition-colors dark:border-[#244B72] dark:bg-[linear-gradient(180deg,#1D232C_0%,#181D24_100%)]"
                               : shouldShowEmptyExamplePlaceholder
-                              ? "group flex cursor-pointer items-center justify-between gap-3 border-b-0 bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
+                              ? "group flex select-none cursor-grab active:cursor-grabbing items-center justify-between gap-3 border-b-0 bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
                               : isExampleIncomplete
-                              ? "group flex cursor-pointer items-center justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
-                              : "group flex cursor-pointer items-center justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]";
+                              ? "group flex select-none cursor-grab active:cursor-grabbing items-center justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]"
+                              : "group flex select-none cursor-grab active:cursor-grabbing items-center justify-between gap-3 border-b border-[#E5E5EA] bg-white px-4 py-2.5 transition-colors hover:bg-[#F5F5F7] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:hover:bg-[#202024]";
+                            const exampleCardStyle = isExampleBeingDragged
+                              ? {
+                                  transform: `translate3d(${draggingExampleOffset.x}px, ${draggingExampleOffset.y}px, 0) scale(1.018)`,
+                                  transitionDuration: "0ms",
+                                }
+                              : isExampleDisplacedDuringDrag
+                              ? {
+                                  transform: `translate3d(0, ${displacedOffsetY}px, 0)`,
+                                  transitionProperty:
+                                    "transform, box-shadow, border-color, background-color",
+                                  transitionDuration: "190ms",
+                                  transitionTimingFunction:
+                                    "cubic-bezier(0.22, 1, 0.36, 1)",
+                                }
+                              : undefined;
 
                             return (
                               <div
-                                key={exampleKey}
+                                key={exampleLocalId}
+                                data-example-sort-card="true"
+                                data-meaning-index={mIdx}
+                                data-example-index={eIdx}
                                 ref={(element) => {
                                   if (element) {
                                     exampleCardRefs.current[exampleKey] = element;
@@ -4271,18 +5077,40 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     delete exampleCardRefs.current[exampleKey];
                                   }
                                 }}
-                                className={`overflow-hidden rounded-[20px] border shadow-none ring-1 ring-black/[0.02] transition-all duration-200 dark:ring-white/[0.04] ${exampleCardClassName} ${
+                                className={`overflow-hidden rounded-[20px] border shadow-none ring-1 ring-black/[0.02] transition-all duration-200 dark:ring-white/[0.04] ${
+                                  isExampleBeingDragged
+                                    ? "pointer-events-none relative z-30 opacity-95 shadow-[0_24px_52px_rgba(15,23,42,0.30)] ring-[#66B7FF] dark:ring-[#4EA6FF]"
+                                    : ""
+                                } ${
+                                  isExampleDragTarget
+                                    ? "relative border-[#7CBEFF] bg-[#F8FCFF] ring-[#66B7FF]/25 dark:border-[#5AAEFF] dark:bg-[#122134] dark:ring-[#4EA6FF]/25"
+                                    : ""
+                                } ${
+                                  isExampleDisplacedDuringDrag
+                                    ? "relative z-20 shadow-[0_12px_26px_rgba(15,23,42,0.09)]"
+                                    : ""
+                                } ${exampleCardClassName} ${
                                   recentlyAddedExampleKey === exampleKey && !isExampleIncomplete
                                     ? "manager-form-editor-card-created"
                                     : ""
                                 }`}
+                                style={exampleCardStyle}
                               >
                                 <div
                                   role="button"
                                   tabIndex={0}
-                                  onClick={() =>
-                                    toggleExampleExpanded(mIdx, eIdx)
+                                  onClick={(event) =>
+                                    handleExampleHeaderClick(event, mIdx, eIdx)
                                   }
+                                  onContextMenu={(event) =>
+                                    handleExampleHeaderContextMenu(event, mIdx, eIdx)
+                                  }
+                                  onPointerDown={(event) =>
+                                    handleExampleHeaderPointerDown(event, mIdx, eIdx)
+                                  }
+                                  onPointerMove={handleExampleHeaderPointerMove}
+                                  onPointerUp={handleExampleHeaderPointerUp}
+                                  onPointerCancel={handleExampleHeaderPointerCancel}
                                   onKeyDown={(event) => {
                                     if (
                                       event.key === "Enter" ||
@@ -4295,7 +5123,10 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                   className={exampleHeaderClassName}
                                   aria-expanded={isExampleExpanded}
                                 >
-                                  <div className="min-w-0 flex flex-1 items-center gap-2 text-left">
+                                  <div className="min-w-0 flex flex-1 items-center gap-2.5 text-left">
+                                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8E8E93] dark:text-[#8E8E93]">
+                                      <GripVertical className="h-3.5 w-3.5" />
+                                    </span>
                                     {isExampleEmpty ? (
                                       <span
                                         className="inline-flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-[#6E6E73] dark:text-[#D1D1D6]"
@@ -4315,7 +5146,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                           {eIdx + 1}
                                         </span>
                                         <span className="shrink-0 text-sm font-normal text-[#8E8E93] dark:text-[#8E8E93]">
-                                          —
+                                          -
                                         </span>
                                         <span
                                           className="min-w-0 truncate text-sm font-semibold text-[#1D1D1F] dark:text-[#F5F5F7]"
@@ -4327,10 +5158,14 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                     )}
                                   </div>
 
-                                  <div className="flex shrink-0 items-center gap-1.5 self-center">
+                                  <div
+                                    className="flex shrink-0 items-center gap-1.5 self-center"
+                                    data-example-header-control="true"
+                                  >
                                     {hasVideo ? (
                                       <VideoAttachedBadge className="h-7 w-7" />
                                     ) : null}
+
 
                                     {!shouldShowEmptyExamplePlaceholder ? (
                                       <button
@@ -4421,171 +5256,321 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
                                       {hasVideo ? (
                                         <div className="flex h-full self-stretch md:items-start">
-                                          <ExampleVideoPreview
-                                            video={videoValue}
-                                            thumbnail={thumbnailValue}
-                                            isActive={isPreviewActive}
-                                            onPlay={() =>
-                                              setActiveVideoPreviewKey(
-                                                activeExampleVideoKey
-                                              )
-                                            }
-                                            className="w-full md:w-[264px]"
-                                          />
+                                          <div className="w-full md:w-[264px]">
+                                            <ExampleVideoPreview
+                                              video={videoValue}
+                                              thumbnail={thumbnailValue}
+                                              isActive={isPreviewActive}
+                                              onPlay={() =>
+                                                setExamplePreviewVideoIndex(
+                                                  mIdx,
+                                                  eIdx,
+                                                  exampleVideoEntries.length,
+                                                  activeExampleVideoIndex
+                                                )
+                                              }
+                                              className="w-full md:w-[264px]"
+                                            />
+
+                                            {hasMultipleExampleVideos ? (
+                                              <div className="mt-2 flex items-center justify-between gap-2 rounded-full border border-[#E5E5EA] bg-white px-2.5 py-1.5 dark:border-[#3A3A3C] dark:bg-[#2C2C2E]">
+                                                <button
+                                                  type="button"
+                                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#6E6E73] transition-colors hover:bg-[#F5F5F7] dark:text-[#D1D1D6] dark:hover:bg-[#3A3A3C]"
+                                                  onClick={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    setExamplePreviewVideoIndex(
+                                                      mIdx,
+                                                      eIdx,
+                                                      exampleVideoEntries.length,
+                                                      activeExampleVideoIndex - 1
+                                                    );
+                                                  }}
+                                                  aria-label="Vídeo anterior"
+                                                >
+                                                  <ChevronRight className="h-4 w-4 rotate-180" />
+                                                </button>
+
+                                                <span className="text-[11px] font-semibold text-[#6E6E73] dark:text-[#D1D1D6]">
+                                                  {activeExampleVideoIndex + 1}/
+                                                  {exampleVideoEntries.length}
+                                                </span>
+
+                                                <button
+                                                  type="button"
+                                                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#6E6E73] transition-colors hover:bg-[#F5F5F7] dark:text-[#D1D1D6] dark:hover:bg-[#3A3A3C]"
+                                                  onClick={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    setExamplePreviewVideoIndex(
+                                                      mIdx,
+                                                      eIdx,
+                                                      exampleVideoEntries.length,
+                                                      activeExampleVideoIndex + 1
+                                                    );
+                                                  }}
+                                                  aria-label="Próximo vídeo"
+                                                >
+                                                  <ChevronRight className="h-4 w-4" />
+                                                </button>
+                                              </div>
+                                            ) : null}
+                                          </div>
                                         </div>
                                       ) : null}
                                     </div>
 
                                     <div className="mt-3 space-y-2">
-                                      {exampleVideoEntries.map((exampleVideoEntry, videoIndex) => {
-                                        const exampleVideoKey = getExampleVideoKey(
-                                          mIdx,
-                                          eIdx,
-                                          videoIndex
-                                        );
-                                        const currentVideoValue = normalizeText(
-                                          exampleVideoEntry?.video
-                                        );
-                                        const currentThumbnailValue = currentVideoValue
-                                          ? normalizeText(exampleVideoEntry?.thumbnail)
-                                          : "";
-                                        const isEditingExampleVideo =
-                                          videoEditor.key === exampleVideoKey;
-                                        const isUploadingExampleVideo =
-                                          uploadingVideoKey === exampleVideoKey;
-                                        const isDeletingExampleVideo =
-                                          deletingVideoKey === exampleVideoKey;
-                                        const exampleVideoUploadError =
-                                          videoUploadErrors[exampleVideoKey] || "";
-                                        const isCurrentPreviewActive =
-                                          activeVideoPreviewKey === exampleVideoKey;
-
-                                        return (
-                                          <VideoControlCard
-                                            key={exampleVideoKey}
-                                            title={`Vídeo do exemplo ${videoIndex + 1}`}
-                                            description={
-                                              hasMeaningVideo
-                                                ? "Se este exemplo não tiver vídeo próprio, ele usa o vídeo geral do significado."
-                                                : wordVideo
-                                                ? "Se este exemplo não tiver vídeo próprio, ele usa o vídeo geral da palavra."
-                                                : ""
-                                            }
-                                            emptyLabel={
-                                              hasMeaningVideo
-                                                ? "Usando vídeo geral do significado"
-                                                : wordVideo
-                                                ? "Usando vídeo geral da palavra"
-                                                : "Sem vídeo"
-                                            }
-                                            video={currentVideoValue}
-                                            thumbnail={currentThumbnailValue}
-                                            isEditing={isEditingExampleVideo}
-                                            editorValue={videoEditor.value}
-                                            uploadError={exampleVideoUploadError}
-                                            isUploading={isUploadingExampleVideo}
-                                            isDeleting={isDeletingExampleVideo}
-                                            isContextCollapsible
-                                            isContextExpanded={isVideoContextCardExpanded(exampleVideoKey)}
-                                            onToggleContext={() =>
-                                              toggleVideoContextCard(exampleVideoKey)
-                                            }
-                                            isPreviewActive={isCurrentPreviewActive}
-                                            showPreview={false}
-                                            showHeaderVideoAttachedIndicator={false}
-                                            mobileMinimalControls
-                                            removeButtonMode="mobile-icon"
-                                            promoteRemoveToHeader
-                                            layerIcon={<Clapperboard className="h-4 w-4" />}
-                                            addButtonLabel="Adicionar vídeo do exemplo"
-                                            changeButtonLabel="Trocar vídeo do exemplo"
-                                            saveButtonLabel="Salvar vídeo do exemplo"
-                                            onPlay={() =>
-                                              setActiveVideoPreviewKey(exampleVideoKey)
-                                            }
-                                            onOpenEditor={() =>
-                                              openVideoEditor(
-                                                exampleVideoKey,
-                                                currentVideoValue
-                                              )
-                                            }
-                                            onEditorChange={(value) =>
-                                              setVideoEditor((current) => ({
-                                                ...current,
-                                                value,
-                                              }))
-                                            }
-                                            onSave={() =>
-                                              void saveVideoFromEditor({
-                                                key: exampleVideoKey,
-                                                oldVideo: currentVideoValue,
-                                                onSuccess: ({
-                                                  video,
-                                                  thumbnail,
-                                                }) =>
-                                                  updateExampleVideoAt(
-                                                    mIdx,
-                                                    eIdx,
-                                                    videoIndex,
-                                                    {
-                                                      video,
-                                                      thumbnail,
-                                                    }
-                                                  ),
-                                              })
-                                            }
-                                            onCancel={closeVideoEditor}
-                                            onTriggerUpload={() =>
-                                              triggerVideoFilePicker(exampleVideoKey)
-                                            }
-                                            onRemove={() =>
-                                              void removeExampleVideoAt(
-                                                mIdx,
-                                                eIdx,
-                                                videoIndex
-                                              )
-                                            }
-                                            fileInputRef={(element) => {
+                                      {exampleVideoEntries.length > 0 ? (
+                                        <div className="rounded-[22px] border border-[#E5E5EA] bg-white p-4 shadow-none ring-1 ring-black/[0.025] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05]">
+                                          <input
+                                            type="file"
+                                            accept="video/*"
+                                            className="hidden"
+                                            ref={(element) => {
                                               if (element) {
-                                                fileInputsRef.current[exampleVideoKey] =
+                                                fileInputsRef.current[newExampleVideoKey] =
                                                   element;
                                               }
                                             }}
-                                            onFileChange={(event) => {
+                                            onChange={(event) => {
                                               const inputElement = event?.target;
-                                              const file =
-                                                inputElement?.files?.[0];
+                                              const file = inputElement?.files?.[0];
 
                                               if (inputElement) {
                                                 inputElement.value = "";
                                               }
 
                                               void handleVideoFileSelected({
-                                                key: exampleVideoKey,
+                                                key: newExampleVideoKey,
                                                 file,
                                                 scope: "example",
-                                                oldVideo: currentVideoValue,
-                                                onSuccess: ({
-                                                  video,
-                                                  thumbnail,
-                                                }) =>
-                                                  updateExampleVideoAt(
-                                                    mIdx,
-                                                    eIdx,
-                                                    videoIndex,
-                                                    {
-                                                      video,
-                                                      thumbnail,
-                                                    }
-                                                  ),
+                                                oldVideo: "",
+                                                onSuccess: ({ video, thumbnail }) =>
+                                                  appendExampleVideo(mIdx, eIdx, {
+                                                    video,
+                                                    thumbnail,
+                                                  }),
                                               });
                                             }}
-                                            uploadButtonText="Trocar por upload"
                                           />
-                                        );
-                                      })}
 
+                                          <div className="flex flex-row flex-wrap items-center justify-between gap-3 md:flex-row md:items-center md:justify-between">
+                                            <div
+                                              className={[
+                                                "flex min-w-0 items-center gap-2",
+                                                exampleVideoEntries.length === 1
+                                                  ? "flex-none flex-nowrap"
+                                                  : "flex-1 flex-wrap",
+                                                "md:flex-1 md:flex-wrap",
+                                              ].join(" ")}
+                                            >
+                                              {exampleVideoEntries.map((exampleVideoEntry, videoIndex) => {
+                                                const exampleVideoKey = getExampleVideoKey(
+                                                  mIdx,
+                                                  eIdx,
+                                                  videoIndex
+                                                );
+                                                const isDeletingExampleVideo =
+                                                  deletingVideoKey === exampleVideoKey;
 
+                                                return (
+                                                  <button
+                                                    key={exampleVideoKey}
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                      event.preventDefault();
+                                                      event.stopPropagation();
+                                                      void removeExampleVideoAt(
+                                                        mIdx,
+                                                        eIdx,
+                                                        videoIndex
+                                                      );
+                                                    }}
+                                                    disabled={isDeletingExampleVideo}
+                                                    className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#F2D7D5] px-3 py-1.5 text-[11px] font-semibold text-[#B42318] transition-colors hover:bg-[#FFF7F6] active:bg-[#FCEDEA] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#5A2521] dark:text-[#FF9F95] dark:hover:bg-[#2B1513]"
+                                                  >
+                                                    {isDeletingExampleVideo ? (
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                      <Trash2 className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {isDeletingExampleVideo
+                                                      ? `Removendo vídeo ${videoIndex + 1}`
+                                                      : `Remover vídeo ${videoIndex + 1}`}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+
+                                            <div
+                                              className={[
+                                                "flex shrink-0 flex-wrap items-center gap-2 md:justify-end",
+                                                exampleVideoEntries.length > 1
+                                                  ? "w-full justify-center pt-1 md:w-auto md:justify-end md:pt-0"
+                                                  : "justify-end",
+                                              ].join(" ")}
+                                            >
+                                              {shouldShowExampleVideoAddOptions && !isNewExampleVideoEditing ? (
+                                                <>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      openVideoEditor(
+                                                        newExampleVideoKey,
+                                                        ""
+                                                      )
+                                                    }
+                                                    disabled={isNewExampleVideoSaving}
+                                                    className="inline-flex min-h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C] md:min-w-0"
+                                                  >
+                                                    <Link2 className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
+                                                    Link
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      triggerVideoFilePicker(
+                                                        newExampleVideoKey
+                                                      )
+                                                    }
+                                                    disabled={
+                                                      isNewExampleVideoUploading ||
+                                                      isNewExampleVideoSaving
+                                                    }
+                                                    className="inline-flex min-h-8 min-w-[88px] items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C] md:min-w-0"
+                                                  >
+                                                    {isNewExampleVideoUploading ? (
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                      <Upload className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {isNewExampleVideoUploading
+                                                      ? "Enviando..."
+                                                      : "Upload"}
+                                                  </button>
+                                                </>
+                                              ) : null}
+
+                                              <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                  event.preventDefault();
+                                                  event.stopPropagation();
+                                                  resetActiveVideoPreview();
+                                                  setExpandedVideoContextCards((current) => ({
+                                                    ...current,
+                                                    [exampleVideoListKey]: true,
+                                                  }));
+                                                }}
+                                                className={[
+                                                  "inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]",
+                                                  exampleVideoEntries.length === 1
+                                                    ? "min-w-[142px]"
+                                                    : "min-w-[160px]",
+                                                  "md:min-w-0",
+                                                ].join(" ")}
+                                                aria-expanded={shouldShowExampleVideoAddOptions}
+                                              >
+                                                <Plus className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
+                                                Adicionar mais vídeo
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          {isNewExampleVideoEditing ? (
+                                            <div className="mt-3 flex justify-end">
+                                              <div className="w-full max-w-[360px] space-y-2 rounded-[18px] border border-[#E5E5EA] bg-white p-3 dark:border-[#2C2C2E] dark:bg-[#1C1C1E]">
+                                                <textarea
+                                                  value={videoEditor.value}
+                                                  onChange={(event) =>
+                                                    setVideoEditor((current) => ({
+                                                      ...current,
+                                                      value: event.target.value,
+                                                    }))
+                                                  }
+                                                  placeholder="Cole link, iframe, embed ou BBCode do vídeo"
+                                                  rows={2}
+                                                  spellCheck={false}
+                                                  className="w-full resize-y rounded-[14px] border border-[#D2D2D7] bg-white px-3 py-2.5 text-xs text-[#1D1D1F] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
+                                                />
+
+                                                <div className="flex flex-wrap justify-end gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      void saveVideoFromEditor({
+                                                        key: newExampleVideoKey,
+                                                        oldVideo: "",
+                                                        onSuccess: ({ video, thumbnail }) =>
+                                                          appendExampleVideo(mIdx, eIdx, {
+                                                            video,
+                                                            thumbnail,
+                                                          }),
+                                                      })
+                                                    }
+                                                    disabled={
+                                                      !videoEditor.value.trim() ||
+                                                      isNewExampleVideoSaving
+                                                    }
+                                                    className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full bg-[#0071E3] px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#0077ED] active:bg-[#006EDB] disabled:cursor-not-allowed disabled:opacity-55 dark:bg-[#0A84FF] dark:hover:bg-[#2290FF]"
+                                                  >
+                                                    {isNewExampleVideoSaving ? (
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {isNewExampleVideoSaving
+                                                      ? "Salvando..."
+                                                      : "Anexar"}
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      triggerVideoFilePicker(
+                                                        newExampleVideoKey
+                                                      )
+                                                    }
+                                                    disabled={
+                                                      isNewExampleVideoUploading ||
+                                                      isNewExampleVideoSaving
+                                                    }
+                                                    className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                                                  >
+                                                    {isNewExampleVideoUploading ? (
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                      <Upload className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {isNewExampleVideoUploading
+                                                      ? "Enviando..."
+                                                      : "Upload"}
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={closeVideoEditor}
+                                                    disabled={isNewExampleVideoSaving}
+                                                    className="inline-flex min-h-8 items-center justify-center rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                                                  >
+                                                    Cancelar
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ) : null}
+
+                                          {newExampleVideoUploadError ? (
+                                            <div className="mt-3 flex w-full max-w-[360px] gap-2 rounded-[14px] border border-[#F2D7D5] bg-[#FFF7F6] px-3 py-2 text-[11px] font-medium leading-relaxed text-[#B42318] dark:border-[#5A2521] dark:bg-[#2B1513] dark:text-[#FF9F95] md:ml-auto">
+                                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                              <p>{newExampleVideoUploadError}</p>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
 
                                       {exampleVideoEntries.length === 0 ? (
                                         <>
@@ -4621,63 +5606,142 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                             }}
                                           />
 
-                                          <AppendVideoPanel
-                                          title="Adicionar vídeo ao exemplo"
-                                          description="Este vídeo será usado somente neste exemplo."
-                                          helperLabel=""
-                                          countLabel="0 vídeo anexado"
-                                          isEditing={isNewExampleVideoEditing}
-                                          editorValue={videoEditor.value}
-                                          uploadError={newExampleVideoUploadError}
-                                          isUploading={
-                                            uploadingVideoKey ===
-                                            newExampleVideoKey
-                                          }
-                                          isDeleting={
-                                            deletingVideoKey ===
-                                            newExampleVideoKey
-                                          }
-                                          onOpenEditor={() =>
-                                            openVideoEditor(
-                                              newExampleVideoKey,
-                                              ""
-                                            )
-                                          }
-                                          onEditorChange={(value) =>
-                                            setVideoEditor((current) => ({
-                                              ...current,
-                                              value,
-                                            }))
-                                          }
-                                          onSave={() =>
-                                            void saveVideoFromEditor({
-                                              key: newExampleVideoKey,
-                                              oldVideo: "",
-                                              onSuccess: ({
-                                                video,
-                                                thumbnail,
-                                              }) =>
-                                                appendExampleVideo(mIdx, eIdx, {
-                                                  video,
-                                                  thumbnail,
-                                                }),
-                                            })
-                                          }
-                                          onCancel={closeVideoEditor}
-                                          onTriggerUpload={() =>
-                                            triggerVideoFilePicker(
-                                              newExampleVideoKey
-                                            )
-                                          }
-                                          addButtonLabel="Adicionar por link"
-                                          uploadButtonLabel="Enviar arquivo"
-                                          saveButtonLabel="Anexar ao exemplo"
-                                          compactInfoHeader
-                                        />
+                                          <div className="rounded-[22px] border border-[#E5E5EA] bg-white p-4 shadow-none ring-1 ring-black/[0.025] dark:border-[#2C2C2E] dark:bg-[#1C1C1E] dark:ring-white/[0.05]">
+                                            {isNewExampleVideoEditing ? (
+                                              <div className="ml-auto w-full max-w-[420px] space-y-2 rounded-[18px] border border-[#E5E5EA] bg-white p-3 dark:border-[#2C2C2E] dark:bg-[#1C1C1E]">
+                                                <textarea
+                                                  value={videoEditor.value}
+                                                  onChange={(event) =>
+                                                    setVideoEditor((current) => ({
+                                                      ...current,
+                                                      value: event.target.value,
+                                                    }))
+                                                  }
+                                                  placeholder="Cole link, iframe, embed ou BBCode do vídeo"
+                                                  rows={2}
+                                                  spellCheck={false}
+                                                  className="w-full resize-y rounded-[14px] border border-[#D2D2D7] bg-white px-3 py-2.5 text-xs text-[#1D1D1F] transition-all placeholder:text-[#86868B] focus:border-[#0071E3] focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#3A3A3C] dark:bg-[#111113] dark:text-[#F5F5F7] dark:placeholder:text-[#8E8E93] dark:focus:border-[#0A84FF] dark:focus:ring-[#0A84FF]/20"
+                                                />
+
+                                                <div className="flex flex-wrap justify-end gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      void saveVideoFromEditor({
+                                                        key: newExampleVideoKey,
+                                                        oldVideo: "",
+                                                        onSuccess: ({ video, thumbnail }) =>
+                                                          appendExampleVideo(mIdx, eIdx, {
+                                                            video,
+                                                            thumbnail,
+                                                          }),
+                                                      })
+                                                    }
+                                                    disabled={
+                                                      !videoEditor.value.trim() ||
+                                                      isNewExampleVideoSaving
+                                                    }
+                                                    className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full bg-[#0071E3] px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#0077ED] active:bg-[#006EDB] disabled:cursor-not-allowed disabled:opacity-55 dark:bg-[#0A84FF] dark:hover:bg-[#2290FF]"
+                                                  >
+                                                    {isNewExampleVideoSaving ? (
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {isNewExampleVideoSaving
+                                                      ? "Salvando..."
+                                                      : "Anexar"}
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      triggerVideoFilePicker(
+                                                        newExampleVideoKey
+                                                      )
+                                                    }
+                                                    disabled={
+                                                      isNewExampleVideoUploading ||
+                                                      isNewExampleVideoSaving
+                                                    }
+                                                    className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                                                  >
+                                                    {isNewExampleVideoUploading ? (
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                      <Upload className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {isNewExampleVideoUploading
+                                                      ? "Enviando..."
+                                                      : "Enviar arquivo"}
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={closeVideoEditor}
+                                                    disabled={isNewExampleVideoSaving}
+                                                    className="inline-flex min-h-8 items-center justify-center rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                                                  >
+                                                    Cancelar
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                                <div className="inline-flex min-w-0 items-center gap-2 text-[11px] font-semibold text-[#86868B] dark:text-[#8E8E93]">
+                                                  <VideoAttachmentGlyph className="h-4 w-4 shrink-0" />
+                                                  <span>Nenhum vídeo anexado</span>
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      openVideoEditor(newExampleVideoKey, "")
+                                                    }
+                                                    disabled={isNewExampleVideoSaving}
+                                                    className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                                                  >
+                                                    <Link2 className="h-3.5 w-3.5 text-[#0071E3] dark:text-[#0A84FF]" />
+                                                    Adicionar por link
+                                                  </button>
+
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      triggerVideoFilePicker(
+                                                        newExampleVideoKey
+                                                      )
+                                                    }
+                                                    disabled={
+                                                      isNewExampleVideoUploading ||
+                                                      isNewExampleVideoSaving
+                                                    }
+                                                    className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border border-[#D2D2D7] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] active:bg-[#EDEDF0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#3A3A3C] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                                                  >
+                                                    {isNewExampleVideoUploading ? (
+                                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                      <Upload className="h-3.5 w-3.5" />
+                                                    )}
+                                                    {isNewExampleVideoUploading
+                                                      ? "Enviando..."
+                                                      : "Enviar arquivo"}
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {newExampleVideoUploadError ? (
+                                              <div className="mt-3 flex w-full max-w-[420px] gap-2 rounded-[14px] border border-[#F2D7D5] bg-[#FFF7F6] px-3 py-2 text-[11px] font-medium leading-relaxed text-[#B42318] dark:border-[#5A2521] dark:bg-[#2B1513] dark:text-[#FF9F95] md:ml-auto">
+                                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                                <p>{newExampleVideoUploadError}</p>
+                                              </div>
+                                            ) : null}
+                                          </div>
                                         </>
                                       ) : null}
-                                    </div>
-                                  </div>
+                                    </div>                                  </div>
                                 ) : null}
                               </div>
                             );
@@ -4735,7 +5799,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                 removeButtonMode="mobile-icon"
                                 layerIcon={<Clapperboard className="h-4 w-4" />}
                                 addButtonLabel="Adicionar vídeo do significado"
-                                changeButtonLabel="Trocar vídeo do significado"
                                 saveButtonLabel="Salvar vídeo do significado"
                                 onPlay={() =>
                                   setActiveVideoPreviewKey(meaningVideoKey)
@@ -4801,7 +5864,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                                       }),
                                   });
                                 }}
-                                uploadButtonText="Trocar por upload"
+                                uploadButtonText="Enviar arquivo"
                               />
                             );
                           })}
@@ -4832,7 +5895,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                               removeButtonMode="mobile-icon"
                               layerIcon={<Clapperboard className="h-4 w-4" />}
                               addButtonLabel="Adicionar vídeo do significado"
-                              changeButtonLabel="Trocar vídeo do significado"
                               saveButtonLabel="Anexar vídeo do significado"
                               helperText="Este espaço fica vazio quando o significado usa o vídeo geral da palavra/frase ou quando os exemplos têm seus próprios vídeos."
                               onPlay={() => undefined}
@@ -5089,7 +6151,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                   removeButtonMode="mobile-icon"
                   layerIcon={<Clapperboard className="h-4 w-4" />}
                   addButtonLabel="Adicionar vídeo geral"
-                  changeButtonLabel="Trocar vídeo geral"
                   saveButtonLabel={
                     currentWordVideoValue
                       ? "Salvar vídeo geral"
@@ -5150,7 +6211,7 @@ export default function ManagerForm({ item, onBack, onSaved }) {
                     });
                   }}
                   uploadButtonText={
-                    currentWordVideoValue ? "Trocar por upload" : "Enviar arquivo"
+                    "Enviar arquivo"
                   }
                 />
               </section>
@@ -5182,6 +6243,33 @@ export default function ManagerForm({ item, onBack, onSaved }) {
 
     </div>
 
+      {exampleActionMenu ? (
+        <div className="fixed inset-0 z-[150]">
+          <div
+            data-example-action-menu="true"
+            className="absolute min-w-[180px] overflow-hidden rounded-xl border border-[#D2D2D7] bg-white p-1 shadow-[0_16px_40px_rgba(15,23,42,0.22)] dark:border-[#3A3A3C] dark:bg-[#1C1C1E]"
+            style={{
+              left: `${exampleActionMenu.x}px`,
+              top: `${exampleActionMenu.y}px`,
+            }}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7] dark:text-[#F5F5F7] dark:hover:bg-[#2C2C2E]"
+              onClick={() =>
+                duplicateExample(
+                  exampleActionMenu.meaningIndex,
+                  exampleActionMenu.exampleIndex
+                )
+              }
+            >
+              <Copy className="h-4 w-4 text-[#0071E3] dark:text-[#0A84FF]" />
+              Duplicar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <UnsavedChangesModal
         open={showUnsavedChangesModal}
         onClose={handleCancelLeaveWithoutSaving}
@@ -5190,3 +6278,6 @@ export default function ManagerForm({ item, onBack, onSaved }) {
     </>
   );
 }
+
+
+

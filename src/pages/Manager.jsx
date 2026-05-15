@@ -28,6 +28,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+const VOCABULARY_SELECT_COLUMNS =
+  "id, user_id, term, pronunciation, meanings, stats, created_at, updated_at";
+
 const getR2DeleteApiUrl = () => {
   const customUrl = import.meta.env.VITE_R2_DELETE_API_URL;
 
@@ -500,7 +503,7 @@ export default function Manager() {
 
       const { data, error } = await supabase
         .from("vocabulary")
-        .select("*")
+        .select(VOCABULARY_SELECT_COLUMNS)
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
 

@@ -10,6 +10,9 @@ import {
   setCachedVocabularyRows,
 } from "../lib/vocabularyCache";
 
+const VOCABULARY_CACHE_SELECT_COLUMNS =
+  "id, user_id, term, pronunciation, meanings, stats, created_at, updated_at";
+
 export default function Home() {
   const { user, navigateToLogin } = useAuth();
 
@@ -22,29 +25,11 @@ export default function Home() {
 
   useEffect(() => {
     let isMounted = true;
-    let warmCacheSchedule = null;
     const statsAbortController =
-      typeof AbortController !== "undefined" ? new AbortController() : null;
-    const warmCacheAbortController =
       typeof AbortController !== "undefined" ? new AbortController() : null;
 
     const game = updateStreak();
     checkStreakMedals();
-
-    const clearWarmCacheSchedule = () => {
-      if (!warmCacheSchedule || typeof window === "undefined") return;
-
-      if (
-        warmCacheSchedule.kind === "idle" &&
-        typeof window.cancelIdleCallback === "function"
-      ) {
-        window.cancelIdleCallback(warmCacheSchedule.handle);
-      } else {
-        window.clearTimeout(warmCacheSchedule.handle);
-      }
-
-      warmCacheSchedule = null;
-    };
 
     const getCounters = (rows) => {
       const safeRows = Array.isArray(rows) ? rows : [];
@@ -80,8 +65,6 @@ export default function Home() {
       return () => {
         isMounted = false;
         statsAbortController?.abort();
-        warmCacheAbortController?.abort();
-        clearWarmCacheSchedule();
       };
     }
 
@@ -95,12 +78,19 @@ export default function Home() {
       });
     }
 
-    const refreshStats = async () => {
+    const refreshStats = async ({ includeVocabularyPayload = false } = {}) => {
       try {
         let query = supabase
           .from("vocabulary")
-          .select("id, stats")
+          .select(
+            includeVocabularyPayload
+              ? VOCABULARY_CACHE_SELECT_COLUMNS
+              : "id, stats"
+          )
           .eq("user_id", user.id);
+        if (includeVocabularyPayload) {
+          query = query.order("updated_at", { ascending: false });
+        }
         if (statsAbortController) {
           query = query.abortSignal(statsAbortController.signal);
         }
@@ -110,7 +100,14 @@ export default function Home() {
         if (error) throw error;
         if (!isMounted) return;
 
-        applyStats(getCounters(data));
+        const safeRows = Array.isArray(data) ? data : [];
+        applyStats(getCounters(safeRows));
+
+        if (includeVocabularyPayload) {
+          setCachedVocabularyRows(user.id, safeRows, {
+            deferPersist: true,
+          });
+        }
       } catch (error) {
         console.error("Erro ao carregar dados da Home:", error);
 
@@ -123,54 +120,13 @@ export default function Home() {
       }
     };
 
-    const warmVocabularyCache = async () => {
-      if (!isMounted || Array.isArray(cachedRows)) return;
-
-      try {
-        let query = supabase
-          .from("vocabulary")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("updated_at", { ascending: false });
-        if (warmCacheAbortController) {
-          query = query.abortSignal(warmCacheAbortController.signal);
-        }
-
-        const { data, error } = await query;
-
-        if (error) throw error;
-        if (!isMounted) return;
-
-        const safeVocab = Array.isArray(data) ? data : [];
-        setCachedVocabularyRows(user.id, safeVocab, {
-          deferPersist: true,
-        });
-      } catch (error) {
-        console.error("Erro ao pré-carregar vocabulário na Home:", error);
-      }
-    };
-
-    refreshStats();
-
-    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
-      const handle = window.requestIdleCallback(() => {
-        warmVocabularyCache();
-      }, { timeout: 850 });
-      warmCacheSchedule = { kind: "idle", handle };
-    } else if (typeof window !== "undefined") {
-      const handle = window.setTimeout(() => {
-        warmVocabularyCache();
-      }, 220);
-      warmCacheSchedule = { kind: "timeout", handle };
-    } else {
-      warmVocabularyCache();
-    }
+    refreshStats({
+      includeVocabularyPayload: !Array.isArray(cachedRows),
+    });
 
     return () => {
       isMounted = false;
       statsAbortController?.abort();
-      warmCacheAbortController?.abort();
-      clearWarmCacheSchedule();
     };
   }, [user?.id]);
 

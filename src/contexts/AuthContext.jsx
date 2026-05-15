@@ -69,12 +69,16 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const {
-        data: { user: authUser },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) throw userError;
+      let authUser = session.user;
+      if (!authUser?.id) {
+        const {
+          data: { user: fallbackUser },
+          error: userError,
+        } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        authUser = fallbackUser;
+      }
+      if (!authUser) throw new Error('UsuÃ¡rio autenticado nÃ£o encontrado');
 
       const normalizedUser = normalizeUser(authUser);
 

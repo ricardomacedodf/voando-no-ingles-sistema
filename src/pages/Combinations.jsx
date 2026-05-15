@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Check, Volume2, VolumeX } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
@@ -42,6 +42,8 @@ const INCORRECT_XP_DELTA = -2;
 const COMBINATIONS_POINTER_SFX_GUARD_MS = 700;
 const COMBINATIONS_MATCH_RESULT_GUARD_MS = 250;
 const COMBINATIONS_MOBILE_BREAKPOINT = 767;
+const VOCABULARY_SELECT_COLUMNS =
+  "id, user_id, term, pronunciation, meanings, stats, created_at, updated_at";
 
 const NON_SELECTABLE_UI_STYLE = {
   userSelect: "none",
@@ -203,6 +205,10 @@ function shuffleRightItemsAvoidingAlignedPairs(leftItems, rightCandidates) {
 export default function Combinations() {
   const { user } = useAuth();
   const location = useLocation();
+  const focusFilter = useMemo(
+    () => new URLSearchParams(location.search).get("focus"),
+    [location.search]
+  );
 
   const [allVocab, setAllVocab] = useState([]);
   const [pool, setPool] = useState([]);
@@ -256,12 +262,15 @@ export default function Combinations() {
 
   const buildVocabularyFromRows = (rows) => {
     const reviewPreferences = loadReviewPreferences();
-    const focus = new URLSearchParams(location.search).get("focus");
     const normalizedItems = Array.isArray(rows)
       ? rows.map((row) => mapVocabularyRow(row, reviewPreferences))
       : [];
 
-    const prioritized = getStudyQueue(normalizedItems, reviewPreferences, focus).items;
+    const prioritized = getStudyQueue(
+      normalizedItems,
+      reviewPreferences,
+      focusFilter
+    ).items;
     if (prioritized.length >= 2 || normalizedItems.length < 2) {
       return prioritized;
     }
@@ -274,7 +283,7 @@ export default function Combinations() {
 
     const { data, error } = await supabase
       .from("vocabulary")
-      .select("*")
+      .select(VOCABULARY_SELECT_COLUMNS)
       .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
 
@@ -355,7 +364,7 @@ export default function Combinations() {
     return () => {
       isMounted = false;
     };
-  }, [user?.id, location.search]);
+  }, [user?.id, focusFilter]);
 
   useEffect(() => {
     if (pool.length === 0) return;
@@ -1054,6 +1063,7 @@ export default function Combinations() {
                 allMeanings={focusedCard.meanings}
                 activeMeaning={focusedMeaning}
                 titleTerm={focusedCard.term}
+                pronunciation={focusedCard.pronunciation}
                 variant="flashcard"
                 panelScope="flashcards"
                 onClose={() => setShowExamples(false)}

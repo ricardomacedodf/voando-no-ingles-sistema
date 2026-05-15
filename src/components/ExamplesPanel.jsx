@@ -1,4 +1,4 @@
-﻿import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -590,12 +590,23 @@ const normalizeExampleThumbnail = (example) => {
   return normalizeText(rawThumbnail);
 };
 
+const normalizeExampleVideos = (example) => {
+  const fallbackThumbnail = normalizeExampleThumbnail(example);
+
+  return dedupeVideoEntries([
+    ...normalizeVideoList(example?.exampleVideos, fallbackThumbnail),
+    ...normalizeVideoList(example?.example_videos, fallbackThumbnail),
+    ...normalizeVideoList(normalizeExampleVideo(example), fallbackThumbnail),
+  ]);
+};
+
 const hasExampleContent = (example) => {
   const sentence = normalizeExampleText(example?.sentence);
   const translation = normalizeExampleText(example?.translation);
   const video = normalizeExampleVideo(example);
+  const videos = normalizeExampleVideos(example);
 
-  return Boolean(sentence || translation || video);
+  return Boolean(sentence || translation || video || videos.length > 0);
 };
 
 const hasMeaningOrExampleVideo = (meanings) => {
@@ -608,7 +619,10 @@ const hasMeaningOrExampleVideo = (meanings) => {
 
     if (!Array.isArray(meaning?.examples)) return false;
 
-    return meaning.examples.some((example) => normalizeExampleVideo(example));
+    return meaning.examples.some(
+      (example) =>
+        normalizeExampleVideo(example) || normalizeExampleVideos(example).length > 0
+    );
   });
 };
 
@@ -1029,7 +1043,7 @@ function ExampleVideoThumbnail({
   onClick,
   onSwipeLeft,
   onSwipeRight,
-  title = "VÃ­deo do exemplo",
+  title = "Vídeo do exemplo",
   isOpen = false,
   isMobile = false,
   className = "h-[84px]",
@@ -1765,9 +1779,9 @@ export default function ExamplesPanel({
     .join("||");
 
 
-  // VÃ­deo geral tem prioridade visual: se existir vÃ­deo global/geral,
-  // ele fica no topo e os vÃ­deos especÃ­ficos dos significados/exemplos
-  // nÃ£o sÃ£o renderizados como carrossÃ©is dentro dos blocos.
+  // Vídeo geral tem prioridade visual: se existir vídeo global/geral,
+  // ele fica no topo e os vídeos específicos dos significados/exemplos
+  // não são renderizados como carrosséis dentro dos blocos.
   const shouldShowGlobalWordVideoOnTop = Boolean(wordVideoSources.length > 0);
   const shouldShowSpecificVideosInsideMeanings = !shouldShowGlobalWordVideoOnTop;
 
@@ -1777,6 +1791,26 @@ export default function ExamplesPanel({
     const meaningThumbnail = normalizeMeaningThumbnail(entry);
 
     const rawExamples = Array.isArray(entry?.examples) ? entry.examples : [];
+    const normalizedExamples = rawExamples
+      .map((example) => {
+        const exampleVideos = normalizeExampleVideos(example);
+        const firstExampleVideo = exampleVideos[0] || {
+          video: "",
+          thumbnail: "",
+        };
+        const primaryVideo = normalizeText(firstExampleVideo.video);
+
+        return {
+          sentence: normalizeExampleText(example?.sentence),
+          translation: normalizeExampleText(example?.translation),
+          video: primaryVideo,
+          thumbnail: primaryVideo
+            ? normalizeText(firstExampleVideo.thumbnail)
+            : "",
+          exampleVideos,
+        };
+      })
+      .filter(hasExampleContent);
 
     const topVideos = [
       meaningVideo
@@ -1788,24 +1822,35 @@ export default function ExamplesPanel({
             level: "meaning",
           }
         : null,
-      ...rawExamples
-        .map((example, exampleIndex) => {
-          const exampleVideo = normalizeExampleVideo(example);
+      ...normalizedExamples
+        .flatMap((example, exampleIndex) => {
+          const safeVideos = Array.isArray(example?.exampleVideos)
+            ? example.exampleVideos
+            : [];
 
-          if (!exampleVideo) return null;
+          return safeVideos.map((videoEntry, videoIndex) => {
+            const videoValue = normalizeText(videoEntry?.video);
 
-          return {
-            video: exampleVideo,
-            thumbnail: normalizeExampleThumbnail(example),
-            key: `${
-              normalizedMeaningText || "meaning"
-            }-${index}-example-${exampleIndex}`,
-            level: "example",
-            title:
+            if (!videoValue) return null;
+
+            const baseTitle =
               normalizeExampleText(example?.sentence) ||
               normalizedMeaningText ||
-              "VÃ­deo do exemplo",
-          };
+              "Vídeo do exemplo";
+            const hasSequence = safeVideos.length > 1;
+
+            return {
+              video: videoValue,
+              thumbnail: normalizeText(videoEntry?.thumbnail),
+              key: `${
+                normalizedMeaningText || "meaning"
+              }-${index}-example-${exampleIndex}-video-${videoIndex}`,
+              level: "example",
+              title: hasSequence
+                ? `${baseTitle} (${videoIndex + 1}/${safeVideos.length})`
+                : baseTitle,
+            };
+          });
         })
         .filter(Boolean),
     ].filter(Boolean);
@@ -1818,14 +1863,7 @@ export default function ExamplesPanel({
       video: meaningVideo,
       thumbnail: meaningThumbnail,
       topVideos,
-      examples: rawExamples
-        .map((example) => ({
-          sentence: normalizeExampleText(example?.sentence),
-          translation: normalizeExampleText(example?.translation),
-          video: normalizeExampleVideo(example),
-          thumbnail: normalizeExampleThumbnail(example),
-        }))
-        .filter(hasExampleContent),
+      examples: normalizedExamples,
     };
   });
 
@@ -3192,7 +3230,7 @@ export default function ExamplesPanel({
                 title:
                   index === 0
                     ? titleValue
-                    : `${titleValue} â€” vÃ­deo geral ${index + 1}`,
+                    : `${titleValue} — vídeo geral ${index + 1}`,
               })),
               groupKey: "global-word-video-group",
               attachContextBelow: true,
@@ -3759,7 +3797,7 @@ export default function ExamplesPanel({
           }
           role="dialog"
           aria-modal="true"
-          aria-label="VÃ­deo do exemplo"
+          aria-label="Vídeo do exemplo"
           onClick={closeMobileVideo}
         >
           <div
@@ -3891,3 +3929,4 @@ export default function ExamplesPanel({
     </>
   );
 }
+
