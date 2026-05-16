@@ -39,6 +39,9 @@ const COLORS = {
   fresh: "#9aa4b3",
 };
 
+const RECENT_NEW_WORDS_WINDOW_DAYS = 2;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 const PROGRESS_PAGE_CSS = `
 @media (min-width: 641px) {
   @supports selector(body:has(.vni-progress-page)) {
@@ -239,7 +242,7 @@ const PROGRESS_PAGE_CSS = `
 
 .vni-progress-percent-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 11px;
   color: #e8edf5;
   font-size: 11px;
@@ -269,7 +272,7 @@ const PROGRESS_PAGE_CSS = `
 
 .vni-progress-legend {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
   color: #aab4c2;
@@ -1330,11 +1333,11 @@ html:not(.dark) body:not(.dark) #root:not(.dark) .vni-progress-reset-modal-butto
   }
 
   .vni-progress-legend {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .vni-progress-legend-item {
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .vni-progress-summary-item {
@@ -1420,11 +1423,25 @@ function getCreatedTimestamp(item) {
   ]);
 }
 
-function getLatestAddedVocabularyItems(items = [], limit = 6) {
-  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 6;
+function getRecentNewVocabularyItems(
+  items = [],
+  { limit, daysWindow = RECENT_NEW_WORDS_WINDOW_DAYS } = {}
+) {
+  const now = Date.now();
+  const safeWindowDays = Math.max(
+    1,
+    Math.floor(Number(daysWindow) || RECENT_NEW_WORDS_WINDOW_DAYS)
+  );
+  const windowMs = safeWindowDays * DAY_IN_MS;
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : null;
 
-  return (Array.isArray(items) ? items : [])
-    .filter((item) => String(item?.term || "").trim().length > 0)
+  const recentItems = (Array.isArray(items) ? items : [])
+    .filter((item) => {
+      if (String(item?.term || "").trim().length <= 0) return false;
+      const createdTimestamp = getCreatedTimestamp(item);
+      if (!Number.isFinite(createdTimestamp) || createdTimestamp <= 0) return false;
+      return now - createdTimestamp <= windowMs;
+    })
     .sort((a, b) => {
       const createdDiff = getCreatedTimestamp(b) - getCreatedTimestamp(a);
       if (createdDiff !== 0) return createdDiff;
@@ -1435,8 +1452,9 @@ function getLatestAddedVocabularyItems(items = [], limit = 6) {
       if (updatedDiff !== 0) return updatedDiff;
 
       return String(b?.id || "").localeCompare(String(a?.id || ""));
-    })
-    .slice(0, safeLimit);
+    });
+
+  return safeLimit ? recentItems.slice(0, safeLimit) : recentItems;
 }
 
 function getDominatedTimestamp(item) {
@@ -1799,25 +1817,54 @@ export default function Progress() {
     [progressData]
   );
 
-  const percentages = useMemo(
-    () => ({
-      dominated: getPercent(categoryValues.dominated, categoryValues.total),
-      nearMastery: getPercent(categoryValues.nearMastery, categoryValues.total),
-      reinforce: getPercent(categoryValues.reinforce, categoryValues.total),
-      fresh: getPercent(categoryValues.fresh, categoryValues.total),
-    }),
-    [categoryValues]
-  );
+  const topBarCategories = useMemo(() => {
+    const groups = [
+      {
+        key: "nearMastery",
+        label: "Perto de dominar",
+        count: categoryValues.nearMastery,
+        color: COLORS.nearMastery,
+        priority: 0,
+      },
+      {
+        key: "reinforce",
+        label: "Precisam de reforço",
+        count: categoryValues.reinforce,
+        color: COLORS.reinforce,
+        priority: 1,
+      },
+      {
+        key: "dominated",
+        label: "Dominadas",
+        count: categoryValues.dominated,
+        color: COLORS.dominated,
+        priority: 2,
+      },
+    ];
+    const totalMainGroups = groups.reduce((sum, group) => sum + group.count, 0);
+
+    return groups
+      .slice()
+      .sort((a, b) => {
+        const countDiff = b.count - a.count;
+        if (countDiff !== 0) return countDiff;
+        return a.priority - b.priority;
+      })
+      .map((group) => ({
+        ...group,
+        percent: getPercent(group.count, totalMainGroups),
+      }));
+  }, [categoryValues.dominated, categoryValues.nearMastery, categoryValues.reinforce]);
+
+  const topBarLeadingCategory = topBarCategories[0] || null;
 
   const masteryStreakTarget = 10;
 
   const orderedNearMasteryWords = progressData.learningWords || [];
   const orderedDominatedWords = progressData.dominatedWords || [];
   const orderedNeedsAttentionWords = progressData.needsAttentionWords || [];
-  const orderedNewWords = useMemo(
-    () => getLatestAddedVocabularyItems(vocabItems, 6),
-    [vocabItems]
-  );
+  const recentNewWords = useMemo(() => getRecentNewVocabularyItems(vocabItems), [vocabItems]);
+  const orderedNewWords = useMemo(() => recentNewWords.slice(0, 6), [recentNewWords]);
 
   if (loading) {
     return (
@@ -1903,78 +1950,47 @@ export default function Progress() {
 
                 <div>
                   <div className="vni-progress-percent-row">
-                    <span>{formatPercent(percentages.nearMastery)}</span>
-                    <span>{formatPercent(percentages.reinforce)}</span>
-                    <span>{formatPercent(percentages.dominated)}</span>
-                    <span>{formatPercent(percentages.fresh)}</span>
+                    {topBarCategories.map((category) => (
+                      <span key={`percent-${category.key}`}>
+                        {formatPercent(category.percent)}
+                      </span>
+                    ))}
                   </div>
 
                   <div className="vni-progress-bar">
                     <div className="vni-progress-bar-fill">
-                      <div
-                        className="vni-progress-bar-segment"
-                        style={{
-                          width: `${percentages.nearMastery}%`,
-                          backgroundColor: COLORS.nearMastery,
-                        }}
-                      />
-                      <div
-                        className="vni-progress-bar-segment"
-                        style={{
-                          width: `${percentages.reinforce}%`,
-                          backgroundColor: COLORS.reinforce,
-                        }}
-                      />
-                      <div
-                        className="vni-progress-bar-segment"
-                        style={{
-                          width: `${percentages.dominated}%`,
-                          backgroundColor: COLORS.dominated,
-                        }}
-                      />
-                      <div
-                        className="vni-progress-bar-segment"
-                        style={{
-                          width: `${percentages.fresh}%`,
-                          backgroundColor: COLORS.fresh,
-                        }}
-                      />
+                      {topBarCategories.map((category) => (
+                        <div
+                          key={`segment-${category.key}`}
+                          className="vni-progress-bar-segment"
+                          style={{
+                            width: `${category.percent}%`,
+                            backgroundColor: category.color,
+                          }}
+                        />
+                      ))}
                     </div>
                   </div>
 
                   <div className="vni-progress-legend">
-                    <div className="vni-progress-legend-item">
-                      <span
-                        className="vni-progress-legend-dot"
-                        style={{ backgroundColor: COLORS.nearMastery }}
-                      />
-                      Perto de dominar
-                    </div>
-                    <div className="vni-progress-legend-item">
-                      <span
-                        className="vni-progress-legend-dot"
-                        style={{ backgroundColor: COLORS.reinforce }}
-                      />
-                      Precisam de reforço
-                    </div>
-                    <div className="vni-progress-legend-item">
-                      <span
-                        className="vni-progress-legend-dot"
-                        style={{ backgroundColor: COLORS.dominated }}
-                      />
-                      Dominadas
-                    </div>
-                    <div className="vni-progress-legend-item">
-                      <span
-                        className="vni-progress-legend-dot"
-                        style={{ backgroundColor: COLORS.fresh }}
-                      />
-                      Novas
-                    </div>
+                    {topBarCategories.map((category) => (
+                      <div
+                        key={`legend-${category.key}`}
+                        className="vni-progress-legend-item"
+                      >
+                        <span
+                          className="vni-progress-legend-dot"
+                          style={{ backgroundColor: category.color }}
+                        />
+                        {category.label}
+                      </div>
+                    ))}
                   </div>
 
                   <p className="vni-progress-domain-note">
-                    {formatPercent(percentages.nearMastery)} do vocabulário está perto de dominar
+                    {topBarLeadingCategory
+                      ? `${formatPercent(topBarLeadingCategory.percent)} do grupo principal está em ${topBarLeadingCategory.label.toLowerCase()}`
+                      : "Sem dados suficientes para classificar no momento."}
                   </p>
                 </div>
               </div>
@@ -2028,7 +2044,7 @@ export default function Progress() {
 
               <MetricCard
                 title="Novas"
-                value={categoryValues.fresh}
+                value={recentNewWords.length}
                 description={
                   <>
                     Ainda no início
@@ -2155,7 +2171,7 @@ export default function Progress() {
                     ))}
                   </ul>
                 ) : (
-                  <EmptyListState text="Nenhuma palavra nova pendente." />
+                  <EmptyListState text="Nenhuma palavra nova cadastrada nos últimos 2 dias." />
                 )}
               </ProgressListFrame>
             </section>
